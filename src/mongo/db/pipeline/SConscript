@@ -134,6 +134,7 @@ env.Library(
     target='expression',
     source=[
         'expression.cpp',
+        'expression_array_n.cpp',
         'expression_bitwise.cpp',
         'expression_field_access.cpp',
         'expression_misc.cpp',

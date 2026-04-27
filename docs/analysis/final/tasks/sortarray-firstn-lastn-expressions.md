@@ -50,6 +50,21 @@ REGISTER_EXPRESSION(sortArray, ExpressionSortArray::parse);
 
 None. These are pure document/array operations.
 
+## Implementation notes
+
+- Implemented as a clean-room backport in
+  `src/mongo/db/pipeline/expression_array_n.cpp`; newer MongoDB code was not
+  copied.
+- `$sortArray` supports whole-value ascending/descending sorting and object
+  `sortBy` specifications with one or more dotted field paths. Missing field
+  path values are normalized to BSON null for comparison so descending sorts put
+  present numeric keys before missing keys.
+- `$firstN`, `$lastN`, `$minN`, and `$maxN` are expression forms only; the
+  same-named accumulator family remains separate work outside this task.
+- Added `tests/jstests/eloq_basic/expression_array_n.js` covering scalar sorts,
+  object field sorts, mixed BSON type ordering, null input, `n > input.length`,
+  and invalid argument failures.
+
 ## Acceptance criteria
 
 - `$sortArray` sorts numbers, strings, dates correctly.
