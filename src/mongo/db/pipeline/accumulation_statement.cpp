@@ -96,6 +96,15 @@ AccumulationStatement AccumulationStatement::parseAccumulationStatement(
             str::stream() << "The " << accName << " accumulator is a unary operator",
             specElem.type() != BSONType::Array);
 
+    if (accName == "$count"_sd) {
+        uassert(ErrorCodes::FailedToParse,
+                "The $count accumulator takes no arguments",
+                specElem.type() == BSONType::Object && specElem.Obj().isEmpty());
+        return {fieldName.toString(),
+                ExpressionConstant::create(expCtx, Value(1)),
+                AccumulationStatement::getFactory(accName)};
+    }
+
     return {fieldName.toString(),
             Expression::parseOperand(expCtx, specElem, vps),
             AccumulationStatement::getFactory(accName)};

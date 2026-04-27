@@ -151,6 +151,7 @@ env.Library(
         'accumulation_statement.cpp',
         'accumulator_add_to_set.cpp',
         'accumulator_avg.cpp',
+        'accumulator_count.cpp',
         'accumulator_first.cpp',
         'accumulator_last.cpp',
         'accumulator_min_max.cpp',

@@ -187,6 +187,30 @@ private:
     Decimal128 decimalTotal;
 };
 
+class AccumulatorCount final : public Accumulator {
+public:
+    explicit AccumulatorCount(const boost::intrusive_ptr<ExpressionContext>& expCtx);
+
+    void processInternal(const Value& input, bool merging) final;
+    Value getValue(bool toBeMerged) final;
+    const char* getOpName() const final;
+    void reset() final;
+
+    static boost::intrusive_ptr<Accumulator> create(
+        const boost::intrusive_ptr<ExpressionContext>& expCtx);
+
+    bool isAssociative() const final {
+        return true;
+    }
+
+    bool isCommutative() const final {
+        return true;
+    }
+
+private:
+    long long _count = 0;
+};
+
 
 class AccumulatorMinMax : public Accumulator {
 public:
