@@ -135,8 +135,10 @@ env.Library(
     source=[
         'expression.cpp',
         'expression_field_access.cpp',
+        'expression_misc.cpp',
         ],
     LIBDEPS=[
+        '$BUILD_DIR/mongo/db/mongohasher',
         '$BUILD_DIR/mongo/db/query/datetime/date_time_support',
         '$BUILD_DIR/mongo/db/server_options_core',
         '$BUILD_DIR/mongo/util/summation',
