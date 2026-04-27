@@ -1,21 +1,30 @@
 /**
- *    Copyright (C) 2018-present MongoDB, Inc.
+ * Copyright (C) 2016 MongoDB Inc.
  *
- *    This program is free software: you can redistribute it and/or modify
- *    it under the terms of the Server Side Public License, version 1,
- *    as published by MongoDB, Inc.
+ * This program is free software: you can redistribute it and/or  modify
+ * it under the terms of the GNU Affero General Public License, version 3,
+ * as published by the Free Software Foundation.
  *
- *    This program is distributed in the hope that it will be useful,
- *    but WITHOUT ANY WARRANTY; without even the implied warranty of
- *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *    Server Side Public License for more details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- *    You should have received a copy of the Server Side Public License
- *    along with this program. If not, see
- *    <http://www.mongodb.com/licensing/server-side-public-license>.
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * As a special exception, the copyright holders give permission to link the
+ * code of portions of this program with the OpenSSL library under certain
+ * conditions as described in each individual source file and distribute
+ * linked combinations including the program with the OpenSSL library. You
+ * must comply with the GNU Affero General Public License in all respects
+ * for all of the code used other than as permitted herein. If you modify
+ * file(s) with this exception, you may extend this exception to your
+ * version of the file(s), but you are not obligated to do so. If you do not
+ * wish to do so, delete this exception statement from your version. If you
+ * delete this exception statement from all source files in the program,
+ * then also delete it in the license file.
  */
-
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kDefault
 
 #include "mongo/platform/basic.h"
 
@@ -27,151 +36,221 @@
 namespace mongo {
 namespace {
 
-template <typename DoubleFn, typename DecimalFn>
-Value evaluateUnboundedTrig(const Value& numericArg, DoubleFn doubleFn, DecimalFn decimalFn) {
-    if (numericArg.getType() == NumberDecimal) {
-        return Value(decimalFn(numericArg.getDecimal()));
+constexpr double kPi = 3.141592653589793238462643383279502884;
+
+Value numericResultLikeInput(const Value& input, double result) {
+    if (input.getType() == BSONType::NumberDecimal) {
+        return Value(Decimal128(result, Decimal128::kRoundTo15Digits));
     }
-    return Value(doubleFn(numericArg.coerceToDouble()));
+    return Value(result);
 }
 
-template <typename DoubleFn, typename DecimalFn>
-Value evaluateBoundedTrig(const char* opName,
-                          const Value& numericArg,
-                          double lowerBound,
-                          bool lowerInclusive,
-                          double upperBound,
-                          bool upperInclusive,
-                          DoubleFn doubleFn,
-                          DecimalFn decimalFn) {
-    if (numericArg.getType() == NumberDecimal) {
-        auto input = numericArg.getDecimal();
-        if (input.isNaN()) {
-            return numericArg;
-        }
+double numericToDouble(const Value& input) {
+    return input.getType() == BSONType::NumberDecimal ? input.getDecimal().toDouble()
+                                                      : input.coerceToDouble();
+}
 
-        auto lower = Decimal128(lowerBound);
-        auto upper = Decimal128(upperBound);
-        bool lowerOk = lowerInclusive ? input.isGreaterEqual(lower) : input.isGreater(lower);
-        bool upperOk = upperInclusive ? input.isLessEqual(upper) : input.isLess(upper);
-        uassert(51090,
-                str::stream() << "cannot apply " << opName << " to " << input.toString()
-                              << ", value must be in " << (lowerInclusive ? "[" : "(")
-                              << lowerBound << "," << upperBound
-                              << (upperInclusive ? "]" : ")"),
-                lowerOk && upperOk);
-        return Value(decimalFn(input));
+void checkDomain(StringData opName,
+                 double value,
+                 double lower,
+                 bool lowerInclusive,
+                 double upper,
+                 bool upperInclusive) {
+    if (std::isnan(value)) {
+        return;
     }
 
-    auto input = numericArg.coerceToDouble();
-    if (std::isnan(input)) {
-        return numericArg;
-    }
-
-    bool lowerOk = lowerInclusive ? input >= lowerBound : input > lowerBound;
-    bool upperOk = upperInclusive ? input <= upperBound : input < upperBound;
+    bool aboveLower = lowerInclusive ? value >= lower : value > lower;
+    bool belowUpper = upperInclusive ? value <= upper : value < upper;
     uassert(51091,
-            str::stream() << "cannot apply " << opName << " to " << input
-                          << ", value must be in " << (lowerInclusive ? "[" : "(")
-                          << lowerBound << "," << upperBound
-                          << (upperInclusive ? "]" : ")"),
-            lowerOk && upperOk);
-    return Value(doubleFn(input));
+            str::stream() << opName << " argument is outside its numeric domain",
+            aboveLower && belowUpper);
 }
 
-Value evaluateDegreeRadiansConversion(const Value& numericArg,
-                                      Decimal128 decimalFactor,
-                                      double doubleFactor) {
-    if (numericArg.getType() == NumberDecimal) {
-        return Value(numericArg.getDecimal().multiply(decimalFactor));
+Value evaluateUnaryTrig(StringData opName,
+                        const Value& input,
+                        double (*mathFn)(double),
+                        double lower,
+                        bool lowerInclusive,
+                        double upper,
+                        bool upperInclusive) {
+    double asDouble = numericToDouble(input);
+    checkDomain(opName, asDouble, lower, lowerInclusive, upper, upperInclusive);
+    return numericResultLikeInput(input, mathFn(asDouble));
+}
+
+Value evaluateDegreeConversion(const Value& input, double factor) {
+    if (input.getType() == BSONType::NumberDecimal) {
+        Decimal128 decimalFactor(factor, Decimal128::kRoundTo15Digits);
+        return Value(input.getDecimal().multiply(decimalFactor));
     }
-    return Value(numericArg.coerceToDouble() * doubleFactor);
+    return Value(input.coerceToDouble() * factor);
 }
 
-#define DECLARE_UNBOUNDED_TRIG_CLASS(className, opName, doubleFunc, decimalFunc)         \
-    class className final : public ExpressionSingleNumericArg<className> {               \
-    public:                                                                              \
-        explicit className(const boost::intrusive_ptr<ExpressionContext>& expCtx)         \
-            : ExpressionSingleNumericArg<className>(expCtx) {}                           \
-        Value evaluateNumericArg(const Value& numericArg) const final {                  \
-            return evaluateUnboundedTrig(                                                \
-                numericArg,                                                              \
-                [](double arg) { return doubleFunc(arg); },                              \
-                [](const Decimal128& arg) { return arg.decimalFunc(); });                \
-        }                                                                                \
-        const char* getOpName() const final {                                            \
-            return opName;                                                               \
-        }                                                                                \
-    };
+template <typename SubClass>
+class ExpressionTrigBase : public ExpressionSingleNumericArg<SubClass> {
+public:
+    explicit ExpressionTrigBase(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionSingleNumericArg<SubClass>(expCtx) {}
 
-#define DECLARE_BOUNDED_TRIG_CLASS(                                                     \
-    className, opName, lower, lowerInc, upper, upperInc, doubleFunc, decimalFunc)        \
-    class className final : public ExpressionSingleNumericArg<className> {               \
-    public:                                                                              \
-        explicit className(const boost::intrusive_ptr<ExpressionContext>& expCtx)         \
-            : ExpressionSingleNumericArg<className>(expCtx) {}                           \
-        Value evaluateNumericArg(const Value& numericArg) const final {                  \
-            return evaluateBoundedTrig(                                                  \
-                opName,                                                                  \
-                numericArg,                                                              \
-                lower,                                                                   \
-                lowerInc,                                                                \
-                upper,                                                                   \
-                upperInc,                                                                \
-                [](double arg) { return doubleFunc(arg); },                              \
-                [](const Decimal128& arg) { return arg.decimalFunc(); });                \
-        }                                                                                \
-        const char* getOpName() const final {                                            \
-            return opName;                                                               \
-        }                                                                                \
-    };
+protected:
+    Value apply(const Value& input,
+                double (*mathFn)(double),
+                double lower = -std::numeric_limits<double>::infinity(),
+                bool lowerInclusive = false,
+                double upper = std::numeric_limits<double>::infinity(),
+                bool upperInclusive = false) const {
+        return evaluateUnaryTrig(
+            this->getOpName(), input, mathFn, lower, lowerInclusive, upper, upperInclusive);
+    }
+};
 
-DECLARE_BOUNDED_TRIG_CLASS(ExpressionSine,
-                           "$sin",
-                           -std::numeric_limits<double>::infinity(),
-                           false,
-                           std::numeric_limits<double>::infinity(),
-                           false,
-                           std::sin,
-                           sin)
-DECLARE_BOUNDED_TRIG_CLASS(ExpressionCosine,
-                           "$cos",
-                           -std::numeric_limits<double>::infinity(),
-                           false,
-                           std::numeric_limits<double>::infinity(),
-                           false,
-                           std::cos,
-                           cos)
-DECLARE_BOUNDED_TRIG_CLASS(ExpressionTangent,
-                           "$tan",
-                           -std::numeric_limits<double>::infinity(),
-                           false,
-                           std::numeric_limits<double>::infinity(),
-                           false,
-                           std::tan,
-                           tan)
-DECLARE_BOUNDED_TRIG_CLASS(
-    ExpressionArcSine, "$asin", -1.0, true, 1.0, true, std::asin, asin)
-DECLARE_BOUNDED_TRIG_CLASS(
-    ExpressionArcCosine, "$acos", -1.0, true, 1.0, true, std::acos, acos)
-DECLARE_UNBOUNDED_TRIG_CLASS(ExpressionArcTangent, "$atan", std::atan, atan)
-DECLARE_UNBOUNDED_TRIG_CLASS(ExpressionHyperbolicSine, "$sinh", std::sinh, sinh)
-DECLARE_UNBOUNDED_TRIG_CLASS(ExpressionHyperbolicCosine, "$cosh", std::cosh, cosh)
-DECLARE_UNBOUNDED_TRIG_CLASS(ExpressionHyperbolicTangent, "$tanh", std::tanh, tanh)
-DECLARE_UNBOUNDED_TRIG_CLASS(ExpressionHyperbolicArcSine, "$asinh", std::asinh, asinh)
-DECLARE_BOUNDED_TRIG_CLASS(ExpressionHyperbolicArcCosine,
-                           "$acosh",
-                           1.0,
-                           true,
-                           std::numeric_limits<double>::infinity(),
-                           false,
-                           std::acosh,
-                           acosh)
-DECLARE_BOUNDED_TRIG_CLASS(
-    ExpressionHyperbolicArcTangent, "$atanh", -1.0, true, 1.0, true, std::atanh, atanh)
+class ExpressionSine final : public ExpressionTrigBase<ExpressionSine> {
+public:
+    explicit ExpressionSine(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionTrigBase<ExpressionSine>(expCtx) {}
+    Value evaluateNumericArg(const Value& input) const final {
+        return apply(input, std::sin);
+    }
+    const char* getOpName() const final {
+        return "$sin";
+    }
+};
 
-#undef DECLARE_BOUNDED_TRIG_CLASS
-#undef DECLARE_UNBOUNDED_TRIG_CLASS
+class ExpressionCosine final : public ExpressionTrigBase<ExpressionCosine> {
+public:
+    explicit ExpressionCosine(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionTrigBase<ExpressionCosine>(expCtx) {}
+    Value evaluateNumericArg(const Value& input) const final {
+        return apply(input, std::cos);
+    }
+    const char* getOpName() const final {
+        return "$cos";
+    }
+};
+
+class ExpressionTangent final : public ExpressionTrigBase<ExpressionTangent> {
+public:
+    explicit ExpressionTangent(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionTrigBase<ExpressionTangent>(expCtx) {}
+    Value evaluateNumericArg(const Value& input) const final {
+        return apply(input, std::tan);
+    }
+    const char* getOpName() const final {
+        return "$tan";
+    }
+};
+
+class ExpressionArcSine final : public ExpressionTrigBase<ExpressionArcSine> {
+public:
+    explicit ExpressionArcSine(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionTrigBase<ExpressionArcSine>(expCtx) {}
+    Value evaluateNumericArg(const Value& input) const final {
+        return apply(input, std::asin, -1.0, true, 1.0, true);
+    }
+    const char* getOpName() const final {
+        return "$asin";
+    }
+};
+
+class ExpressionArcCosine final : public ExpressionTrigBase<ExpressionArcCosine> {
+public:
+    explicit ExpressionArcCosine(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionTrigBase<ExpressionArcCosine>(expCtx) {}
+    Value evaluateNumericArg(const Value& input) const final {
+        return apply(input, std::acos, -1.0, true, 1.0, true);
+    }
+    const char* getOpName() const final {
+        return "$acos";
+    }
+};
+
+class ExpressionArcTangent final : public ExpressionTrigBase<ExpressionArcTangent> {
+public:
+    explicit ExpressionArcTangent(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionTrigBase<ExpressionArcTangent>(expCtx) {}
+    Value evaluateNumericArg(const Value& input) const final {
+        return apply(input, std::atan);
+    }
+    const char* getOpName() const final {
+        return "$atan";
+    }
+};
+
+class ExpressionHyperbolicSine final : public ExpressionTrigBase<ExpressionHyperbolicSine> {
+public:
+    explicit ExpressionHyperbolicSine(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionTrigBase<ExpressionHyperbolicSine>(expCtx) {}
+    Value evaluateNumericArg(const Value& input) const final {
+        return apply(input, std::sinh);
+    }
+    const char* getOpName() const final {
+        return "$sinh";
+    }
+};
+
+class ExpressionHyperbolicCosine final : public ExpressionTrigBase<ExpressionHyperbolicCosine> {
+public:
+    explicit ExpressionHyperbolicCosine(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionTrigBase<ExpressionHyperbolicCosine>(expCtx) {}
+    Value evaluateNumericArg(const Value& input) const final {
+        return apply(input, std::cosh);
+    }
+    const char* getOpName() const final {
+        return "$cosh";
+    }
+};
+
+class ExpressionHyperbolicTangent final : public ExpressionTrigBase<ExpressionHyperbolicTangent> {
+public:
+    explicit ExpressionHyperbolicTangent(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionTrigBase<ExpressionHyperbolicTangent>(expCtx) {}
+    Value evaluateNumericArg(const Value& input) const final {
+        return apply(input, std::tanh);
+    }
+    const char* getOpName() const final {
+        return "$tanh";
+    }
+};
+
+class ExpressionHyperbolicArcSine final
+    : public ExpressionTrigBase<ExpressionHyperbolicArcSine> {
+public:
+    explicit ExpressionHyperbolicArcSine(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionTrigBase<ExpressionHyperbolicArcSine>(expCtx) {}
+    Value evaluateNumericArg(const Value& input) const final {
+        return apply(input, std::asinh);
+    }
+    const char* getOpName() const final {
+        return "$asinh";
+    }
+};
+
+class ExpressionHyperbolicArcCosine final
+    : public ExpressionTrigBase<ExpressionHyperbolicArcCosine> {
+public:
+    explicit ExpressionHyperbolicArcCosine(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionTrigBase<ExpressionHyperbolicArcCosine>(expCtx) {}
+    Value evaluateNumericArg(const Value& input) const final {
+        return apply(input, std::acosh, 1.0, true);
+    }
+    const char* getOpName() const final {
+        return "$acosh";
+    }
+};
+
+class ExpressionHyperbolicArcTangent final
+    : public ExpressionTrigBase<ExpressionHyperbolicArcTangent> {
+public:
+    explicit ExpressionHyperbolicArcTangent(const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : ExpressionTrigBase<ExpressionHyperbolicArcTangent>(expCtx) {}
+    Value evaluateNumericArg(const Value& input) const final {
+        return apply(input, std::atanh, -1.0, true, 1.0, true);
+    }
+    const char* getOpName() const final {
+        return "$atanh";
+    }
+};
 
 class ExpressionArcTangent2 final : public ExpressionFixedArity<ExpressionArcTangent2, 2> {
 public:
@@ -179,28 +258,28 @@ public:
         : ExpressionFixedArity<ExpressionArcTangent2, 2>(expCtx) {}
 
     Value evaluate(const Document& root) const final {
-        auto first = vpOperand[0]->evaluate(root);
-        if (first.nullish()) {
+        auto y = vpOperand[0]->evaluate(root);
+        if (y.nullish()) {
             return Value(BSONNULL);
         }
         uassert(51092,
                 str::stream() << getOpName() << " only supports numeric types, not "
-                              << typeName(first.getType()),
-                first.numeric());
+                              << typeName(y.getType()),
+                y.numeric());
 
-        auto second = vpOperand[1]->evaluate(root);
-        if (second.nullish()) {
+        auto x = vpOperand[1]->evaluate(root);
+        if (x.nullish()) {
             return Value(BSONNULL);
         }
         uassert(51093,
                 str::stream() << getOpName() << " only supports numeric types, not "
-                              << typeName(second.getType()),
-                second.numeric());
+                              << typeName(x.getType()),
+                x.numeric());
 
-        if (first.getType() == NumberDecimal || second.getType() == NumberDecimal) {
-            return Value(first.coerceToDecimal().atan2(second.coerceToDecimal()));
-        }
-        return Value(std::atan2(first.coerceToDouble(), second.coerceToDouble()));
+        double result = std::atan2(numericToDouble(y), numericToDouble(x));
+        return (y.getType() == BSONType::NumberDecimal || x.getType() == BSONType::NumberDecimal)
+            ? Value(Decimal128(result, Decimal128::kRoundTo15Digits))
+            : Value(result);
     }
 
     const char* getOpName() const final {
@@ -214,10 +293,8 @@ public:
     explicit ExpressionDegreesToRadians(const boost::intrusive_ptr<ExpressionContext>& expCtx)
         : ExpressionSingleNumericArg<ExpressionDegreesToRadians>(expCtx) {}
 
-    Value evaluateNumericArg(const Value& numericArg) const final {
-        static const double kDoublePiOver180 = 3.141592653589793 / 180.0;
-        return evaluateDegreeRadiansConversion(
-            numericArg, Decimal128::kPiOver180, kDoublePiOver180);
+    Value evaluateNumericArg(const Value& input) const final {
+        return evaluateDegreeConversion(input, kPi / 180.0);
     }
 
     const char* getOpName() const final {
@@ -231,10 +308,8 @@ public:
     explicit ExpressionRadiansToDegrees(const boost::intrusive_ptr<ExpressionContext>& expCtx)
         : ExpressionSingleNumericArg<ExpressionRadiansToDegrees>(expCtx) {}
 
-    Value evaluateNumericArg(const Value& numericArg) const final {
-        static const double kDouble180OverPi = 180.0 / 3.141592653589793;
-        return evaluateDegreeRadiansConversion(
-            numericArg, Decimal128::k180OverPi, kDouble180OverPi);
+    Value evaluateNumericArg(const Value& input) const final {
+        return evaluateDegreeConversion(input, 180.0 / kPi);
     }
 
     const char* getOpName() const final {

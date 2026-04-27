@@ -78,3 +78,4 @@ When source analyses **disagree** on a feature's tier, the task file calls out t
 - Acceptance criteria reference jstest paths under `tests/jstests/` — many tests will need to be adapted from upstream MongoDB and made EloqDoc-compatible.
 - Where a task is a parser-only "compatibility" stub (accept the field, ignore the semantics), it is marked **(stub)** in the title.
 - Whenever a backport intentionally differs from MongoDB semantics, document the difference explicitly in the task spec and implementation notes. State what MongoDB does, what EloqDoc does instead, and why that tradeoff is acceptable for EloqDoc.
+- Newer MongoDB source may be used only to understand externally observable semantics, API shape, and compatibility tests. Do not copy implementation code from newer MongoDB into EloqDoc; backports must be clean-room implementations adapted independently to EloqDoc's MongoDB 4.0.3 codebase.

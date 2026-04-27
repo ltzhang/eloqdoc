@@ -725,47 +725,6 @@ Decimal128 Decimal128::squareRoot(std::uint32_t* signalingFlags, RoundingMode ro
     return Decimal128{libraryTypeToValue(current)};
 }
 
-#define MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(op, f)                                          \
-    Decimal128 Decimal128::op(RoundingMode roundMode) const {                                 \
-        std::uint32_t throwAwayFlag = 0;                                                      \
-        return op(&throwAwayFlag, roundMode);                                                 \
-    }                                                                                         \
-                                                                                              \
-    Decimal128 Decimal128::op(std::uint32_t* signalingFlags, RoundingMode roundMode) const {  \
-        BID_UINT128 current = decimal128ToLibraryType(_value);                                \
-        current = f(current, roundMode, signalingFlags);                                      \
-        return Decimal128{libraryTypeToValue(current)};                                       \
-    }
-
-MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(sin, bid128_sin)
-MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(cos, bid128_cos)
-MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(tan, bid128_tan)
-MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(asin, bid128_asin)
-MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(acos, bid128_acos)
-MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(atan, bid128_atan)
-MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(sinh, bid128_sinh)
-MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(cosh, bid128_cosh)
-MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(tanh, bid128_tanh)
-MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(asinh, bid128_asinh)
-MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(acosh, bid128_acosh)
-MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP(atanh, bid128_atanh)
-
-#undef MONGO_DECIMAL128_DEFINE_UNARY_TRIG_OP
-
-Decimal128 Decimal128::atan2(const Decimal128& other, RoundingMode roundMode) const {
-    std::uint32_t throwAwayFlag = 0;
-    return atan2(other, &throwAwayFlag, roundMode);
-}
-
-Decimal128 Decimal128::atan2(const Decimal128& other,
-                             std::uint32_t* signalingFlags,
-                             RoundingMode roundMode) const {
-    BID_UINT128 current = decimal128ToLibraryType(_value);
-    BID_UINT128 divisor = decimal128ToLibraryType(other.getValue());
-    current = bid128_atan2(current, divisor, roundMode, signalingFlags);
-    return Decimal128{libraryTypeToValue(current)};
-}
-
 bool Decimal128::isEqual(const Decimal128& other) const {
     std::uint32_t throwAwayFlag = 0;
     BID_UINT128 current = decimal128ToLibraryType(_value);
@@ -859,10 +818,6 @@ const Decimal128 Decimal128::kPositiveInfinity(Decimal128::Value({0ull, 0x78ull 
 const Decimal128 Decimal128::kNegativeInfinity(Decimal128::Value({0ull, 0xf8ull << 56}));
 const Decimal128 Decimal128::kPositiveNaN(Decimal128::Value({0ull, 0x7cull << 56}));
 const Decimal128 Decimal128::kNegativeNaN(Decimal128::Value({0ull, 0xfcull << 56}));
-const Decimal128 Decimal128::kPi("3.14159265358979323846264338327950288419716939937510");
-const Decimal128 Decimal128::kPiOver180(Decimal128::kPi.divide(Decimal128("180")));
-const Decimal128 Decimal128::k180OverPi(Decimal128("180").divide(Decimal128::kPi));
-
 std::ostream& operator<<(std::ostream& stream, const Decimal128& value) {
     return stream << value.toString();
 }

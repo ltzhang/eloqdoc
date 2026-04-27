@@ -4713,96 +4713,98 @@ void ExpressionTrim::_doAddDependencies(DepsTracker* deps) const {
 
 namespace {
 
-void assertRoundTruncFlagsValid(uint32_t flags,
-                                StringData opName,
-                                long long numericValue,
-                                long long precisionValue) {
-    uassert(51080,
-            str::stream() << "invalid conversion from Decimal128 result in " << opName
-                          << " resulting from arguments: [" << numericValue << ", "
-                          << precisionValue << "]",
-            !Decimal128::hasFlag(flags, Decimal128::kInvalid));
+constexpr long long kRoundTruncMinPlace = -20;
+constexpr long long kRoundTruncMaxPlace = 100;
+
+Decimal128 decimalPlaceReference(long long place) {
+    return Decimal128(str::stream() << "1E" << -place);
 }
 
-Value evaluateRoundOrTrunc(const Document& root,
-                           const std::vector<boost::intrusive_ptr<Expression>>& operands,
-                           StringData opName,
-                           Decimal128::RoundingMode roundingMode) {
-    constexpr auto maxPrecision = 100LL;
-    constexpr auto minPrecision = -20LL;
+long long readRoundTruncPlace(const Document& root,
+                              const std::vector<boost::intrusive_ptr<Expression>>& operands,
+                              StringData opName,
+                              bool* nullResult) {
+    *nullResult = false;
+    if (operands.size() == 1) {
+        return 0;
+    }
 
-    auto numericArg = operands[0]->evaluate(root);
-    if (numericArg.nullish()) {
+    auto place = operands[1]->evaluate(root);
+    if (place.nullish()) {
+        *nullResult = true;
+        return 0;
+    }
+
+    uassert(51082,
+            str::stream() << opName << " requires an integral place argument",
+            place.integral());
+
+    long long placeValue = place.coerceToLong();
+    uassert(51083,
+            str::stream() << opName << " place argument " << placeValue
+                          << " is outside the supported range [-20, 100]",
+            kRoundTruncMinPlace <= placeValue && placeValue <= kRoundTruncMaxPlace);
+    return placeValue;
+}
+
+Value roundOrTruncateValue(const Value& input,
+                           long long place,
+                           Decimal128::RoundingMode roundingMode,
+                           StringData opName) {
+    auto reference = decimalPlaceReference(place);
+
+    if (input.getType() == BSONType::NumberDecimal) {
+        auto decimal = input.getDecimal();
+        return decimal.isInfinite() ? input : Value(decimal.quantize(reference, roundingMode));
+    }
+
+    if (input.getType() == BSONType::NumberDouble) {
+        auto decimal = Decimal128(input.getDouble(), Decimal128::kRoundTo34Digits);
+        return decimal.isInfinite() ? input : Value(decimal.quantize(reference, roundingMode).toDouble());
+    }
+
+    if (place >= 0) {
+        return input;
+    }
+
+    long long integralInput = input.coerceToLong();
+    auto rounded = Decimal128(static_cast<int64_t>(integralInput)).quantize(reference, roundingMode);
+    std::uint32_t flags = Decimal128::SignalingFlag::kNoFlag;
+    long long integralOutput = rounded.toLong(&flags);
+    uassert(51080,
+            str::stream() << opName << " produced an integer outside the 64-bit range",
+            !Decimal128::hasFlag(flags, Decimal128::kInvalid));
+
+    if (input.getType() == BSONType::NumberLong ||
+        integralOutput > std::numeric_limits<int>::max()) {
+        return Value(static_cast<long long>(integralOutput));
+    }
+    return Value(static_cast<int>(integralOutput));
+}
+
+Value evaluateRoundTruncExpression(const Document& root,
+                                   const std::vector<boost::intrusive_ptr<Expression>>& operands,
+                                   StringData opName,
+                                   Decimal128::RoundingMode roundingMode) {
+    auto input = operands[0]->evaluate(root);
+    if (input.nullish()) {
         return Value(BSONNULL);
     }
 
     uassert(51081,
             str::stream() << opName << " only supports numeric types, not "
-                          << typeName(numericArg.getType()),
-            numericArg.numeric());
+                          << typeName(input.getType()),
+            input.numeric());
 
-    long long precisionValue = 0;
-    if (operands.size() > 1) {
-        auto precisionArg = operands[1]->evaluate(root);
-        if (precisionArg.nullish()) {
-            return Value(BSONNULL);
-        }
-
-        uassert(51082,
-                str::stream() << "precision argument to " << opName
-                              << " must be an integral value",
-                precisionArg.integral());
-        precisionValue = precisionArg.coerceToLong();
-        uassert(51083,
-                str::stream() << "cannot apply " << opName << " with precision value "
-                              << precisionValue << " value must be in [-20, 100]",
-                minPrecision <= precisionValue && precisionValue <= maxPrecision);
-    }
-
-    auto quantum = Decimal128(0LL, Decimal128::kExponentBias - precisionValue, 0LL, 1LL);
-
-    switch (numericArg.getType()) {
-        case BSONType::NumberDecimal: {
-            if (numericArg.getDecimal().isInfinite()) {
-                return numericArg;
-            }
-            return Value(numericArg.getDecimal().quantize(quantum, roundingMode));
-        }
-        case BSONType::NumberDouble: {
-            auto dec = Decimal128(numericArg.getDouble(), Decimal128::kRoundTo34Digits);
-            if (dec.isInfinite()) {
-                return numericArg;
-            }
-            return Value(dec.quantize(quantum, roundingMode).toDouble());
-        }
-        case BSONType::NumberInt:
-        case BSONType::NumberLong: {
-            if (precisionValue >= 0) {
-                return numericArg;
-            }
-
-            auto numericArgLong = numericArg.coerceToLong();
-            auto out = Decimal128(static_cast<int64_t>(numericArgLong))
-                           .quantize(quantum, roundingMode);
-            uint32_t flags = 0;
-            auto outLong = out.toLong(&flags);
-            assertRoundTruncFlagsValid(flags, opName, numericArgLong, precisionValue);
-
-            if (numericArg.getType() == BSONType::NumberLong ||
-                outLong > std::numeric_limits<int>::max()) {
-                return Value(static_cast<long long>(outLong));
-            }
-            return Value(static_cast<int>(outLong));
-        }
-        default:
-            MONGO_UNREACHABLE;
-    }
+    bool nullPlace = false;
+    long long place = readRoundTruncPlace(root, operands, opName, &nullPlace);
+    return nullPlace ? Value(BSONNULL) : roundOrTruncateValue(input, place, roundingMode, opName);
 }
 
 }  // namespace
 
 Value ExpressionRound::evaluate(const Document& root) const {
-    return evaluateRoundOrTrunc(
+    return evaluateRoundTruncExpression(
         root, vpOperand, "$round"_sd, Decimal128::kRoundTiesToEven);
 }
 
@@ -4812,7 +4814,7 @@ const char* ExpressionRound::getOpName() const {
 }
 
 Value ExpressionTrunc::evaluate(const Document& root) const {
-    return evaluateRoundOrTrunc(
+    return evaluateRoundTruncExpression(
         root, vpOperand, "$trunc"_sd, Decimal128::kRoundTowardZero);
 }
 

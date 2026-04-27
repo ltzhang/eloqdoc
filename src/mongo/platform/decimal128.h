@@ -68,9 +68,6 @@ public:
     static const Decimal128 kNegativeInfinity;
     static const Decimal128 kPositiveNaN;
     static const Decimal128 kNegativeNaN;
-    static const Decimal128 kPi;
-    static const Decimal128 kPiOver180;
-    static const Decimal128 k180OverPi;
 
     static const uint32_t kMaxBiasedExponent = 6143 + 6144;
     // Biased exponent of a Decimal128 with least significant digit in the units place
@@ -382,35 +379,6 @@ public:
     Decimal128 squareRoot(RoundingMode roundMode = kRoundTiesToEven) const;
     Decimal128 squareRoot(std::uint32_t* signalingFlags,
                           RoundingMode roundMode = kRoundTiesToEven) const;
-
-    Decimal128 sin(RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 sin(std::uint32_t* signalingFlags, RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 cos(RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 cos(std::uint32_t* signalingFlags, RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 tan(RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 tan(std::uint32_t* signalingFlags, RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 asin(RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 asin(std::uint32_t* signalingFlags, RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 acos(RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 acos(std::uint32_t* signalingFlags, RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 atan(RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 atan(std::uint32_t* signalingFlags, RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 atan2(const Decimal128& other, RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 atan2(const Decimal128& other,
-                     std::uint32_t* signalingFlags,
-                     RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 sinh(RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 sinh(std::uint32_t* signalingFlags, RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 cosh(RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 cosh(std::uint32_t* signalingFlags, RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 tanh(RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 tanh(std::uint32_t* signalingFlags, RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 asinh(RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 asinh(std::uint32_t* signalingFlags, RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 acosh(RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 acosh(std::uint32_t* signalingFlags, RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 atanh(RoundingMode roundMode = kRoundTiesToEven) const;
-    Decimal128 atanh(std::uint32_t* signalingFlags, RoundingMode roundMode = kRoundTiesToEven) const;
 
     /**
      * This function quantizes the current decimal given a quantum reference
