@@ -89,6 +89,10 @@ One file per subgroup is reasonable:
 - **Decimal128.** All numeric expressions must propagate Decimal128 if any operand is Decimal128; downcast to double otherwise. The existing math expressions (`$add`, `$multiply`) show the pattern.
 - **Storage / locking.** None of these expressions touch storage. Safe wrt EloqDoc's no-op locking.
 
+## Implementation notes
+
+- `$round` and the two-argument `$trunc` backport match MongoDB's numeric rounding modes, including ties-to-even for `$round` and toward-zero for `$trunc`. EloqDoc's older Decimal128 library may serialize an equivalent decimal cohort without MongoDB's trailing `.0` in some zero-precision results (for example `NumberDecimal("2")` rather than `NumberDecimal("2.0")`). This is a display/cohort difference only; numeric comparison semantics are unchanged.
+
 ## Acceptance criteria
 
 - Each new expression has a unit test under `tests/cpp_unit_tests/db/pipeline/expression_<group>_test.cpp` covering: normal case, null operand, Decimal128 operand, NaN/Inf where relevant, type-error case.
