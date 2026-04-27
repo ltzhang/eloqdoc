@@ -45,6 +45,7 @@ const char ParsedDistinct::kKeyField[] = "key";
 const char ParsedDistinct::kQueryField[] = "query";
 const char ParsedDistinct::kCollationField[] = "collation";
 const char ParsedDistinct::kCommentField[] = "comment";
+const char ParsedDistinct::kHintField[] = "hint";
 
 StatusWith<BSONObj> ParsedDistinct::asAggregationCommand() const {
     BSONObjBuilder aggregationBuilder;
@@ -93,6 +94,10 @@ StatusWith<BSONObj> ParsedDistinct::asAggregationCommand() const {
 
     if (qr.getMaxTimeMS() > 0) {
         aggregationBuilder.append(QueryRequest::cmdOptionMaxTimeMS, qr.getMaxTimeMS());
+    }
+
+    if (!qr.getHint().isEmpty()) {
+        aggregationBuilder.append(kHintField, qr.getHint());
     }
 
     if (!qr.getReadConcern().isEmpty()) {
@@ -175,6 +180,19 @@ StatusWith<ParsedDistinct> ParsedDistinct::parse(OperationContext* opCtx,
                               << typeName(commentElt.type()));
         }
         qr->setComment(commentElt.str());
+    }
+
+    if (BSONElement hintElt = cmdObj[kHintField]) {
+        if (hintElt.type() == BSONType::Object) {
+            qr->setHint(hintElt.embeddedObject());
+        } else if (hintElt.type() == BSONType::String) {
+            qr->setHint(hintElt.wrap("$hint"));
+        } else {
+            return Status(ErrorCodes::FailedToParse,
+                          str::stream()
+                              << "\"" << kHintField
+                              << "\" must be either a string or nested object");
+        }
     }
 
     if (BSONElement queryOptionsElt = cmdObj[QueryRequest::kUnwrappedReadPrefField]) {
