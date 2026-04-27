@@ -50,7 +50,7 @@ struct SpecialArgRecord {
 // If that changes, it should be added. When you add to this list, consider whether you
 // should also change the filterCommandRequestForPassthrough() function.
 // clang-format off
-static constexpr std::array<SpecialArgRecord, 24> specials{{
+static constexpr std::array<SpecialArgRecord, 32> specials{{
     //                                       /-isGeneric
     //                                       |  /-stripFromRequest
     //                                       |  |  /-stripFromReply
@@ -75,6 +75,14 @@ static constexpr std::array<SpecialArgRecord, 24> specials{{
     {"autocommit"_sd,                        1, 1, 0},
     {"startTransaction"_sd,                  1, 1, 0},
     {"stmtId"_sd,                            1, 0, 0},
+    {"apiVersion"_sd,                        1, 1, 0},
+    {"apiStrict"_sd,                         1, 1, 0},
+    {"apiDeprecationErrors"_sd,              1, 1, 0},
+    {"collectionUUID"_sd,                    1, 1, 0},
+    {"isTimeseriesNamespace"_sd,             1, 1, 0},
+    {"mirrored"_sd,                          1, 1, 0},
+    {"sampleId"_sd,                          1, 1, 0},
+    {"comment"_sd,                           1, 0, 0},
     {"$gleStats"_sd,                         0, 0, 1},
     {"operationTime"_sd,                     0, 0, 1},
     {"lastCommittedOpTime"_sd,               0, 0, 1}}};

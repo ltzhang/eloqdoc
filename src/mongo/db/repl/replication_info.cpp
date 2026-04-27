@@ -209,6 +209,9 @@ public:
 
 class CmdIsMaster : public BasicCommand {
 public:
+    CmdIsMaster(StringData name = "isMaster", StringData oldName = "ismaster")
+        : BasicCommand(name, oldName) {}
+
     bool requiresAuth() const override {
         return false;
     }
@@ -225,7 +228,6 @@ public:
     virtual void addRequiredPrivileges(const std::string& dbname,
                                        const BSONObj& cmdObj,
                                        std::vector<Privilege>* out) const {}  // No auth required
-    CmdIsMaster() : BasicCommand("isMaster", "ismaster") {}
     virtual bool run(OperationContext* opCtx,
                      const string&,
                      const BSONObj& cmdObj,
@@ -342,6 +344,10 @@ public:
         }
 
         appendReplicationInfo(opCtx, result, 0);
+        result.appendBool("isWritablePrimary", result.asTempObj()["ismaster"].trueValue());
+        if (getName() == "hello" || cmdObj["helloOk"].trueValue()) {
+            result.appendBool("helloOk", true);
+        }
 
         if (serverGlobalParams.clusterRole == ClusterRole::ConfigServer) {
             const int configServerModeNumber = 2;
@@ -388,6 +394,8 @@ public:
         return true;
     }
 } cmdismaster;
+
+CmdIsMaster cmdHello("hello", StringData());
 
 OpCounterServerStatusSection replOpCounterServerStatusSection("opcountersRepl", &replOpCounters);
 

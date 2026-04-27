@@ -69,6 +69,18 @@ namespace {
 
 const StringData kIndexesFieldName = "indexes"_sd;
 const StringData kCommandName = "createIndexes"_sd;
+const StringData kCommitQuorumFieldName = "commitQuorum"_sd;
+
+Status validateCommitQuorum(const BSONElement& commitQuorum) {
+    if (commitQuorum.type() == BSONType::String || commitQuorum.isNumber()) {
+        return Status::OK();
+    }
+
+    return {ErrorCodes::TypeMismatch,
+            str::stream() << "The field '" << kCommitQuorumFieldName
+                          << "' must be a string or numeric quorum, but got "
+                          << typeName(commitQuorum.type())};
+}
 
 /**
  * Parses the index specifications from 'cmdObj', validates them, and returns equivalent index
@@ -131,6 +143,11 @@ StatusWith<std::vector<BSONObj>> parseAndValidateIndexSpecs(
             }
 
             hasIndexesField = true;
+        } else if (kCommitQuorumFieldName == cmdElemFieldName) {
+            auto status = validateCommitQuorum(cmdElem);
+            if (!status.isOK()) {
+                return status;
+            }
         } else if (kCommandName == cmdElemFieldName || isGenericArgument(cmdElemFieldName)) {
             continue;
         } else {

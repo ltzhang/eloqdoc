@@ -77,3 +77,4 @@ When source analyses **disagree** on a feature's tier, the task file calls out t
 - Effort estimates assume one experienced C++ engineer familiar with the MongoDB code style. Add 30–50% for first-time contributors.
 - Acceptance criteria reference jstest paths under `tests/jstests/` — many tests will need to be adapted from upstream MongoDB and made EloqDoc-compatible.
 - Where a task is a parser-only "compatibility" stub (accept the field, ignore the semantics), it is marked **(stub)** in the title.
+- Whenever a backport intentionally differs from MongoDB semantics, document the difference explicitly in the task spec and implementation notes. State what MongoDB does, what EloqDoc does instead, and why that tradeoff is acceptable for EloqDoc.

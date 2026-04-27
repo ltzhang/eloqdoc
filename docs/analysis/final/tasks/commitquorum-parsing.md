@@ -57,6 +57,13 @@ if (auto cqEl = cmdObj["commitQuorum"]) {
 
 Per `analysis_cc/forward_compat_eval.md`: "since you're ignoring replication internals, you may implement a simplified version: always commit when the primary finishes (equivalent to `commitQuorum: 0`)." That's exactly what this stub does. If EloqDoc later adds Data Substrate-aware quorum, escalate to Tier 2 and build on top.
 
+This is intentionally **not semantically equivalent to MongoDB**. In MongoDB, `commitQuorum`
+controls when a replicated two-phase index build may commit after enough replica-set members are
+ready. EloqDoc does not implement that MongoDB replication protocol in this Tier 1 stub, so
+`commitQuorum` is accepted for client compatibility, validated for basic type correctness, and then
+ignored. Index builds keep EloqDoc's existing immediate/Data Substrate-backed behavior regardless
+of the supplied quorum value.
+
 ## Acceptance criteria
 
 - `createIndexes` with `commitQuorum: 0|1|"majority"|"votingMembers"` succeeds.

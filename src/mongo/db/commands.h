@@ -172,6 +172,14 @@ struct CommandHelpers {
             arg == "txnNumber" ||                        //
             arg == "autocommit" ||                       //
             arg == "startTransaction" ||                 //
+            arg == "apiVersion" ||                       //
+            arg == "apiStrict" ||                        //
+            arg == "apiDeprecationErrors" ||             //
+            arg == "collectionUUID" ||                   //
+            arg == "isTimeseriesNamespace" ||            //
+            arg == "mirrored" ||                         //
+            arg == "sampleId" ||                         //
+            arg == "comment" ||                          //
             false;  // These comments tell clang-format to keep this line-oriented.
     }
 
