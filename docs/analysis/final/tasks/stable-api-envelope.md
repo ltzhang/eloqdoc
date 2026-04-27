@@ -52,6 +52,21 @@ if (auto apiVersion = cmdObj["apiVersion"]) {
 
 None at Tier 1. The fields are stripped before they reach any code that touches Data Substrate or storage. If escalating to Tier 3 in the future, note that EloqDoc's command framework predates the IDL stability annotations system from upstream — that escalation is a much larger effort than upstream's because the IDL infrastructure isn't there.
 
+## Implementation notes
+
+- Implemented as a Tier 1 compatibility envelope in `src/mongo/db/api_parameters.h`,
+  `src/mongo/db/command_generic_argument.cpp`, and command argument filtering.
+- This is intentionally **not full MongoDB Stable API semantics**. MongoDB uses
+  `apiStrict` and `apiDeprecationErrors` to reject commands or fields that are
+  outside API Version 1 or deprecated. EloqDoc validates the envelope field
+  types and `apiVersion: "1"`, then strips the fields and runs the command with
+  existing 4.0.3 behavior.
+- This semantic difference is accepted for Tier 1 because it lets modern
+  drivers connect without forcing every command and field to be annotated with
+  Stable API metadata. Full strict/deprecation enforcement remains future work.
+- Covered by `tests/jstests/eloq_basic/stable_api_permissive.js` and
+  `tests/jstests/eloq_basic/hello_command.js`.
+
 ## Acceptance criteria
 
 - Sending `{find: "c", apiVersion: "1"}` succeeds and behaves identically to without the field.

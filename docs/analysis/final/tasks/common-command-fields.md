@@ -58,6 +58,22 @@ None.
 
 `collectionUUID` is the trickiest — in stock MongoDB, it asserts that the target namespace's UUID matches the supplied one. Stripping it is safe in EloqDoc *only if* you don't have a use case where a stale namespace name maps to a different UUID. For a single-node instance with no concurrent rename, stripping is fine. If concurrent renames are a concern, escalate to Tier 2 with a real check against EloqDoc's catalog UUID.
 
+## Implementation notes
+
+- Implemented as Tier 1 command-envelope passthrough in
+  `src/mongo/db/command_generic_argument.cpp` and `src/mongo/db/commands.h`.
+- This is intentionally **not full MongoDB `collectionUUID` semantics**. MongoDB
+  verifies that the requested namespace still matches the supplied UUID. EloqDoc
+  accepts and strips `collectionUUID`, `isTimeseriesNamespace`, `mirrored`, and
+  `sampleId`; the command then executes by namespace using existing behavior.
+- The telemetry fields `mirrored` and `sampleId` also remain no-ops because
+  EloqDoc does not implement MongoDB's query analyzer telemetry in this tier.
+- These semantic differences are accepted for Tier 1 client compatibility. A
+  future stricter implementation should verify `collectionUUID` against
+  EloqDoc's catalog and add telemetry plumbing only if those features become
+  product requirements.
+- Covered by `tests/jstests/eloq_basic/envelope_field_passthrough.js`.
+
 ## Acceptance criteria
 
 - Every existing command-level jstest still passes after this change (no regressions).
