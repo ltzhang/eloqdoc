@@ -301,6 +301,7 @@ pipelineeEnv.Library(
         'document_source_sequential_document_cache.cpp',
         'document_source_single_document_transformation.cpp',
         'document_source_skip.cpp',
+        'document_source_stage_aliases.cpp',
         'document_source_sort.cpp',
         'document_source_sort_by_count.cpp',
         "cluster_aggregation_planner.cpp",
