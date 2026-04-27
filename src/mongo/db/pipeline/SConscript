@@ -136,6 +136,7 @@ env.Library(
         'expression.cpp',
         'expression_array_n.cpp',
         'expression_bitwise.cpp',
+        'expression_date_arithmetic.cpp',
         'expression_field_access.cpp',
         'expression_function.cpp',
         'expression_misc.cpp',

@@ -205,6 +205,42 @@ public:
 
 } logRotateCmd;
 
+class RotateCertificatesCmd : public BasicCommand {
+public:
+    RotateCertificatesCmd() : BasicCommand("rotateCertificates") {}
+    bool supportsWriteConcern(const BSONObj& cmd) const override {
+        return false;
+    }
+    AllowedOnSecondary secondaryAllowed(ServiceContext*) const override {
+        return AllowedOnSecondary::kAlways;
+    }
+    bool adminOnly() const override {
+        return true;
+    }
+    void addRequiredPrivileges(const std::string& dbname,
+                               const BSONObj& cmdObj,
+                               std::vector<Privilege>* out) const override {
+        ActionSet actions;
+        actions.addAction(ActionType::logRotate);
+        out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
+    }
+    bool run(OperationContext* opCtx,
+             const string& ns,
+             const BSONObj& cmdObj,
+             BSONObjBuilder& result) override {
+        auto message = cmdObj["message"];
+        if (message) {
+            log() << "rotateCertificates requested: " << message.toString(false);
+        }
+
+        result.appendBool("noop", true);
+        result.append("note",
+                      "TLS certificate rotation is not implemented in this EloqDoc build");
+        return true;
+    }
+
+} rotateCertificatesCmd;
+
 class GetLogCmd : public ErrmsgCommandDeprecated {
 public:
     GetLogCmd() : ErrmsgCommandDeprecated("getLog") {}

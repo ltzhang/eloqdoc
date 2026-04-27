@@ -57,6 +57,13 @@ static CmdRotateCertificates cmdRotateCertificates;
 
 If EloqDoc has additional internal TLS contexts (for Data Substrate inter-node communication, log service mTLS, S3 client), this command should rotate those too — but only if the same on-disk paths are used. Audit `src/mongo/db/modules/eloq/` for additional SSL contexts before declaring done.
 
+## Implementation notes
+
+- Implemented as a Tier 1 compatibility stub in `src/mongo/db/commands/generic_servers.cpp`.
+- MongoDB reloads the server TLS certificate/key material for new TLS connections. EloqDoc currently accepts `rotateCertificates` as an admin command, requires the existing host-manager `logRotate` cluster action, and returns `{noop: true}` with a note that TLS certificate rotation is not implemented in this build.
+- This is a documented semantic difference: the command is present for client compatibility, but does not rotate TLS material until EloqDoc has a concrete TLS-context reload hook to call.
+- Added `tests/jstests/eloq_basic/rotate_certificates_stub.js` to verify the accepted no-op behavior.
+
 ## Acceptance criteria
 
 - `db.adminCommand({rotateCertificates: 1})` succeeds when run as a user with the `hostManager` role.

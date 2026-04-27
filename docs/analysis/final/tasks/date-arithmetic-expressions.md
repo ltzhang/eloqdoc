@@ -65,6 +65,30 @@ None at the storage/concurrency level. The trickiness is purely **temporal corre
 
 These are well-tested by the upstream MongoDB jstest suite — adapt those tests verbatim.
 
+## Implementation notes
+
+- Implemented as a clean-room Tier 1 backport in
+  `src/mongo/db/pipeline/expression_date_arithmetic.cpp`; newer MongoDB code
+  was not copied.
+- `$dateAdd` and `$dateSubtract` use EloqDoc's existing `TimeZone` helpers,
+  including timezone-aware day/week arithmetic and month/quarter/year
+  end-of-month clamping.
+- `$dateDiff` supports all listed units. For millisecond through week it uses
+  elapsed UTC milliseconds; for month/quarter/year it currently uses calendar
+  part differences. MongoDB counts date-unit boundary crossings with more
+  nuanced timezone and partial-boundary rules. This is a documented EloqDoc
+  semantic difference for edge cases around DST, partial months, and negative
+  ranges.
+- `$dateTrunc` supports all listed units, `binSize`, `timezone`, and
+  `startOfWeek`. The Tier 1 implementation covers common calendar truncation
+  behavior but does not fully reproduce MongoDB's reference-date bin alignment
+  for every larger-unit `binSize` edge case. This is a documented semantic
+  difference accepted for this compatibility tier.
+- Added `tests/jstests/eloq_basic/expression_date_arithmetic.js` covering UTC
+  arithmetic, month-end clamping, timezone-aware DST day addition, date
+  differences, truncation bins, week truncation with `startOfWeek`, null input,
+  and invalid argument errors.
+
 ## Acceptance criteria
 
 - All four expressions parse and evaluate correctly across the nine supported units.
