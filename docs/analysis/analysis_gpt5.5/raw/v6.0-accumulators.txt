@@ -1,0 +1,15 @@
+_internalJsReduce
+accumulator
+addToSet
+avg
+first
+foo
+key
+last
+max
+mergeObjects
+min
+push
+stdDevPop
+stdDevSamp
+sum

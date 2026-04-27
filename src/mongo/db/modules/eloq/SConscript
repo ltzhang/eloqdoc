@@ -288,6 +288,16 @@ cmake_module_libs = ["data_substrate",
                      "logservice", "txservice", "eloq-metrics"]
 env.Append(LIBS=cmake_module_libs)
 
+# These CMake-built archives are static, so their transitive dependencies are not
+# carried into the final SCons link. Re-add the required third-party libraries
+# after the archives so GNU ld can resolve symbols introduced by those archives.
+env.Append(LIBS=[
+    "absl_log_severity",
+    "absl_raw_logging_internal",
+    "prometheus-cpp-pull",
+    "prometheus-cpp-core",
+])
+
 # For RocksDB Cloud backends, ensure AWS/GCS SDKs are linked when needed because
 # this module directly references AWS Init/Shutdown APIs under S3 builds.
 if data_store_type == DATA_STORE_TYPE_ROCKSDB_CLOUD_S3:

@@ -1,0 +1,905 @@
+[
+  {
+    "file": "database.ts",
+    "line": 99,
+    "method": "constructor",
+    "signature": "constructor(mongo: Mongo<M>, name: StringKey<M>, session?: Session)",
+    "decorators": []
+  },
+  {
+    "file": "database.ts",
+    "line": 364,
+    "method": "getMongo",
+    "signature": "getMongo(): Mongo<M>",
+    "decorators": [
+      "@returnType('Mongo')"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 368,
+    "method": "getName",
+    "signature": "getName(): StringKey<M>",
+    "decorators": []
+  },
+  {
+    "file": "database.ts",
+    "line": 379,
+    "method": "getCollectionNames",
+    "signature": "async getCollectionNames(): Promise<StringKey<D>[]>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 445,
+    "method": "adminCommand",
+    "signature": "async adminCommand(cmd: string | Document): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@serverVersions(['3.4.0', ServerVersions.latest])",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 478,
+    "method": "aggregate",
+    "signature": "async aggregate(...args: unknown[]): Promise<AggregationCursor | Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@returnType('AggregationCursor')",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 576,
+    "method": "dropDatabase",
+    "signature": "async dropDatabase(writeConcern?: WriteConcern): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 710,
+    "method": "logout",
+    "signature": "async logout(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 733,
+    "method": "dropAllUsers",
+    "signature": "async dropAllUsers(writeConcern?: WriteConcern): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 855,
+    "method": "getUsers",
+    "signature": "async getUsers(options: Document = {}): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 994,
+    "method": "dropAllRoles",
+    "signature": "async dropAllRoles(writeConcern?: WriteConcern): Promise<Document>",
+    "decorators": [
+      "@returnsPromise"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1117,
+    "method": "getRoles",
+    "signature": "async getRoles(options: Document = {}): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1178,
+    "method": "currentOp",
+    "signature": "async currentOp(opts: Document | boolean = {}): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1189,
+    "method": "killOp",
+    "signature": "async killOp(opId: number | string): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1199,
+    "method": "shutdownServer",
+    "signature": "async shutdownServer(opts: Document = {}): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1209,
+    "method": "fsyncLock",
+    "signature": "async fsyncLock(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1219,
+    "method": "fsyncUnlock",
+    "signature": "async fsyncUnlock(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1228,
+    "method": "version",
+    "signature": "async version(): Promise<string>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1246,
+    "method": "serverBits",
+    "signature": "async serverBits(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1264,
+    "method": "isMaster",
+    "signature": "async isMaster(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1276,
+    "method": "hello",
+    "signature": "async hello(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([1])",
+      "@serverVersions(['5.0.0', ServerVersions.latest])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1296,
+    "method": "serverBuildInfo",
+    "signature": "async serverBuildInfo(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1305,
+    "method": "serverStatus",
+    "signature": "async serverStatus(opts = {}): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1315,
+    "method": "stats",
+    "signature": "async stats(scaleOrOptions: number | Document = 1): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1334,
+    "method": "hostInfo",
+    "signature": "async hostInfo(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1343,
+    "method": "serverCmdLineOpts",
+    "signature": "async serverCmdLineOpts(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1353,
+    "method": "rotateCertificates",
+    "signature": "async rotateCertificates(message?: string): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@serverVersions(['5.0.0', ServerVersions.latest])",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1363,
+    "method": "printCollectionStats",
+    "signature": "async printCollectionStats(scale = 1): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1385,
+    "method": "getProfilingStatus",
+    "signature": "async getProfilingStatus(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1450,
+    "method": "getLogComponents",
+    "signature": "async getLogComponents(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1465,
+    "method": "cloneDatabase",
+    "signature": "cloneDatabase(): void",
+    "decorators": [
+      "@deprecated"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1472,
+    "method": "cloneCollection",
+    "signature": "cloneCollection(): void",
+    "decorators": [
+      "@deprecated"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1479,
+    "method": "copyDatabase",
+    "signature": "copyDatabase(): void",
+    "decorators": [
+      "@deprecated"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1487,
+    "method": "commandHelp",
+    "signature": "async commandHelp(name: string): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1508,
+    "method": "listCommands",
+    "signature": "async listCommands(): Promise<CommandResult>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1576,
+    "method": "printShardingStatus",
+    "signature": "async printShardingStatus(verbose = false): Promise<CommandResult>",
+    "decorators": [
+      "@returnsPromise",
+      "@topologies(['Sharded'])",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1588,
+    "method": "printSecondaryReplicationInfo",
+    "signature": "async printSecondaryReplicationInfo(): Promise<CommandResult>",
+    "decorators": [
+      "@returnsPromise",
+      "@topologies(['ReplSet'])",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1669,
+    "method": "getReplicationInfo",
+    "signature": "async getReplicationInfo(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@topologies(['ReplSet'])",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1734,
+    "method": "printReplicationInfo",
+    "signature": "async printReplicationInfo(): Promise<CommandResult>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])",
+      "@topologies(['ReplSet'])"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1766,
+    "method": "printSlaveReplicationInfo",
+    "signature": "printSlaveReplicationInfo(): never",
+    "decorators": [
+      "@deprecated"
+    ]
+  },
+  {
+    "file": "database.ts",
+    "line": 1774,
+    "method": "setSecondaryOk",
+    "signature": "async setSecondaryOk(): Promise<void>",
+    "decorators": [
+      "@deprecated",
+      "@returnsPromise"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 201,
+    "method": "aggregate",
+    "signature": "async aggregate(...args: unknown[]): Promise<AggregationCursor | Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@returnType('AggregationCursor')",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 318,
+    "method": "count",
+    "signature": "async count(query = {}, options: CountOptions = {}): Promise<number>",
+    "decorators": [
+      "@returnsPromise",
+      "@deprecated",
+      "@serverVersions([ServerVersions.earliest, '4.0.0'])",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 915,
+    "method": "isCapped",
+    "signature": "async isCapped(): Promise<boolean>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1152,
+    "method": "compactStructuredEncryptionData",
+    "signature": "async compactStructuredEncryptionData(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1175,
+    "method": "convertToCapped",
+    "signature": "async convertToCapped(size: number): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1316,
+    "method": "getIndexes",
+    "signature": "async getIndexes(): Promise<Document[]>",
+    "decorators": [
+      "@returnsPromise",
+      "@serverVersions(['3.2.0', ServerVersions.latest])",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1334,
+    "method": "getIndexSpecs",
+    "signature": "async getIndexSpecs(): Promise<Document[]>",
+    "decorators": [
+      "@returnsPromise",
+      "@serverVersions(['3.2.0', ServerVersions.latest])",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1351,
+    "method": "getIndices",
+    "signature": "async getIndices(): Promise<Document[]>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1368,
+    "method": "getIndexKeys",
+    "signature": "async getIndexKeys(): Promise<Document[]>",
+    "decorators": [
+      "@returnsPromise",
+      "@serverVersions(['3.2.0', ServerVersions.latest])",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1433,
+    "method": "dropIndex",
+    "signature": "async dropIndex(index: string | Document): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1468,
+    "method": "totalIndexSize",
+    "signature": "async totalIndexSize(...args: any[]): Promise<number>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1489,
+    "method": "reIndex",
+    "signature": "async reIndex(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@deprecated",
+      "@topologies(['Standalone'])",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1502,
+    "method": "getDB",
+    "signature": "getDB(): DatabaseWithSchema<M, D>",
+    "decorators": [
+      "@returnType('DatabaseWithSchema')"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1513,
+    "method": "getMongo",
+    "signature": "getMongo(): Mongo<M>",
+    "decorators": [
+      "@returnType('Mongo')"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1525,
+    "method": "dataSize",
+    "signature": "async dataSize(): Promise<number>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1538,
+    "method": "storageSize",
+    "signature": "async storageSize(): Promise<number>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1551,
+    "method": "totalSize",
+    "signature": "async totalSize(): Promise<number>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1564,
+    "method": "drop",
+    "signature": "async drop(options: DropCollectionOptions = {}): Promise<boolean>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1625,
+    "method": "exists",
+    "signature": "async exists(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1638,
+    "method": "getFullName",
+    "signature": "getFullName(): string",
+    "decorators": []
+  },
+  {
+    "file": "collection.ts",
+    "line": 1643,
+    "method": "getName",
+    "signature": "getName(): N",
+    "decorators": []
+  },
+  {
+    "file": "collection.ts",
+    "line": 1688,
+    "method": "explain",
+    "signature": "explain(verbosity: ExplainVerbosityLike = 'queryPlanner'): Explainable",
+    "decorators": [
+      "@returnType('Explainable')",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 1971,
+    "method": "stats",
+    "signature": "async stats(originalOptions: Document | number = {}): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 2055,
+    "method": "latencyStats",
+    "signature": "async latencyStats(options: Document = {}): Promise<Document[]>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 2065,
+    "method": "initializeOrderedBulkOp",
+    "signature": "async initializeOrderedBulkOp(): Promise<Bulk>",
+    "decorators": [
+      "@returnsPromise",
+      "@returnType('Bulk')",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 2079,
+    "method": "initializeUnorderedBulkOp",
+    "signature": "async initializeUnorderedBulkOp(): Promise<Bulk>",
+    "decorators": [
+      "@returnsPromise",
+      "@returnType('Bulk')",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 2092,
+    "method": "getPlanCache",
+    "signature": "getPlanCache(): PlanCache",
+    "decorators": [
+      "@returnType('PlanCache')",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 2142,
+    "method": "validate",
+    "signature": "async validate(options: boolean | Document = false): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 2156,
+    "method": "getShardVersion",
+    "signature": "async getShardVersion(): Promise<Document>",
+    "decorators": [
+      "@returnsPromise",
+      "@topologies(['Sharded'])",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 2348,
+    "method": "getShardLocation",
+    "signature": "async getShardLocation(): Promise<",
+    "decorators": [
+      "@returnsPromise",
+      "@topologies(['Sharded'])",
+      "@apiVersions([])",
+      "@serverVersions(['8.0.10', ServerVersions.latest])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 2446,
+    "method": "hideIndex",
+    "signature": "async hideIndex(index: string | Document): Promise<Document>",
+    "decorators": [
+      "@serverVersions(['4.4.0', ServerVersions.latest])",
+      "@returnsPromise",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 2454,
+    "method": "unhideIndex",
+    "signature": "async unhideIndex(index: string | Document): Promise<Document>",
+    "decorators": [
+      "@serverVersions(['4.4.0', ServerVersions.latest])",
+      "@returnsPromise",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 2480,
+    "method": "configureQueryAnalyzer",
+    "signature": "async configureQueryAnalyzer(options: Document): Promise<Document>",
+    "decorators": [
+      "@serverVersions(['7.0.0', ServerVersions.latest])",
+      "@returnsPromise",
+      "@topologies(['ReplSet', 'Sharded'])",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "collection.ts",
+    "line": 2614,
+    "method": "dropSearchIndex",
+    "signature": "async dropSearchIndex(indexName: string): Promise<void>",
+    "decorators": [
+      "@serverVersions(['6.0.0', ServerVersions.latest])",
+      "@returnsPromise",
+      "@apiVersions([])"
+    ]
+  },
+  {
+    "file": "mongo.ts",
+    "line": 221,
+    "method": "connect",
+    "signature": "async connect(username?: string, password?: string): Promise<void>",
+    "decorators": []
+  },
+  {
+    "file": "mongo.ts",
+    "line": 311,
+    "method": "getURI",
+    "signature": "getURI(): string",
+    "decorators": []
+  },
+  {
+    "file": "mongo.ts",
+    "line": 315,
+    "method": "use",
+    "signature": "use(db: StringKey<M>): string",
+    "decorators": []
+  },
+  {
+    "file": "mongo.ts",
+    "line": 383,
+    "method": "getDBs",
+    "signature": "async getDBs(options: ListDatabasesOptions = {}): Promise<",
+    "decorators": [
+      "@returnsPromise",
+      "@apiVersions([1])"
+    ]
+  },
+  {
+    "file": "mongo.ts",
+    "line": 589,
+    "method": "close",
+    "signature": "async close(): Promise<void>",
+    "decorators": []
+  },
+  {
+    "file": "mongo.ts",
+    "line": 608,
+    "method": "getReadPrefMode",
+    "signature": "getReadPrefMode(): ReadPreferenceMode",
+    "decorators": []
+  },
+  {
+    "file": "mongo.ts",
+    "line": 612,
+    "method": "getReadPrefTagSet",
+    "signature": "getReadPrefTagSet(): Record<string, string>[] | undefined",
+    "decorators": []
+  },
+  {
+    "file": "mongo.ts",
+    "line": 616,
+    "method": "getReadPref",
+    "signature": "getReadPref(): ReadPreference",
+    "decorators": []
+  },
+  {
+    "file": "mongo.ts",
+    "line": 628,
+    "method": "getReadConcern",
+    "signature": "getReadConcern(): string | undefined",
+    "decorators": []
+  },
+  {
+    "file": "mongo.ts",
+    "line": 637,
+    "method": "getWriteConcern",
+    "signature": "getWriteConcern(): WriteConcern | undefined",
+    "decorators": []
+  },
+  {
+    "file": "mongo.ts",
+    "line": 662,
+    "method": "setReadConcern",
+    "signature": "async setReadConcern(level: ReadConcernLevel): Promise<void>",
+    "decorators": [
+      "@returnsPromise"
+    ]
+  },
+  {
+    "file": "mongo.ts",
+    "line": 752,
+    "method": "startSession",
+    "signature": "startSession(options: Document = {}): Session",
+    "decorators": [
+      "@topologies(['ReplSet'])"
+    ]
+  },
+  {
+    "file": "mongo.ts",
+    "line": 804,
+    "method": "setCausalConsistency",
+    "signature": "setCausalConsistency(): void",
+    "decorators": []
+  },
+  {
+    "file": "mongo.ts",
+    "line": 812,
+    "method": "isCausalConsistency",
+    "signature": "isCausalConsistency(): void",
+    "decorators": []
+  },
+  {
+    "file": "mongo.ts",
+    "line": 821,
+    "method": "setSlaveOk",
+    "signature": "setSlaveOk(): void",
+    "decorators": [
+      "@deprecated"
+    ]
+  },
+  {
+    "file": "mongo.ts",
+    "line": 829,
+    "method": "setSecondaryOk",
+    "signature": "async setSecondaryOk(): Promise<void>",
+    "decorators": [
+      "@deprecated",
+      "@returnsPromise"
+    ]
+  },
+  {
+    "file": "mongo.ts",
+    "line": 879,
+    "method": "getClientEncryption",
+    "signature": "getClientEncryption(): ClientEncryption",
+    "decorators": [
+      "@platforms(['CLI'])",
+      "@serverVersions(['4.2.0', ServerVersions.latest])",
+      "@returnType('ClientEncryption')"
+    ]
+  },
+  {
+    "file": "mongo.ts",
+    "line": 896,
+    "method": "getKeyVault",
+    "signature": "async getKeyVault(): Promise<KeyVault>",
+    "decorators": [
+      "@platforms(['CLI'])",
+      "@serverVersions(['4.2.0', ServerVersions.latest])",
+      "@returnType('KeyVault')",
+      "@returnsPromise"
+    ]
+  }
+]

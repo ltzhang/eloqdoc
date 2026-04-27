@@ -1,0 +1,982 @@
+[
+  {
+    "class": "ConfigSvrAddShardCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_configsvrAddShard"
+    ],
+    "file": "src/mongo/db/s/config/configsvr_add_shard_command.cpp"
+  },
+  {
+    "class": "ConfigSvrAddShardToZoneCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_configsvrAddShardToZone"
+    ],
+    "file": "src/mongo/db/s/config/configsvr_add_shard_to_zone_command.cpp"
+  },
+  {
+    "class": "ConfigSvrSplitChunkCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_configsvrCommitChunkSplit"
+    ],
+    "file": "src/mongo/db/s/config/configsvr_split_chunk_command.cpp"
+  },
+  {
+    "class": "ConfigSvrRemoveShardCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_configsvrRemoveShard"
+    ],
+    "file": "src/mongo/db/s/config/configsvr_remove_shard_command.cpp"
+  },
+  {
+    "class": "ConfigSvrRemoveShardFromZoneCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_configsvrRemoveShardFromZone"
+    ],
+    "file": "src/mongo/db/s/config/configsvr_remove_shard_from_zone_command.cpp"
+  },
+  {
+    "class": "ConfigSvrRepairShardedCollectionChunksHistoryCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_configsvrRepairShardedCollectionChunksHistory"
+    ],
+    "file": "src/mongo/db/s/config/configsvr_repair_sharded_collection_chunks_history_command.cpp"
+  },
+  {
+    "class": "ConfigSvrRunRestoreCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_configsvrRunRestore"
+    ],
+    "file": "src/mongo/db/s/config/configsvr_run_restore_command.cpp"
+  },
+  {
+    "class": "ConfigSvrTransitionToDedicatedConfigCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_configsvrTransitionToDedicatedConfigServer"
+    ],
+    "file": "src/mongo/db/s/config/configsvr_transition_to_dedicated_config_server_command.cpp"
+  },
+  {
+    "class": "ConfigsvrUpdateZoneKeyRangeCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_configsvrUpdateZoneKeyRange"
+    ],
+    "file": "src/mongo/db/s/config/configsvr_update_zone_key_range_command.cpp"
+  },
+  {
+    "class": "MigrateSessionCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_getNextSessionMods"
+    ],
+    "file": "src/mongo/db/s/migration_chunk_cloner_source_legacy_commands.cpp"
+  },
+  {
+    "class": "CmdHashElt",
+    "base": "BasicCommand",
+    "names": [
+      "_hashBSONElement"
+    ],
+    "file": "src/mongo/db/commands/hashcmd.cpp"
+  },
+  {
+    "class": "IsSelfCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_isSelf"
+    ],
+    "file": "src/mongo/db/commands/isself.cpp"
+  },
+  {
+    "class": "InitialCloneCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_migrateClone"
+    ],
+    "file": "src/mongo/db/s/migration_chunk_cloner_source_legacy_commands.cpp"
+  },
+  {
+    "class": "RecvChunkAbortCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_recvChunkAbort"
+    ],
+    "file": "src/mongo/db/s/migration_destination_manager_commands.cpp"
+  },
+  {
+    "class": "RecvChunkCommitCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_recvChunkCommit"
+    ],
+    "file": "src/mongo/db/s/migration_destination_manager_commands.cpp"
+  },
+  {
+    "class": "RecvChunkReleaseCritSecCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_recvChunkReleaseCritSec"
+    ],
+    "file": "src/mongo/db/s/migration_destination_manager_commands.cpp"
+  },
+  {
+    "class": "RecvChunkStartCommand",
+    "base": "ErrmsgCommandDeprecated",
+    "names": [
+      "_recvChunkStart"
+    ],
+    "file": "src/mongo/db/s/migration_destination_manager_commands.cpp"
+  },
+  {
+    "class": "RecvChunkStatusCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_recvChunkStatus"
+    ],
+    "file": "src/mongo/db/s/migration_destination_manager_commands.cpp"
+  },
+  {
+    "class": "CloneCatalogDataCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_shardsvrCloneCatalogData",
+      "_cloneCatalogData"
+    ],
+    "file": "src/mongo/db/s/clone_catalog_data_command.cpp"
+  },
+  {
+    "class": "MovePrimaryCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_shardsvrMovePrimary"
+    ],
+    "file": "src/mongo/db/s/shardsvr_move_primary_command.cpp"
+  },
+  {
+    "class": "TransferModsCommand",
+    "base": "BasicCommand",
+    "names": [
+      "_transferMods"
+    ],
+    "file": "src/mongo/db/s/migration_chunk_cloner_source_legacy_commands.cpp"
+  },
+  {
+    "class": "AddShardCmd",
+    "base": "BasicCommand",
+    "names": [
+      "addShard",
+      "addshard"
+    ],
+    "file": "src/mongo/s/commands/cluster_add_shard_cmd.cpp"
+  },
+  {
+    "class": "AddShardToZoneCmd",
+    "base": "BasicCommand",
+    "names": [
+      "addShardToZone",
+      "addshardtozone"
+    ],
+    "file": "src/mongo/s/commands/cluster_add_shard_to_zone_cmd.cpp"
+  },
+  {
+    "class": "AppendOplogNoteCmd",
+    "base": "BasicCommand",
+    "names": [
+      "appendOplogNote"
+    ],
+    "file": "src/mongo/db/commands/oplog_note.cpp"
+  },
+  {
+    "class": "AppendOplogNoteCmd",
+    "base": "BasicCommand",
+    "names": [
+      "appendOplogNote"
+    ],
+    "file": "src/mongo/s/commands/cluster_oplog_note_cmd.cpp"
+  },
+  {
+    "class": "ApplyOpsCmd",
+    "base": "BasicCommand",
+    "names": [
+      "applyOps"
+    ],
+    "file": "src/mongo/db/commands/apply_ops_cmd.cpp"
+  },
+  {
+    "class": "CmdBuildInfo",
+    "base": "BasicCommand",
+    "names": [
+      "buildInfo",
+      "buildinfo"
+    ],
+    "file": "src/mongo/db/commands/dbcommands.cpp"
+  },
+  {
+    "class": "ClusterCmdBuildInfo",
+    "base": "BasicCommand",
+    "names": [
+      "buildInfo",
+      "buildinfo"
+    ],
+    "file": "src/mongo/s/commands/cluster_build_info.cpp"
+  },
+  {
+    "class": "CapTrunc",
+    "base": "BasicCommand",
+    "names": [
+      "captrunc"
+    ],
+    "file": "src/mongo/db/commands/test_commands.cpp"
+  },
+  {
+    "class": "CheckShardingIndex",
+    "base": "ErrmsgCommandDeprecated",
+    "names": [
+      "checkShardingIndex"
+    ],
+    "file": "src/mongo/db/s/check_sharding_index_command.cpp"
+  },
+  {
+    "class": "CleanupOrphanedCommand",
+    "base": "ErrmsgCommandDeprecated",
+    "names": [
+      "cleanupOrphaned"
+    ],
+    "file": "src/mongo/db/s/cleanup_orphaned_cmd.cpp"
+  },
+  {
+    "class": "CmdCloneCollectionAsCapped",
+    "base": "BasicCommand",
+    "names": [
+      "cloneCollectionAsCapped"
+    ],
+    "file": "src/mongo/db/commands/collection_to_capped.cpp"
+  },
+  {
+    "class": "CollectionStats",
+    "base": "BasicCommand",
+    "names": [
+      "collStats",
+      "collstats"
+    ],
+    "file": "src/mongo/s/commands/cluster_coll_stats_cmd.cpp"
+  },
+  {
+    "class": "CompactCmd",
+    "base": "BasicCommand",
+    "names": [
+      "compact"
+    ],
+    "file": "src/mongo/db/commands/compact.cpp"
+  },
+  {
+    "class": "CompactCmd",
+    "base": "BasicCommand",
+    "names": [
+      "compact"
+    ],
+    "file": "src/mongo/s/commands/cluster_compact_cmd.cpp"
+  },
+  {
+    "class": "FaultInjectCmd",
+    "base": "BasicCommand",
+    "names": [
+      "configureFailPoint"
+    ],
+    "file": "src/mongo/db/commands/fail_point_cmd.cpp"
+  },
+  {
+    "class": "PoolStats",
+    "base": "BasicCommand",
+    "names": [
+      "connPoolStats"
+    ],
+    "file": "src/mongo/db/commands/conn_pool_stats.cpp"
+  },
+  {
+    "class": "PoolFlushCmd",
+    "base": "BasicCommand",
+    "names": [
+      "connPoolSync",
+      "connpoolsync"
+    ],
+    "file": "src/mongo/db/commands/conn_pool_sync.cpp"
+  },
+  {
+    "class": "CmdConvertToCapped",
+    "base": "BasicCommand",
+    "names": [
+      "convertToCapped"
+    ],
+    "file": "src/mongo/db/commands/collection_to_capped.cpp"
+  },
+  {
+    "class": "ConvertToCappedCmd",
+    "base": "BasicCommand",
+    "names": [
+      "convertToCapped"
+    ],
+    "file": "src/mongo/s/commands/cluster_convert_to_capped_cmd.cpp"
+  },
+  {
+    "class": "CmdCount",
+    "base": "BasicCommand",
+    "names": [
+      "count"
+    ],
+    "file": "src/mongo/db/commands/count_cmd.cpp"
+  },
+  {
+    "class": "CPULoadCommand",
+    "base": "BasicCommand",
+    "names": [
+      "cpuload"
+    ],
+    "file": "src/mongo/db/commands/cpuload.cpp"
+  },
+  {
+    "class": "CstCommand",
+    "base": "BasicCommand",
+    "names": [
+      "cst"
+    ],
+    "file": "src/mongo/db/commands/cst_command.cpp"
+  },
+  {
+    "class": "CurrentOpCommandBase",
+    "base": "BasicCommand",
+    "names": [
+      "currentOp"
+    ],
+    "file": "src/mongo/db/commands/current_op_common.h"
+  },
+  {
+    "class": "DbCheckCmd",
+    "base": "BasicCommand",
+    "names": [
+      "dbCheck"
+    ],
+    "file": "src/mongo/db/commands/dbcheck.cpp"
+  },
+  {
+    "class": "DBHashCmd",
+    "base": "BasicCommand",
+    "names": [
+      "dbHash",
+      "dbhash"
+    ],
+    "file": "src/mongo/db/commands/dbhash.cpp"
+  },
+  {
+    "class": "DistinctCommand",
+    "base": "BasicCommand",
+    "names": [
+      "distinct"
+    ],
+    "file": "src/mongo/db/commands/distinct.cpp"
+  },
+  {
+    "class": "DistinctCmd",
+    "base": "BasicCommand",
+    "names": [
+      "distinct"
+    ],
+    "file": "src/mongo/s/commands/cluster_distinct_cmd.cpp"
+  },
+  {
+    "class": "EmptyCapped",
+    "base": "BasicCommand",
+    "names": [
+      "emptycapped"
+    ],
+    "file": "src/mongo/db/commands/test_commands.cpp"
+  },
+  {
+    "class": "CmdFileMD5",
+    "base": "BasicCommand",
+    "names": [
+      "filemd5"
+    ],
+    "file": "src/mongo/db/commands/dbcommands_d.cpp"
+  },
+  {
+    "class": "FileMD5Cmd",
+    "base": "BasicCommand",
+    "names": [
+      "filemd5"
+    ],
+    "file": "src/mongo/s/commands/cluster_filemd5_cmd.cpp"
+  },
+  {
+    "class": "FindAndModifyCmd",
+    "base": "BasicCommand",
+    "names": [
+      "findAndModify",
+      "findandmodify"
+    ],
+    "file": "src/mongo/s/commands/cluster_find_and_modify_cmd.h"
+  },
+  {
+    "class": "FlushRouterConfigCmd",
+    "base": "BasicCommand",
+    "names": [
+      "flushRouterConfig",
+      "flushrouterconfig"
+    ],
+    "file": "src/mongo/s/commands/flush_router_config_cmd.cpp"
+  },
+  {
+    "class": "FSyncCommand",
+    "base": "BasicCommand",
+    "names": [
+      "fsync"
+    ],
+    "file": "src/mongo/db/commands/fsync.cpp"
+  },
+  {
+    "class": "FsyncCommand",
+    "base": "ErrmsgCommandDeprecated",
+    "names": [
+      "fsync"
+    ],
+    "file": "src/mongo/s/commands/cluster_fsync_cmd.cpp"
+  },
+  {
+    "class": "FSyncUnlockCommand",
+    "base": "BasicCommand",
+    "names": [
+      "fsyncUnlock"
+    ],
+    "file": "src/mongo/db/commands/fsync.cpp"
+  },
+  {
+    "class": "GetDiagnosticDataCommand",
+    "base": "BasicCommand",
+    "names": [
+      "getDiagnosticData"
+    ],
+    "file": "src/mongo/db/ftdc/ftdc_commands.cpp"
+  },
+  {
+    "class": "GetDiagnosticDataCommand",
+    "base": "ErrmsgCommandDeprecated",
+    "names": [
+      "getDiagnosticData"
+    ],
+    "file": "src/mongo/s/commands/cluster_ftdc_commands.cpp"
+  },
+  {
+    "class": "GetLogCmd",
+    "base": "BasicCommand",
+    "names": [
+      "getLog"
+    ],
+    "file": "src/mongo/db/commands/generic_servers.cpp"
+  },
+  {
+    "class": "CmdGet",
+    "base": "BasicCommand",
+    "names": [
+      "getParameter"
+    ],
+    "file": "src/mongo/db/commands/parameters.cpp"
+  },
+  {
+    "class": "CmdGetShardMap",
+    "base": "BasicCommand",
+    "names": [
+      "getShardMap"
+    ],
+    "file": "src/mongo/s/commands/get_shard_map_cmd.cpp"
+  },
+  {
+    "class": "GetShardVersion",
+    "base": "BasicCommand",
+    "names": [
+      "getShardVersion"
+    ],
+    "file": "src/mongo/db/s/get_shard_version_command.cpp"
+  },
+  {
+    "class": "GetShardVersion",
+    "base": "BasicCommand",
+    "names": [
+      "getShardVersion",
+      "getshardversion"
+    ],
+    "file": "src/mongo/s/commands/cluster_get_shard_version_cmd.cpp"
+  },
+  {
+    "class": "GodInsert",
+    "base": "BasicCommand",
+    "names": [
+      "godinsert"
+    ],
+    "file": "src/mongo/db/commands/test_commands.cpp"
+  },
+  {
+    "class": "IsDbGridCmd",
+    "base": "BasicCommand",
+    "names": [
+      "isdbgrid"
+    ],
+    "file": "src/mongo/s/commands/cluster_is_db_grid_cmd.cpp"
+  },
+  {
+    "class": "KillAllSessionsCommand",
+    "base": "BasicCommand",
+    "names": [
+      "killAllSessions"
+    ],
+    "file": "src/mongo/db/commands/kill_all_sessions_command.cpp"
+  },
+  {
+    "class": "KillAllSessionsByPatternCommand",
+    "base": "BasicCommand",
+    "names": [
+      "killAllSessionsByPattern"
+    ],
+    "file": "src/mongo/db/commands/kill_all_sessions_by_pattern_command.cpp"
+  },
+  {
+    "class": "KillOpCmdBase",
+    "base": "BasicCommand",
+    "names": [
+      "killOp"
+    ],
+    "file": "src/mongo/db/commands/kill_op_cmd_base.h"
+  },
+  {
+    "class": "KillSessionsCommand",
+    "base": "BasicCommand",
+    "names": [
+      "killSessions"
+    ],
+    "file": "src/mongo/db/commands/kill_sessions_command.cpp"
+  },
+  {
+    "class": "ListCommandsCmd",
+    "base": "BasicCommand",
+    "names": [
+      "listCommands"
+    ],
+    "file": "src/mongo/db/commands/generic.cpp"
+  },
+  {
+    "class": "ListShardsCmd",
+    "base": "BasicCommand",
+    "names": [
+      "listShards",
+      "listshards"
+    ],
+    "file": "src/mongo/s/commands/cluster_list_shards_cmd.cpp"
+  },
+  {
+    "class": "CmdLockInfo",
+    "base": "BasicCommand",
+    "names": [
+      "lockInfo"
+    ],
+    "file": "src/mongo/db/commands/lock_info.cpp"
+  },
+  {
+    "class": "CmdMakeSnapshot",
+    "base": "BasicCommand",
+    "names": [
+      "makeSnapshot"
+    ],
+    "file": "src/mongo/db/commands/snapshot_management.cpp"
+  },
+  {
+    "class": "MapReduceCommandBase",
+    "base": "BasicCommand",
+    "names": [
+      "mapReduce",
+      "mapreduce"
+    ],
+    "file": "src/mongo/db/commands/map_reduce_command_base.h"
+  },
+  {
+    "class": "MergeChunksCommand",
+    "base": "ErrmsgCommandDeprecated",
+    "names": [
+      "mergeChunks",
+      "_shardsvrMergeChunks"
+    ],
+    "file": "src/mongo/db/s/shardsvr_merge_chunks_command.cpp"
+  },
+  {
+    "class": "ClusterMergeChunksCommand",
+    "base": "ErrmsgCommandDeprecated",
+    "names": [
+      "mergeChunks"
+    ],
+    "file": "src/mongo/s/commands/cluster_merge_chunks_cmd.cpp"
+  },
+  {
+    "class": "MoveDatabasePrimaryCommand",
+    "base": "BasicCommand",
+    "names": [
+      "movePrimary",
+      "moveprimary"
+    ],
+    "file": "src/mongo/s/commands/cluster_move_primary_cmd.cpp"
+  },
+  {
+    "class": "ClusterMulticastCmd",
+    "base": "BasicCommand",
+    "names": [
+      "multicast"
+    ],
+    "file": "src/mongo/s/commands/cluster_multicast_cmd.cpp"
+  },
+  {
+    "class": "NetStatCmd",
+    "base": "BasicCommand",
+    "names": [
+      "netstat"
+    ],
+    "file": "src/mongo/s/commands/cluster_netstat_cmd.cpp"
+  },
+  {
+    "class": "DurableHistoryReplicatedTestCmd",
+    "base": "BasicCommand",
+    "names": [
+      "pinHistoryReplicated"
+    ],
+    "file": "src/mongo/db/commands/test_commands.cpp"
+  },
+  {
+    "class": "PlanCacheClearCommand",
+    "base": "BasicCommand",
+    "names": [
+      "planCacheClear"
+    ],
+    "file": "src/mongo/db/commands/plan_cache_clear_command.cpp"
+  },
+  {
+    "class": "ClusterPlanCacheClearCmd",
+    "base": "BasicCommand",
+    "names": [
+      "planCacheClear"
+    ],
+    "file": "src/mongo/s/commands/cluster_plan_cache_clear_cmd.cpp"
+  },
+  {
+    "class": "ProfileCmdBase",
+    "base": "BasicCommand",
+    "names": [
+      "profile"
+    ],
+    "file": "src/mongo/db/commands/profile_common.h"
+  },
+  {
+    "class": "CmdReIndex",
+    "base": "BasicCommand",
+    "names": [
+      "reIndex"
+    ],
+    "file": "src/mongo/db/commands/drop_indexes.cpp"
+  },
+  {
+    "class": "ReapLogicalSessionCacheNowCommand",
+    "base": "BasicCommand",
+    "names": [
+      "reapLogicalSessionCacheNow"
+    ],
+    "file": "src/mongo/db/commands/reap_logical_session_cache_now.cpp"
+  },
+  {
+    "class": "RefreshLogicalSessionCacheNowCommand",
+    "base": "BasicCommand",
+    "names": [
+      "refreshLogicalSessionCacheNow"
+    ],
+    "file": "src/mongo/db/commands/refresh_logical_session_cache_now.cpp"
+  },
+  {
+    "class": "RemoveShardCmd",
+    "base": "BasicCommand",
+    "names": [
+      "removeShard",
+      "removeshard"
+    ],
+    "file": "src/mongo/s/commands/cluster_remove_shard_cmd.cpp"
+  },
+  {
+    "class": "RemoveShardFromZoneCmd",
+    "base": "BasicCommand",
+    "names": [
+      "removeShardFromZone",
+      "removeshardfromzone"
+    ],
+    "file": "src/mongo/s/commands/cluster_remove_shard_from_zone_cmd.cpp"
+  },
+  {
+    "class": "RepairShardedCollectionChunksHistoryCommand",
+    "base": "BasicCommand",
+    "names": [
+      "repairShardedCollectionChunksHistory"
+    ],
+    "file": "src/mongo/s/commands/cluster_repair_sharded_collection_chunks_history_cmd.cpp"
+  },
+  {
+    "class": "CmdReplSetGetStatus",
+    "base": "ErrmsgCommandDeprecated",
+    "names": [
+      "replSetGetStatus"
+    ],
+    "file": "src/mongo/s/commands/cluster_repl_set_get_status_cmd.cpp"
+  },
+  {
+    "class": "CmdReplSetResizeOplog",
+    "base": "BasicCommand",
+    "names": [
+      "replSetResizeOplog"
+    ],
+    "file": "src/mongo/db/commands/resize_oplog.cpp"
+  },
+  {
+    "class": "CmdServerStatus",
+    "base": "BasicCommand",
+    "names": [
+      "serverStatus"
+    ],
+    "file": "src/mongo/db/commands/server_status_command.cpp"
+  },
+  {
+    "class": "CmdSetCommittedSnapshot",
+    "base": "BasicCommand",
+    "names": [
+      "setCommittedSnapshot"
+    ],
+    "file": "src/mongo/db/commands/snapshot_management.cpp"
+  },
+  {
+    "class": "ClusterSetDefaultRWConcernCommand",
+    "base": "BasicCommand",
+    "names": [
+      "setDefaultRWConcern"
+    ],
+    "file": "src/mongo/s/commands/cluster_rwc_defaults_commands.cpp"
+  },
+  {
+    "class": "SetIndexCommitQuorumCommand",
+    "base": "BasicCommand",
+    "names": [
+      "setIndexCommitQuorum"
+    ],
+    "file": "src/mongo/s/commands/cluster_set_index_commit_quorum_cmd.cpp"
+  },
+  {
+    "class": "CmdSet",
+    "base": "BasicCommand",
+    "names": [
+      "setParameter"
+    ],
+    "file": "src/mongo/db/commands/parameters.cpp"
+  },
+  {
+    "class": "SetProfilingFilterGloballyCmd",
+    "base": "BasicCommand",
+    "names": [
+      "setProfilingFilterGlobally"
+    ],
+    "file": "src/mongo/db/commands/set_profiling_filter_globally_cmd.h"
+  },
+  {
+    "class": "ShardCollectionCmd",
+    "base": "BasicCommand",
+    "names": [
+      "shardCollection",
+      "shardcollection"
+    ],
+    "file": "src/mongo/s/commands/cluster_shard_collection_cmd.cpp"
+  },
+  {
+    "class": "ShardingStateCmd",
+    "base": "BasicCommand",
+    "names": [
+      "shardingState"
+    ],
+    "file": "src/mongo/db/s/sharding_state_command.cpp"
+  },
+  {
+    "class": "CmdSleep",
+    "base": "BasicCommand",
+    "names": [
+      "sleep"
+    ],
+    "file": "src/mongo/db/commands/sleep_command.cpp"
+  },
+  {
+    "class": "SplitCollectionCmd",
+    "base": "ErrmsgCommandDeprecated",
+    "names": [
+      "split"
+    ],
+    "file": "src/mongo/s/commands/cluster_split_cmd.cpp"
+  },
+  {
+    "class": "SplitChunkCommand",
+    "base": "ErrmsgCommandDeprecated",
+    "names": [
+      "splitChunk",
+      "_shardsvrSplitChunk"
+    ],
+    "file": "src/mongo/db/s/shardsvr_split_chunk_command.cpp"
+  },
+  {
+    "class": "SplitVector",
+    "base": "ErrmsgCommandDeprecated",
+    "names": [
+      "splitVector"
+    ],
+    "file": "src/mongo/db/s/split_vector_command.cpp"
+  },
+  {
+    "class": "SplitVectorCmd",
+    "base": "BasicCommand",
+    "names": [
+      "splitVector"
+    ],
+    "file": "src/mongo/s/commands/cluster_split_vector_cmd.cpp"
+  },
+  {
+    "class": "StageDebugCmd",
+    "base": "BasicCommand",
+    "names": [
+      "stageDebug"
+    ],
+    "file": "src/mongo/db/exec/stagedebug_cmd.cpp"
+  },
+  {
+    "class": "StartSessionCommand",
+    "base": "BasicCommand",
+    "names": [
+      "startSession"
+    ],
+    "file": "src/mongo/db/commands/start_session_command.cpp"
+  },
+  {
+    "class": "TestDeprecationCmd",
+    "base": "BasicCommand",
+    "names": [
+      "testDeprecation"
+    ],
+    "file": "src/mongo/db/commands/test_deprecation_command.cpp"
+  },
+  {
+    "class": "TestDeprecationInVersion2Cmd",
+    "base": "BasicCommand",
+    "names": [
+      "testDeprecationInVersion2"
+    ],
+    "file": "src/mongo/db/commands/test_api_version_2_commands.cpp"
+  },
+  {
+    "class": "TestRemovalCmd",
+    "base": "BasicCommand",
+    "names": [
+      "testRemoval"
+    ],
+    "file": "src/mongo/db/commands/test_api_version_2_commands.cpp"
+  },
+  {
+    "class": "TestVersion2Cmd",
+    "base": "BasicCommand",
+    "names": [
+      "testVersion2"
+    ],
+    "file": "src/mongo/db/commands/test_api_version_2_commands.cpp"
+  },
+  {
+    "class": "TestVersions1And2Cmd",
+    "base": "BasicCommand",
+    "names": [
+      "testVersions1And2"
+    ],
+    "file": "src/mongo/db/commands/test_api_version_2_commands.cpp"
+  },
+  {
+    "class": "TopCommand",
+    "base": "BasicCommand",
+    "names": [
+      "top"
+    ],
+    "file": "src/mongo/db/commands/top_command.cpp"
+  },
+  {
+    "class": "TransitionToDedicatedConfigServerCmd",
+    "base": "BasicCommand",
+    "names": [
+      "transitionToDedicatedConfigServer"
+    ],
+    "file": "src/mongo/s/commands/cluster_transition_to_dedicated_config_server_cmd.cpp"
+  },
+  {
+    "class": "UpdateZoneKeyRangeCmd",
+    "base": "BasicCommand",
+    "names": [
+      "updateZoneKeyRange",
+      "updatezonekeyRange"
+    ],
+    "file": "src/mongo/s/commands/cluster_update_zone_key_range_cmd.cpp"
+  },
+  {
+    "class": "ValidateCmd",
+    "base": "BasicCommand",
+    "names": [
+      "validate"
+    ],
+    "file": "src/mongo/db/commands/validate.cpp"
+  },
+  {
+    "class": "ValidateCmd",
+    "base": "BasicCommand",
+    "names": [
+      "validate"
+    ],
+    "file": "src/mongo/s/commands/cluster_validate_cmd.cpp"
+  },
+  {
+    "class": "WaitForOngoingChunksSplitsCommand",
+    "base": "BasicCommand",
+    "names": [
+      "waitForOngoingChunkSplits"
+    ],
+    "file": "src/mongo/db/s/wait_for_ongoing_chunk_splits_command.cpp"
+  },
+  {
+    "class": "CmdWhatsMySNI",
+    "base": "BasicCommand",
+    "names": [
+      "whatsmysni"
+    ],
+    "file": "src/mongo/db/commands/whats_my_sni_command.cpp"
+  },
+  {
+    "class": "CmdWhatsMyUri",
+    "base": "BasicCommand",
+    "names": [
+      "whatsmyuri"
+    ],
+    "file": "src/mongo/db/commands/whats_my_uri_cmd.cpp"
+  },
+  {
+    "class": "WhatsMyUriCmd",
+    "base": "BasicCommand",
+    "names": [
+      "whatsmyuri"
+    ],
+    "file": "src/mongo/s/commands/cluster_whats_my_uri_cmd.cpp"
+  }
+]

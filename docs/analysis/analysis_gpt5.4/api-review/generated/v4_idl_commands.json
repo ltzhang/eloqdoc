@@ -1,0 +1,1782 @@
+[
+  {
+    "name": "MapReduce",
+    "command_name": "MapReduce",
+    "cpp_name": null,
+    "description": "The MapReduce command.",
+    "strict": true,
+    "namespace": "concatenate_with_db",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/map_reduce.idl",
+    "fields": [
+      {
+        "name": "map",
+        "type": "mapReduceJavascriptCodeType",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Javascript code to run as the map operation which associates a value with a key and emits the key and value pair.",
+        "validator": null
+      },
+      {
+        "name": "reduce",
+        "type": "mapReduceJavascriptCodeType",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Javascript code to run as the map operation which reduces all the values associated with a particular key to a single value.",
+        "validator": null
+      },
+      {
+        "name": "out",
+        "type": "mapReduceOutOptionsType",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": "outOptions",
+        "description": "Out Options sub-object or string representing a collection.",
+        "validator": null
+      },
+      {
+        "name": "query",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Query object in match language to use as a filter applied before the map step.",
+        "validator": null
+      },
+      {
+        "name": "sort",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Sort specification to apply before the map step.",
+        "validator": null
+      },
+      {
+        "name": "collation",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "collation specification which takes effect for 'query' and 'sort'.",
+        "validator": null
+      },
+      {
+        "name": "limit",
+        "type": "safeInt64",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Document count limit to apply before the map step.",
+        "validator": null
+      },
+      {
+        "name": "finalize",
+        "type": "mapReduceJavascriptCodeNullPermittedType",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Javascript code to run after the reduce operation.",
+        "validator": null
+      },
+      {
+        "name": "scope",
+        "type": "mapReduceGlobalVariableScopeType",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Javascript global variable mapping for map, reduce and finalize.",
+        "validator": null
+      },
+      {
+        "name": "verbose",
+        "type": "bool",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Specifies whether to include the timing information in the result information.",
+        "validator": null
+      },
+      {
+        "name": "bypassDocumentValidation",
+        "type": "bool",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Causes the out portion of the operation to ignore the output collection's document validation.",
+        "validator": null
+      },
+      {
+        "name": "jsMode",
+        "type": "bool",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Deprecated non-functional option which is ignored.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "_addShard",
+    "command_name": "_addShard",
+    "cpp_name": "AddShard",
+    "description": "_addShard Command",
+    "strict": null,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/s/add_shard_cmd.idl",
+    "fields": [
+      {
+        "name": "shardIdentity",
+        "type": "ShardIdentity",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Identity metadata for the new shard",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "_cloneCollectionOptionsFromPrimaryShard",
+    "command_name": "_cloneCollectionOptionsFromPrimaryShard",
+    "cpp_name": "cloneCollectionOptionsFromPrimaryShard",
+    "description": "Internal command to create a collection on a non-primary shard with the collection options from the primary shard.",
+    "strict": true,
+    "namespace": "type",
+    "type": "namespacestring",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/clone_collection_options_from_primary_shard.idl",
+    "fields": [
+      {
+        "name": "primaryShard",
+        "type": "string",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The primary shard to get the options from.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "_configsvrBalancerCollectionStatus",
+    "command_name": "_configsvrBalancerCollectionStatus",
+    "cpp_name": "ConfigsvrBalancerCollectionStatus",
+    "description": "Internal balancerCollectionStatus command on the config server",
+    "strict": true,
+    "namespace": "type",
+    "type": "namespacestring",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/balancer_collection_status.idl",
+    "fields": []
+  },
+  {
+    "name": "_configsvrClearJumboFlag",
+    "command_name": "_configsvrClearJumboFlag",
+    "cpp_name": "ConfigsvrClearJumboFlag",
+    "description": "internal clearJumboFlag command for config server",
+    "strict": false,
+    "namespace": "type",
+    "type": "namespacestring",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/clear_jumbo_flag.idl",
+    "fields": [
+      {
+        "name": "epoch",
+        "type": "objectid",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The expected epoch of the namespace provided to clearJumboFlag.",
+        "validator": null
+      },
+      {
+        "name": "minKey",
+        "type": "object",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The lower bound key value of the chunk.",
+        "validator": null
+      },
+      {
+        "name": "maxKey",
+        "type": "object",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The upper bound key value of the chunk.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "_configsvrCreateCollection",
+    "command_name": "_configsvrCreateCollection",
+    "cpp_name": "ConfigsvrCreateCollection",
+    "description": "The internal createCollection command on the config server",
+    "strict": false,
+    "namespace": "type",
+    "type": "namespacestring",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/create_collection.idl",
+    "fields": [
+      {
+        "name": "options",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "collection creation options",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "_configsvrCreateDatabase",
+    "command_name": "_configsvrCreateDatabase",
+    "cpp_name": "ConfigsvrCreateDatabase",
+    "description": "The internal createDatabase command on the config server",
+    "strict": false,
+    "namespace": "type",
+    "type": "string",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/create_database.idl",
+    "fields": []
+  },
+  {
+    "name": "_configsvrEnsureChunkVersionIsGreaterThan",
+    "command_name": "_configsvrEnsureChunkVersionIsGreaterThan",
+    "cpp_name": "ConfigsvrEnsureChunkVersionIsGreaterThan",
+    "description": "If a chunk matching 'requestedChunk' exists, bumps the chunk's version to one greater than the current collection version.",
+    "strict": false,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/ensure_chunk_version_is_greater_than.idl",
+    "fields": [
+      {
+        "name": "minKey",
+        "type": "object",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The lower bound of the chunk.",
+        "validator": null
+      },
+      {
+        "name": "maxKey",
+        "type": "object",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The upper bound of the chunk.",
+        "validator": null
+      },
+      {
+        "name": "version",
+        "type": "ChunkVersion",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The version of the chunk, including major version, minor version, and epoch.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "_configsvrRefineCollectionShardKey",
+    "command_name": "_configsvrRefineCollectionShardKey",
+    "cpp_name": "ConfigsvrRefineCollectionShardKey",
+    "description": "The internal refineCollectionShardKey command on the config server",
+    "strict": false,
+    "namespace": "type",
+    "type": "namespacestring",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/refine_collection_shard_key.idl",
+    "fields": [
+      {
+        "name": "key",
+        "type": "object",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The index specification document to use as the new shard key.",
+        "validator": null
+      },
+      {
+        "name": "epoch",
+        "type": "objectid",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The expected epoch of the namespace provided to refineCollectionShardKey.",
+        "validator": null
+      },
+      {
+        "name": "enforceUniquenessCheck",
+        "type": "optionalBool",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Verifies that the shard key index has the same unique setting as the command.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "_flushDatabaseCacheUpdates",
+    "command_name": "_flushDatabaseCacheUpdates",
+    "cpp_name": null,
+    "description": "An internal command to wait for the last routing table cache refresh for a particular database to be persisted to disk",
+    "strict": true,
+    "namespace": "type",
+    "type": "string",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/flush_database_cache_updates.idl",
+    "fields": [
+      {
+        "name": "syncFromConfig",
+        "type": "bool",
+        "optional": false,
+        "default": true,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "If true, forces a refresh of the cache entry from the config server before waiting for updates to be persist",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "_flushRoutingTableCacheUpdates",
+    "command_name": "_flushRoutingTableCacheUpdates",
+    "cpp_name": "FlushRoutingTableCacheUpdates",
+    "description": "An internal command to wait for the last routing table cache refresh for a particular namespace to be persisted to disk",
+    "strict": true,
+    "namespace": "type",
+    "type": "namespacestring",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/flush_routing_table_cache_updates.idl",
+    "fields": [
+      {
+        "name": "syncFromConfig",
+        "type": "bool",
+        "optional": false,
+        "default": true,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "If true, forces a refresh of the cache entry from the config server before waiting for updates to be persist",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "_killOperations",
+    "command_name": "_killOperations",
+    "cpp_name": "KillOperationsRequest",
+    "description": "Interrupt a list of operations on a remote server",
+    "strict": true,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/kill_operations.idl",
+    "fields": [
+      {
+        "name": "operationKeys",
+        "type": "array<uuid>",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "A list of (UUID) operation key",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "_shardsvrSetAllowMigrations",
+    "command_name": "_shardsvrSetAllowMigrations",
+    "cpp_name": "shardsvrSetAllowMigrations",
+    "description": "Internal setAllowMigrations command for a shard.",
+    "strict": false,
+    "namespace": "concatenate_with_db",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/set_allow_migrations.idl",
+    "fields": []
+  },
+  {
+    "name": "abortTransaction",
+    "command_name": "abortTransaction",
+    "cpp_name": null,
+    "description": "abortTransaction Command",
+    "strict": null,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/txn_cmds.idl",
+    "fields": []
+  },
+  {
+    "name": "autoSplitVector",
+    "command_name": "autoSplitVector",
+    "cpp_name": "AutoSplitVectorRequest",
+    "description": "Internal autoSplitVector command",
+    "strict": false,
+    "namespace": "concatenate_with_db",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/auto_split_vector.idl",
+    "fields": [
+      {
+        "name": "keyPattern",
+        "type": "object_owned",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Shard key pattern of the collection",
+        "validator": null
+      },
+      {
+        "name": "min",
+        "type": "object_owned",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Min key of the chunk",
+        "validator": null
+      },
+      {
+        "name": "max",
+        "type": "object_owned",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Max key of the chunk",
+        "validator": null
+      },
+      {
+        "name": "maxChunkSizeBytes",
+        "type": "safeInt64",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Max chunk size of the collection expressed in bytes",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "balancerCollectionStatus",
+    "command_name": "balancerCollectionStatus",
+    "cpp_name": "BalancerCollectionStatus",
+    "description": "Public balancerCollectionStatus command on mongos",
+    "strict": true,
+    "namespace": "type",
+    "type": "namespacestring",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/balancer_collection_status.idl",
+    "fields": []
+  },
+  {
+    "name": "clearJumboFlag",
+    "command_name": "clearJumboFlag",
+    "cpp_name": null,
+    "description": "clearJumboFlag command for mongos",
+    "strict": false,
+    "namespace": "type",
+    "type": "namespacestring",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/clear_jumbo_flag.idl",
+    "fields": [
+      {
+        "name": "bounds",
+        "type": "array<object>",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The exact boundaries for a single chunk.",
+        "validator": null
+      },
+      {
+        "name": "find",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The shard key value that is within a chunk's boundaries. Cannot be used on collections with hashed shard keys.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "cloneCatalogData",
+    "command_name": "cloneCatalogData",
+    "cpp_name": null,
+    "description": "The internal cloneCatalogData command on a shard",
+    "strict": false,
+    "namespace": "type",
+    "type": "namespacestring",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/clone_catalog_data.idl",
+    "fields": [
+      {
+        "name": "from",
+        "type": "string",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The connection string of the database to clone from.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "commitTransaction",
+    "command_name": "commitTransaction",
+    "cpp_name": null,
+    "description": "commitTransaction Command",
+    "strict": null,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/txn_cmds.idl",
+    "fields": [
+      {
+        "name": "commitTimestamp",
+        "type": "timestamp",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Timestamp at which to commit the transaction. Required for prepared transactions and illegal for non-prepared ones.",
+        "validator": null
+      },
+      {
+        "name": "recoveryToken",
+        "type": "TxnRecoveryToken",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "A mongos that doesn't know about this transaction can attempt to make progress on commit by processing using the info in the recoveryToken.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "coordinateCommitTransaction",
+    "command_name": "coordinateCommitTransaction",
+    "cpp_name": null,
+    "description": "Parser for the 'coordinateCommitTransaction' command.",
+    "strict": false,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/txn_two_phase_commit_cmds.idl",
+    "fields": [
+      {
+        "name": "participants",
+        "type": "array<CommitParticipant>",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "An array of shard participants that must be included in the commit.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "count",
+    "command_name": "count",
+    "cpp_name": "CountCommand",
+    "description": "Parser for the 'count' command.",
+    "strict": true,
+    "namespace": "concatenate_with_db_or_uuid",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/query/count_command.idl",
+    "fields": [
+      {
+        "name": "query",
+        "type": "object",
+        "optional": false,
+        "default": "BSONObj()",
+        "unstable": false,
+        "cpp_name": null,
+        "description": "A query that selects which documents to count in the collection or view.",
+        "validator": null
+      },
+      {
+        "name": "limit",
+        "type": "countLimit",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The maximum number of matching documents to count.",
+        "validator": null
+      },
+      {
+        "name": "skip",
+        "type": "countSkip",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The number of matching documents to skip before counting subsequent results.",
+        "validator": null
+      },
+      {
+        "name": "hint",
+        "type": "indexHint",
+        "optional": false,
+        "default": "BSONObj()",
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The index name to use or the index specification document.",
+        "validator": null
+      },
+      {
+        "name": "collation",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The collation to use in the count command.",
+        "validator": null
+      },
+      {
+        "name": "fields",
+        "type": "object",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "A BSONObj added by the shell. Left in for backwards compatibility.",
+        "validator": null
+      },
+      {
+        "name": "readConcern",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "A BSONObj read concern.",
+        "validator": null
+      },
+      {
+        "name": "maxTimeMS",
+        "type": "maxTimeMS",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "",
+        "validator": null
+      },
+      {
+        "name": "$queryOptions",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": "queryOptions",
+        "description": "Unwrapped read preference.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "create",
+    "command_name": "create",
+    "cpp_name": "CreateCommand",
+    "description": "Parser for the 'create' Command",
+    "strict": true,
+    "namespace": "concatenate_with_db",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/create.idl",
+    "fields": [
+      {
+        "name": "capped",
+        "type": "safeBool",
+        "optional": false,
+        "default": false,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Specify true to create a capped collection. If you specify true, you must also set a maximum size in the 'size' field.",
+        "validator": null
+      },
+      {
+        "name": "autoIndexId",
+        "type": "safeBool",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Specify false to disable the automatic creation of an index on the _id field.",
+        "validator": null
+      },
+      {
+        "name": "idIndex",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Specify the default _id index specification.",
+        "validator": null
+      },
+      {
+        "name": "size",
+        "type": "safeInt64",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Specify a maximum size in bytes for the capped collection.",
+        "validator": null
+      },
+      {
+        "name": "max",
+        "type": "safeInt64",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The maximum number of documents allowed in the capped collection. The 'size' limit takes precedence over this limit.",
+        "validator": null
+      },
+      {
+        "name": "storageEngine",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Specify a configuration to the storage engine on a per-collection basis when creating a collection.",
+        "validator": null
+      },
+      {
+        "name": "validator",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Specify validation rules or expressions for the collection.",
+        "validator": null
+      },
+      {
+        "name": "validationLevel",
+        "type": "string",
+        "optional": false,
+        "default": "\"strict\"",
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Determines how strictly to apply the validation rules to existing documents during an update. Can be one of following values: 'off', 'strict' or 'moderate'.",
+        "validator": null
+      },
+      {
+        "name": "validationAction",
+        "type": "string",
+        "optional": false,
+        "default": "\"error\"",
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Determines whether to error on invalid documents or just warn about the violations but allow invalid documents to be inserted. Can be either 'warn' or 'error'.",
+        "validator": null
+      },
+      {
+        "name": "indexOptionDefaults",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Allows users to specify a default configuration for indexes when creating a collection.",
+        "validator": null
+      },
+      {
+        "name": "viewOn",
+        "type": "string",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The name of the source collection or view from which to create the view.",
+        "validator": null
+      },
+      {
+        "name": "pipeline",
+        "type": "array<object>",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "An array that consists of the aggregation pipeline. Creates the view by applying the specified pipeline to the 'viewOn' collection or view.",
+        "validator": null
+      },
+      {
+        "name": "collation",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Specifies the default collation for the collection or the view.",
+        "validator": null
+      },
+      {
+        "name": "writeConcern",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "A document that expresses the write concern for the operation.",
+        "validator": null
+      },
+      {
+        "name": "recordPreImages",
+        "type": "safeBool",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Sets whether updates/deletes should store the pre-image of the document in the oplog",
+        "validator": null
+      },
+      {
+        "name": "temp",
+        "type": "safeBool",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "DEPRECATED",
+        "validator": null
+      },
+      {
+        "name": "flags",
+        "type": "safeInt64",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "DEPRECATED",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "delete",
+    "command_name": "delete",
+    "cpp_name": null,
+    "description": "Parser for the 'delete' command.",
+    "strict": true,
+    "namespace": "concatenate_with_db",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/ops/write_ops.idl",
+    "fields": [
+      {
+        "name": "deletes",
+        "type": "array<DeleteOpEntry>",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "An array of one or more delete statements to perform.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "distinct",
+    "command_name": "distinct",
+    "cpp_name": "DistinctCommand",
+    "description": "Parser for the 'distinct' command.",
+    "strict": true,
+    "namespace": "concatenate_with_db_or_uuid",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/query/distinct_command.idl",
+    "fields": [
+      {
+        "name": "key",
+        "type": "string",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The field path for which to return distinct values.",
+        "validator": null
+      },
+      {
+        "name": "query",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Optional query that filters the documents from which to retrieve the distinct values.",
+        "validator": null
+      },
+      {
+        "name": "collation",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Optional collation for the command.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "dropConnections",
+    "command_name": "dropConnections",
+    "cpp_name": null,
+    "description": "An administrative command which takes a list of host and ports and drops pooled connections to them",
+    "strict": null,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/drop_connections.idl",
+    "fields": [
+      {
+        "name": "hostAndPort",
+        "type": "array<HostAndPort>",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "List of host and ports",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "exampleIncrement",
+    "command_name": "exampleIncrement",
+    "cpp_name": null,
+    "description": "increment an integer (TypedCommand example)",
+    "strict": null,
+    "namespace": "concatenate_with_db",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands_test_example.idl",
+    "fields": [
+      {
+        "name": "i",
+        "type": null,
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "exampleMinimal",
+    "command_name": "exampleMinimal",
+    "cpp_name": null,
+    "description": "like exampleIncrement, but use MinimalInvocationBase",
+    "strict": null,
+    "namespace": "concatenate_with_db",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands_test_example.idl",
+    "fields": [
+      {
+        "name": "i",
+        "type": null,
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "exampleVoid",
+    "command_name": "exampleVoid",
+    "cpp_name": null,
+    "description": "no return, just side effects",
+    "strict": null,
+    "namespace": "concatenate_with_db",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands_test_example.idl",
+    "fields": [
+      {
+        "name": "i",
+        "type": null,
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "fsyncUnlock",
+    "command_name": "fsyncUnlock",
+    "cpp_name": "ClusterFsyncUnlock",
+    "description": "The command for calling fsync unlock on all shards of a cluster.",
+    "strict": false,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/commands/cluster_fsync_unlock_cmd.idl",
+    "fields": []
+  },
+  {
+    "name": "getDatabaseVersion",
+    "command_name": "getDatabaseVersion",
+    "cpp_name": null,
+    "description": "An internal command to get a shard server's cached database version",
+    "strict": null,
+    "namespace": "type",
+    "type": "string",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/get_database_version.idl",
+    "fields": []
+  },
+  {
+    "name": "getDefaultRWConcern",
+    "command_name": "getDefaultRWConcern",
+    "cpp_name": null,
+    "description": "Get the current read/write concern defaults being applied by this node",
+    "strict": null,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/rwc_defaults_commands.idl",
+    "fields": [
+      {
+        "name": "inMemory",
+        "type": "bool",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "If true, return the locally cached read/write concern defaults",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "httpClientRequest",
+    "command_name": "httpClientRequest",
+    "cpp_name": null,
+    "description": "Fetch an HTTP(S) resource via GET",
+    "strict": null,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/http_client.idl",
+    "fields": [
+      {
+        "name": "uri",
+        "type": "string",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Document location to fetch",
+        "validator": null
+      },
+      {
+        "name": "timeoutSecs",
+        "type": "int",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Maximum amount of time to wait for response (seconds)",
+        "validator": {
+          "gt": 0
+        }
+      }
+    ]
+  },
+  {
+    "name": "insert",
+    "command_name": "insert",
+    "cpp_name": null,
+    "description": "Parser for the 'insert' command.",
+    "strict": true,
+    "namespace": "concatenate_with_db",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/ops/write_ops.idl",
+    "fields": [
+      {
+        "name": "documents",
+        "type": "array<object>",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "An array of one or more documents to insert.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "internalRenameIfOptionsAndIndexesMatch",
+    "command_name": "internalRenameIfOptionsAndIndexesMatch",
+    "cpp_name": null,
+    "description": "An internal command that does a rename, but first checks to make sure the indexes and collection options on the destination match those given in the command.",
+    "strict": null,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/internal_rename_if_options_and_indexes_match.idl",
+    "fields": [
+      {
+        "name": "from",
+        "type": "namespacestring",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "",
+        "validator": null
+      },
+      {
+        "name": "to",
+        "type": "namespacestring",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "",
+        "validator": null
+      },
+      {
+        "name": "collectionOptions",
+        "type": "object",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "An object representing the options on the from collection with the same format as the options from the listCollections command.",
+        "validator": null
+      },
+      {
+        "name": "indexes",
+        "type": "array<object>",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "An object with form {indexName: {spec}, indexName: {spec}, ...}",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "listDatabasesCommand",
+    "command_name": "listDatabasesCommand",
+    "cpp_name": null,
+    "description": "listDatabases Command",
+    "strict": null,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/list_databases.idl",
+    "fields": [
+      {
+        "name": "nameOnly",
+        "type": "safeBool",
+        "optional": false,
+        "default": false,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Return just the database name without metadata",
+        "validator": null
+      },
+      {
+        "name": "authorizedDatabases",
+        "type": "bool",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Only return those databases for which the user is authorized",
+        "validator": null
+      },
+      {
+        "name": "filter",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Filter description to limit results",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "logMessage",
+    "command_name": "logMessage",
+    "cpp_name": "LogMessageCommand",
+    "description": "Log a message on the server",
+    "strict": true,
+    "namespace": "type",
+    "type": "string",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/generic.idl",
+    "fields": [
+      {
+        "name": "extra",
+        "type": "object",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Structured data to include with log message",
+        "validator": null
+      },
+      {
+        "name": "severity",
+        "type": "MessageSeverity",
+        "optional": false,
+        "default": "kLog",
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Severity of log message",
+        "validator": null
+      },
+      {
+        "name": "debugLevel",
+        "type": "int",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "When using 'debug' severity, what level of debug is to be used?",
+        "validator": {
+          "gte": 1,
+          "lte": 5
+        }
+      }
+    ]
+  },
+  {
+    "name": "prepareTransaction",
+    "command_name": "prepareTransaction",
+    "cpp_name": null,
+    "description": "Parser for the 'prepareTransaction' command.",
+    "strict": true,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/txn_two_phase_commit_cmds.idl",
+    "fields": []
+  },
+  {
+    "name": "profile",
+    "command_name": "profile",
+    "cpp_name": "ProfileCmdRequest",
+    "description": "Parser for the 'profile' command.",
+    "strict": false,
+    "namespace": "type",
+    "type": "safeInt64",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/profile.idl",
+    "fields": [
+      {
+        "name": "slowms",
+        "type": "safeInt64",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The threshold, in milliseconds, at which ops are profiled and logged.",
+        "validator": null
+      },
+      {
+        "name": "sampleRate",
+        "type": "double",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The fraction of eligible ops, in the range [0,1), to be logged/profiled.",
+        "validator": null
+      },
+      {
+        "name": "filter",
+        "type": "ObjectOrUnset",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "A query predicate that determines which ops are logged/profiled. This is an alternative to slowms and sampleRate. The special value 'unset' removes the filter.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "refineCollectionShardKey",
+    "command_name": "refineCollectionShardKey",
+    "cpp_name": null,
+    "description": "The public refineCollectionShardKey command on mongos",
+    "strict": false,
+    "namespace": "type",
+    "type": "namespacestring",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/refine_collection_shard_key.idl",
+    "fields": [
+      {
+        "name": "key",
+        "type": "object",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The index specification document to use as the new shard key.",
+        "validator": null
+      },
+      {
+        "name": "enforceUniquenessCheck",
+        "type": "optionalBool",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Controls whether this command verifies that any unique indexes are prefixed by the shard key pattern if unique is true. If true then it will verify and if false then it won't.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "renameCollection",
+    "command_name": "renameCollection",
+    "cpp_name": "RenameCollectionCommand",
+    "description": "Parser for the 'renameCollection' command.",
+    "strict": true,
+    "namespace": "type",
+    "type": "namespacestring",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/rename_collection.idl",
+    "fields": [
+      {
+        "name": "to",
+        "type": "namespacestring",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The new namespace for the collection being renamed.",
+        "validator": null
+      },
+      {
+        "name": "dropTarget",
+        "type": "bool",
+        "optional": false,
+        "default": false,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "If true, mongod will drop the target of renameCollection prior to renaming the collection.",
+        "validator": null
+      },
+      {
+        "name": "stayTemp",
+        "type": "bool",
+        "optional": false,
+        "default": false,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "If true, the original collection will remain temp if it was temp before the rename.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "replSetResizeOplog",
+    "command_name": "replSetResizeOplog",
+    "cpp_name": "ReplSetResizeOplogRequest",
+    "description": "Parser for the 'replSetResizeOplog' command.",
+    "strict": false,
+    "namespace": "type",
+    "type": "safeInt64",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/resize_oplog.idl",
+    "fields": [
+      {
+        "name": "size",
+        "type": "double",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Size of the oplog in MB",
+        "validator": {
+          "gte": 990,
+          "lte": 1073741824
+        }
+      },
+      {
+        "name": "minRetentionHours",
+        "type": "double",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Minimum number of hours to preserve oplog entry.",
+        "validator": {
+          "gte": 0
+        }
+      }
+    ]
+  },
+  {
+    "name": "setAllowMigrations",
+    "command_name": "setAllowMigrations",
+    "cpp_name": "SetAllowMigrations",
+    "description": "User faced setAllowMigrations command.",
+    "strict": true,
+    "namespace": "type",
+    "type": "namespacestring",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/set_allow_migrations.idl",
+    "fields": []
+  },
+  {
+    "name": "setDefaultRWConcern",
+    "command_name": "setDefaultRWConcern",
+    "cpp_name": null,
+    "description": "Set the current read/write concern defaults (cluster-wide)",
+    "strict": null,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/rwc_defaults_commands.idl",
+    "fields": [
+      {
+        "name": "defaultReadConcern",
+        "type": "ReadConcern",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The new default read concern",
+        "validator": null
+      },
+      {
+        "name": "defaultWriteConcern",
+        "type": "WriteConcern",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The new default write concern",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "setIndexCommitQuorum",
+    "command_name": "setIndexCommitQuorum",
+    "cpp_name": "SetIndexCommitQuorum",
+    "description": "Resets the commitQuorum for an index build.",
+    "strict": false,
+    "namespace": "concatenate_with_db",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/set_index_commit_quorum.idl",
+    "fields": [
+      {
+        "name": "indexNames",
+        "type": "array<string>",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "an array of all index names matching a single prior createIndexes request.",
+        "validator": null
+      },
+      {
+        "name": "commitQuorum",
+        "type": "CommitQuorum",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "commitQuorum can be set to the same values as writeConcern.w and indicates how many and/or which replica set members are needed for the primary to commit the index build.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "setProfilingFilterGlobally",
+    "command_name": "setProfilingFilterGlobally",
+    "cpp_name": "SetProfilingFilterGloballyCmdRequest",
+    "description": "Parser for the 'setProfilingFilterGlobally' command.",
+    "strict": true,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/profile.idl",
+    "fields": [
+      {
+        "name": "filter",
+        "type": "ObjectOrUnset",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "A query predicate that determines which ops are logged/profiled on a global level. The special value 'unset' removes the filter.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "startRecordingTraffic",
+    "command_name": "startRecordingTraffic",
+    "cpp_name": null,
+    "description": "start recording Command",
+    "strict": null,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/traffic_recorder.idl",
+    "fields": [
+      {
+        "name": "filename",
+        "type": "string",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "output file name",
+        "validator": null
+      },
+      {
+        "name": "bufferSize",
+        "type": "long",
+        "optional": false,
+        "default": 134217728,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "size of buffer",
+        "validator": null
+      },
+      {
+        "name": "maxFileSize",
+        "type": "long",
+        "optional": false,
+        "default": 6294967296,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "size of log file",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "stopRecordingTraffic",
+    "command_name": "stopRecordingTraffic",
+    "cpp_name": null,
+    "description": "stop recording Command",
+    "strict": null,
+    "namespace": "ignored",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/traffic_recorder.idl",
+    "fields": []
+  },
+  {
+    "name": "update",
+    "command_name": "update",
+    "cpp_name": null,
+    "description": "Parser for the 'update' command.",
+    "strict": true,
+    "namespace": "concatenate_with_db",
+    "type": null,
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/ops/write_ops.idl",
+    "fields": [
+      {
+        "name": "updates",
+        "type": "array<UpdateOpEntry>",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "An array of one or more update statements to perform.",
+        "validator": null
+      },
+      {
+        "name": "runtimeConstants",
+        "type": "RuntimeConstants",
+        "optional": true,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "A collection of values that do not change once computed. These are used by pipeline-style update operations.",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "voteCommitIndexBuild",
+    "command_name": "voteCommitIndexBuild",
+    "cpp_name": "VoteCommitIndexBuild",
+    "description": "An internal mongod command pertaining to cross replica set index builds",
+    "strict": false,
+    "namespace": "type",
+    "type": "uuid",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/db/commands/vote_commit_index_build.idl",
+    "fields": [
+      {
+        "name": "hostAndPort",
+        "type": "HostAndPort",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "Replica set member identification",
+        "validator": null
+      }
+    ]
+  },
+  {
+    "name": "waitForFailPoint",
+    "command_name": "waitForFailPoint",
+    "cpp_name": null,
+    "description": "wait for a fail point to be entered a certain number of times",
+    "strict": false,
+    "namespace": "type",
+    "type": "string",
+    "api_version": null,
+    "reply_type": null,
+    "file": "src/mongo/s/request_types/wait_for_fail_point.idl",
+    "fields": [
+      {
+        "name": "timesEntered",
+        "type": "safeInt64",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The target number of times the fail point has been entered.",
+        "validator": null
+      },
+      {
+        "name": "maxTimeMS",
+        "type": "safeInt64",
+        "optional": false,
+        "default": null,
+        "unstable": false,
+        "cpp_name": null,
+        "description": "The wait timeout in milliseconds.",
+        "validator": null
+      }
+    ]
+  }
+]
