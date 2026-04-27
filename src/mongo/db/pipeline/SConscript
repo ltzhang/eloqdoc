@@ -137,6 +137,7 @@ env.Library(
         'expression_bitwise.cpp',
         'expression_field_access.cpp',
         'expression_misc.cpp',
+        'expression_trigonometric.cpp',
         ],
     LIBDEPS=[
         '$BUILD_DIR/mongo/db/mongohasher',

@@ -92,6 +92,7 @@ One file per subgroup is reasonable:
 ## Implementation notes
 
 - `$round` and the two-argument `$trunc` backport match MongoDB's numeric rounding modes, including ties-to-even for `$round` and toward-zero for `$trunc`. EloqDoc's older Decimal128 library may serialize an equivalent decimal cohort without MongoDB's trailing `.0` in some zero-precision results (for example `NumberDecimal("2")` rather than `NumberDecimal("2.0")`). This is a display/cohort difference only; numeric comparison semantics are unchanged.
+- Trigonometric conversion expressions use MongoDB's API names `$degreesToRadians` and `$radiansToDegrees`; the shorter `$degrees`/`$radians` labels in the subgroup list are shorthand, not separate MongoDB expressions.
 
 ## Acceptance criteria
 
