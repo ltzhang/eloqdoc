@@ -106,6 +106,9 @@ public:
     virtual CollectionIndexUsageMap getIndexStats(OperationContext* opCtx,
                                                   const NamespaceString& ns) = 0;
 
+    virtual std::vector<BSONObj> getPlanCacheStats(OperationContext* opCtx,
+                                                   const NamespaceString& ns) = 0;
+
     /**
      * Appends operation latency statistics for collection "nss" to "builder"
      */

@@ -73,6 +73,8 @@ public:
                        const std::vector<BSONObj>& objs) final;
         CollectionIndexUsageMap getIndexStats(OperationContext* opCtx,
                                               const NamespaceString& ns) final;
+        std::vector<BSONObj> getPlanCacheStats(OperationContext* opCtx,
+                                               const NamespaceString& ns) final;
         void appendLatencyStats(OperationContext* opCtx,
                                 const NamespaceString& nss,
                                 bool includeHistograms,

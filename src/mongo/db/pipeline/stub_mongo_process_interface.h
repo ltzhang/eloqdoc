@@ -68,6 +68,11 @@ public:
         MONGO_UNREACHABLE;
     }
 
+    std::vector<BSONObj> getPlanCacheStats(OperationContext* opCtx,
+                                           const NamespaceString& ns) override {
+        MONGO_UNREACHABLE;
+    }
+
     void appendLatencyStats(OperationContext* opCtx,
                             const NamespaceString& nss,
                             bool includeHistograms,

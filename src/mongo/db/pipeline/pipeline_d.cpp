@@ -34,6 +34,9 @@
 
 #include "mongo/db/pipeline/pipeline_d.h"
 
+#include <functional>
+#include <sstream>
+
 #include "mongo/bson/simple_bsonobj_comparator.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/auth/authorization_session.h"
@@ -68,7 +71,10 @@
 #include "mongo/db/pipeline/document_source_sort.h"
 #include "mongo/db/pipeline/pipeline.h"
 #include "mongo/db/query/collation/collator_interface.h"
+#include "mongo/db/query/explain.h"
 #include "mongo/db/query/get_executor.h"
+#include "mongo/db/query/plan_cache.h"
+#include "mongo/db/query/plan_ranker.h"
 #include "mongo/db/query/plan_summary_stats.h"
 #include "mongo/db/query/query_planner.h"
 #include "mongo/db/s/collection_sharding_state.h"
@@ -97,6 +103,73 @@ using std::string;
 using std::unique_ptr;
 
 namespace {
+
+std::string makePlanCacheStatsQueryHash(const PlanCacheKey& key) {
+    std::ostringstream stream;
+    stream << std::hex << std::hash<std::string>()(key);
+    return stream.str();
+}
+
+StatusWith<CanonicalQuery::UPtr> canonicalizePlanCacheEntry(OperationContext* opCtx,
+                                                            const NamespaceString& nss,
+                                                            const PlanCacheEntry& entry) {
+    auto qr = ObjectPool<QueryRequest>::newObject(nss);
+    qr->setFilter(entry.query);
+    qr->setSort(entry.sort);
+    qr->setProj(entry.projection);
+    qr->setCollation(entry.collation);
+
+    const ExtensionsCallbackReal extensionsCallback(opCtx, &nss);
+    const boost::intrusive_ptr<ExpressionContext> expCtx;
+    return CanonicalQuery::canonicalize(opCtx,
+                                        std::move(qr),
+                                        expCtx,
+                                        extensionsCallback,
+                                        MatchExpressionParser::kAllowAllSpecialFeatures);
+}
+
+BSONArray serializePlanCacheEntryPlans(const PlanCacheEntry& entry) {
+    BSONArrayBuilder plansBuilder;
+
+    const size_t numPlans = entry.plannerData.size();
+    invariant(numPlans == entry.decision->stats.size());
+    invariant(numPlans == entry.decision->scores.size());
+
+    for (size_t i = 0; i < numPlans; ++i) {
+        BSONObjBuilder planBob(plansBuilder.subobjStart());
+
+        auto scd = entry.plannerData[i];
+        BSONObjBuilder detailsBob(planBob.subobjStart("details"));
+        detailsBob.append("solution", scd->toString());
+        detailsBob.doneFast();
+
+        BSONObjBuilder reasonBob(planBob.subobjStart("reason"));
+        reasonBob.append("score", entry.decision->scores[i]);
+        BSONObjBuilder statsBob(reasonBob.subobjStart("stats"));
+        if (auto stats = entry.decision->stats[i].get()) {
+            Explain::statsToBSON(*stats, &statsBob);
+        }
+        statsBob.doneFast();
+        reasonBob.doneFast();
+
+        BSONObjBuilder feedbackBob(planBob.subobjStart("feedback"));
+        if (i == 0U) {
+            feedbackBob.append("nfeedback", int(entry.feedback.size()));
+            BSONArrayBuilder scoresBob(feedbackBob.subarrayStart("scores"));
+            for (size_t j = 0; j < entry.feedback.size(); ++j) {
+                BSONObjBuilder scoreBob(scoresBob.subobjStart());
+                scoreBob.append("score", entry.feedback[j]->score);
+            }
+            scoresBob.doneFast();
+        }
+        feedbackBob.doneFast();
+
+        planBob.append("filterSet", scd->indexFilterApplied);
+        planBob.doneFast();
+    }
+
+    return plansBuilder.arr();
+}
 
 /**
  * Returns a PlanExecutor which uses a random cursor to sample documents if successful. Returns {}
@@ -624,6 +697,47 @@ CollectionIndexUsageMap PipelineD::MongoDInterface::getIndexStats(OperationConte
     }
 
     return collection->infoCache()->getIndexUsageStats();
+}
+
+std::vector<BSONObj> PipelineD::MongoDInterface::getPlanCacheStats(OperationContext* opCtx,
+                                                                   const NamespaceString& ns) {
+    AutoGetCollectionForReadCommand autoColl(opCtx, ns);
+
+    auto collection = autoColl.getCollection();
+    uassert(ErrorCodes::NamespaceNotFound,
+            str::stream() << "collection does not exist: " << ns.ns(),
+            collection);
+
+    auto planCache = collection->infoCache()->getPlanCache();
+    invariant(planCache);
+
+    std::vector<BSONObj> stats;
+    auto entries = planCache->getAllEntries();
+    for (auto entryRaw : entries) {
+        std::unique_ptr<PlanCacheEntry> entry(entryRaw);
+        auto statusWithQuery = canonicalizePlanCacheEntry(opCtx, ns, *entry);
+        if (!statusWithQuery.isOK()) {
+            continue;
+        }
+
+        auto query = std::move(statusWithQuery.getValue());
+        const auto key = planCache->computeKey(*query);
+
+        BSONObjBuilder builder;
+        builder.append("queryHash", makePlanCacheStatsQueryHash(key));
+        builder.append("planCacheKey", key);
+        builder.append("query", entry->query);
+        builder.append("sort", entry->sort);
+        builder.append("projection", entry->projection);
+        if (!entry->collation.isEmpty()) {
+            builder.append("collation", entry->collation);
+        }
+        builder.append("plans", serializePlanCacheEntryPlans(*entry));
+        builder.append("timeOfCreation", entry->timeOfCreation);
+        stats.push_back(builder.obj());
+    }
+
+    return stats;
 }
 
 void PipelineD::MongoDInterface::appendLatencyStats(OperationContext* opCtx,

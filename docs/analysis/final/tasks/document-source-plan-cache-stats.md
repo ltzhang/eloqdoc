@@ -55,6 +55,7 @@ REGISTER_DOCUMENT_SOURCE(planCacheStats,
 
 - **Plan-cache invalidation in EloqDoc.** Verify the plan cache is per-collection (it should be, matching upstream). If EloqDoc has a custom plan cache implementation in `src/mongo/db/modules/eloq/`, this stage should iterate that cache.
 - **Catalog interactions.** The stage must hold a read lock on the collection to enumerate the cache safely. With `eloq_locker_noop`, this means using whatever EloqDoc's catalog-snapshot mechanism is.
+- **Semantic difference:** EloqDoc 4.0 does not have MongoDB's upstream `queryHash` machinery. The compatibility stage reports `queryHash` as a deterministic hash of EloqDoc's local `planCacheKey`, so clients can group entries, but the value is not byte-for-byte comparable with MongoDB 4.2+ `queryHash` output.
 
 ## Acceptance criteria
 
