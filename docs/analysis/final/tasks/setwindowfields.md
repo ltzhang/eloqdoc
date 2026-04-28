@@ -8,6 +8,11 @@
 
 Window-function aggregation: compute aggregates over a sliding "window" of adjacent documents within a partition, without collapsing the partition into a single document.
 
+**Checkpoint status:** first buffered executor slice landed. EloqDoc supports `partitionBy`,
+`sortBy`, `documents` windows, and standard output operators `$sum`, `$avg`, `$count`, `$min`,
+`$max`, `$first`, and `$last`. Range windows, date units, spill/removable optimizations, and
+window-only operators remain deferred.
+
 ```js
 db.sales.aggregate([
   { $setWindowFields: {
@@ -84,15 +89,26 @@ The window executor must support:
 
 ## Acceptance criteria
 
-- Documents-window: `[-3, "current"]` produces correct moving aggregate over last 4 documents.
+- [x] Documents-window: `[-3, "current"]` produces correct moving aggregate over last 4 documents.
 - Range-window: `[-7, 0], unit: "day"` correctly slides over time-based windows even with non-uniform document timestamps.
 - Window-only operators (`$rank`, `$denseRank`, `$documentNumber`) produce correct values within each partition.
 - `$expMovingAvg` produces correct values with both `N` and `alpha` forms.
 - `$shift` produces correct lag/lead values.
-- Removable accumulators ($sum, $avg, $count) maintain correct state under sliding-window updates.
-- Non-removable accumulators ($min, $max) work correctly (may be slower).
+- [x] Removable accumulators ($sum, $avg, $count) maintain correct state under sliding-window updates.
+- [x] Non-removable accumulators ($min, $max) work correctly (may be slower).
 - Empty windows return null per accumulator's null-policy.
 - **Test entry point:** `tests/jstests/eloq_basic/agg_set_window_fields/`. Adapt `jstests/aggregation/sources/setWindowFields/` extensively.
+
+## Implementation notes
+
+The initial `document_source_set_window_fields.cpp` implementation buffers all input documents,
+stable-sorts them by `partitionBy` and `sortBy`, then recomputes each requested `documents` window
+per output row. This is correct for small/medium compatibility workloads and keeps the first slice
+simple, but it is intentionally not spill-capable and does not yet implement incremental removable
+accumulator state.
+
+Only document-position windows are accepted. `range` windows, date units, implicit sort planning,
+large-partition memory bounds, and window-only operators are follow-up slices.
 
 ## Notes from source analyses
 

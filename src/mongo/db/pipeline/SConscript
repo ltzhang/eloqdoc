@@ -319,6 +319,7 @@ pipelineeEnv.Library(
         'document_source_sample.cpp',
         'document_source_sample_from_random_cursor.cpp',
         'document_source_sequential_document_cache.cpp',
+        'document_source_set_window_fields.cpp',
         'document_source_single_document_transformation.cpp',
         'document_source_skip.cpp',
         'document_source_stage_aliases.cpp',

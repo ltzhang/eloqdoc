@@ -1,0 +1,463 @@
+/**
+ * Copyright (C) 2026 EloqData Inc.
+ *
+ * This program is free software: you can redistribute it and/or  modify
+ * it under the terms of the GNU Affero General Public License, version 3,
+ * as published by the Free Software Foundation.
+ */
+
+#include "mongo/platform/basic.h"
+
+#include <algorithm>
+#include <cmath>
+#include <deque>
+#include <limits>
+
+#include "mongo/db/jsobj.h"
+#include "mongo/db/pipeline/document.h"
+#include "mongo/db/pipeline/document_source.h"
+#include "mongo/db/pipeline/expression.h"
+#include "mongo/db/pipeline/field_path.h"
+#include "mongo/db/pipeline/lite_parsed_document_source.h"
+#include "mongo/db/pipeline/value.h"
+#include "mongo/db/pipeline/variables.h"
+
+namespace mongo {
+namespace {
+
+class DocumentSourceSetWindowFields final : public DocumentSource {
+public:
+    static constexpr StringData kStageName = "$setWindowFields"_sd;
+
+    GetNextResult getNext() final {
+        pExpCtx->checkForInterrupt();
+
+        if (!_initialized) {
+            auto initResult = initialize();
+            if (!initResult.isEOF()) {
+                return initResult;
+            }
+        }
+
+        if (_pending.empty()) {
+            return GetNextResult::makeEOF();
+        }
+
+        auto doc = std::move(_pending.front());
+        _pending.pop_front();
+        return GetNextResult(std::move(doc));
+    }
+
+    const char* getSourceName() const final {
+        return kStageName.rawData();
+    }
+
+    Value serialize(boost::optional<ExplainOptions::Verbosity> explain = boost::none) const final {
+        MutableDocument spec;
+        if (_partitionBy) {
+            spec["partitionBy"] = _partitionBy->serialize(false);
+        }
+        if (!_sortBy.isEmpty()) {
+            spec["sortBy"] = Value(Document(_sortBy));
+        }
+
+        MutableDocument output;
+        for (auto&& out : _outputs) {
+            MutableDocument outSpec;
+            outSpec[out.opName] = out.argument ? out.argument->serialize(false) : Value(Document());
+            MutableDocument window;
+            window["documents"] = Value(std::vector<Value>{windowBoundValue(out.lower),
+                                                           windowBoundValue(out.upper)});
+            outSpec["window"] = window.freezeToValue();
+            output[out.field.fullPath()] = outSpec.freezeToValue();
+        }
+        spec["output"] = output.freezeToValue();
+        return Value(Document{{kStageName, spec.freezeToValue()}});
+    }
+
+    StageConstraints constraints(Pipeline::SplitState pipeState) const final {
+        return StageConstraints(StreamType::kBlocking,
+                                PositionRequirement::kNone,
+                                HostTypeRequirement::kNone,
+                                DiskUseRequirement::kNoDiskUse,
+                                FacetRequirement::kAllowed,
+                                TransactionRequirement::kAllowed);
+    }
+
+    static boost::intrusive_ptr<DocumentSource> createFromBson(
+        BSONElement elem, const boost::intrusive_ptr<ExpressionContext>& expCtx) {
+        uassert(6789319,
+                "$setWindowFields requires an object specification",
+                elem.type() == BSONType::Object);
+
+        auto spec = elem.Obj();
+        boost::intrusive_ptr<Expression> partitionBy;
+        if (auto partitionElem = spec["partitionBy"]) {
+            VariablesParseState vps = expCtx->variablesParseState;
+            partitionBy = Expression::parseOperand(expCtx, partitionElem, vps)->optimize();
+        }
+
+        BSONObj sortBy;
+        if (auto sortByElem = spec["sortBy"]) {
+            uassert(6789320,
+                    "$setWindowFields sortBy must be an object",
+                    sortByElem.type() == BSONType::Object);
+            sortBy = sortByElem.Obj().getOwned();
+            for (auto&& sortElem : sortBy) {
+                uassert(6789321,
+                        "$setWindowFields sortBy directions must be 1 or -1",
+                        sortElem.isNumber() &&
+                            (sortElem.numberInt() == 1 || sortElem.numberInt() == -1));
+            }
+        }
+
+        auto outputElem = spec["output"];
+        uassert(6789322,
+                "$setWindowFields requires an object output specification",
+                outputElem.type() == BSONType::Object);
+
+        std::vector<OutputSpec> outputs;
+        for (auto&& outputField : outputElem.Obj()) {
+            uassert(6789323,
+                    "$setWindowFields output entries must be objects",
+                    outputField.type() == BSONType::Object);
+            outputs.push_back(parseOutputSpec(expCtx, outputField));
+        }
+        uassert(6789324, "$setWindowFields output must not be empty", !outputs.empty());
+
+        for (auto&& option : spec) {
+            auto fieldName = option.fieldNameStringData();
+            uassert(6789325,
+                    str::stream() << "unknown $setWindowFields option '" << fieldName << "'",
+                    fieldName == "partitionBy"_sd || fieldName == "sortBy"_sd ||
+                        fieldName == "output"_sd);
+        }
+
+        return new DocumentSourceSetWindowFields(
+            expCtx, std::move(partitionBy), sortBy, std::move(outputs));
+    }
+
+private:
+    enum class BoundKind { kUnbounded, kCurrent, kOffset };
+    struct WindowBound {
+        BoundKind kind = BoundKind::kCurrent;
+        int offset = 0;
+    };
+
+    struct OutputSpec {
+        FieldPath field;
+        std::string opName;
+        boost::intrusive_ptr<Expression> argument;
+        WindowBound lower;
+        WindowBound upper;
+    };
+
+    struct BufferedDoc {
+        Document doc;
+        Value partitionKey;
+        std::vector<Value> sortKeys;
+        size_t inputOrdinal = 0;
+    };
+
+    DocumentSourceSetWindowFields(const boost::intrusive_ptr<ExpressionContext>& expCtx,
+                                  boost::intrusive_ptr<Expression> partitionBy,
+                                  BSONObj sortBy,
+                                  std::vector<OutputSpec> outputs)
+        : DocumentSource(expCtx),
+          _partitionBy(std::move(partitionBy)),
+          _sortBy(sortBy.getOwned()),
+          _outputs(std::move(outputs)) {}
+
+    static OutputSpec parseOutputSpec(const boost::intrusive_ptr<ExpressionContext>& expCtx,
+                                      BSONElement outputField) {
+        auto obj = outputField.Obj();
+        boost::optional<BSONElement> opElem;
+        BSONElement windowElem;
+        for (auto&& elem : obj) {
+            auto fieldName = elem.fieldNameStringData();
+            if (fieldName == "window"_sd) {
+                windowElem = elem;
+            } else if (fieldName.startsWith("$")) {
+                uassert(6789326,
+                        "$setWindowFields output entry must contain exactly one operator",
+                        !opElem);
+                opElem = elem;
+            } else {
+                uasserted(6789327,
+                          str::stream() << "unknown $setWindowFields output option '" << fieldName
+                                        << "'");
+            }
+        }
+        uassert(6789328, "$setWindowFields output entry requires an operator", opElem);
+
+        OutputSpec out{FieldPath(outputField.fieldName()), opElem->fieldName(), nullptr, {}, {}};
+        uassert(6789329,
+                str::stream() << "unsupported $setWindowFields operator '" << out.opName << "'",
+                out.opName == "$sum" || out.opName == "$avg" || out.opName == "$count" ||
+                    out.opName == "$min" || out.opName == "$max" || out.opName == "$first" ||
+                    out.opName == "$last");
+
+        if (out.opName == "$count") {
+            uassert(6789330,
+                    "$setWindowFields $count argument must be an empty object",
+                    opElem->type() == BSONType::Object && opElem->Obj().isEmpty());
+        } else {
+            VariablesParseState vps = expCtx->variablesParseState;
+            out.argument = Expression::parseOperand(expCtx, *opElem, vps)->optimize();
+        }
+
+        parseWindow(windowElem, &out);
+        return out;
+    }
+
+    static void parseWindow(BSONElement windowElem, OutputSpec* out) {
+        if (!windowElem) {
+            out->lower = {BoundKind::kCurrent, 0};
+            out->upper = {BoundKind::kCurrent, 0};
+            return;
+        }
+        uassert(6789331,
+                "$setWindowFields window must be an object",
+                windowElem.type() == BSONType::Object);
+        auto windowObj = windowElem.Obj();
+        auto documentsElem = windowObj["documents"];
+        uassert(6789332,
+                "this $setWindowFields checkpoint supports only documents windows",
+                documentsElem.type() == BSONType::Array);
+        std::vector<BSONElement> bounds;
+        for (auto&& bound : documentsElem.Obj()) {
+            bounds.push_back(bound);
+        }
+        uassert(6789333,
+                "$setWindowFields documents window requires exactly two bounds",
+                bounds.size() == 2);
+        out->lower = parseBound(bounds[0]);
+        out->upper = parseBound(bounds[1]);
+
+        for (auto&& option : windowObj) {
+            uassert(6789334,
+                    str::stream() << "unknown $setWindowFields window option '"
+                                  << option.fieldNameStringData() << "'",
+                    option.fieldNameStringData() == "documents"_sd);
+        }
+    }
+
+    static WindowBound parseBound(BSONElement elem) {
+        if (elem.type() == BSONType::String) {
+            auto value = elem.valueStringData();
+            if (value == "unbounded"_sd) {
+                return {BoundKind::kUnbounded, 0};
+            }
+            if (value == "current"_sd) {
+                return {BoundKind::kCurrent, 0};
+            }
+            uasserted(6789335,
+                      str::stream() << "unsupported $setWindowFields window bound '" << value
+                                    << "'");
+        }
+        uassert(6789336,
+                "$setWindowFields documents window bounds must be integers or strings",
+                elem.isNumber());
+        return {BoundKind::kOffset, elem.numberInt()};
+    }
+
+    GetNextResult initialize() {
+        while (!_inputExhausted) {
+            auto next = pSource->getNext();
+            if (next.isPaused()) {
+                return next;
+            }
+            if (next.isEOF()) {
+                _inputExhausted = true;
+                break;
+            }
+            auto doc = next.releaseDocument();
+            _buffer.push_back({doc, makePartitionKey(doc), makeSortKeys(doc), _buffer.size()});
+        }
+
+        std::stable_sort(_buffer.begin(), _buffer.end(), [this](const auto& left, const auto& right) {
+            auto partitionCmp =
+                pExpCtx->getValueComparator().compare(left.partitionKey, right.partitionKey);
+            if (partitionCmp != 0) {
+                return partitionCmp < 0;
+            }
+            for (size_t i = 0; i < left.sortKeys.size(); ++i) {
+                auto cmp = pExpCtx->getValueComparator().compare(left.sortKeys[i], right.sortKeys[i]);
+                if (cmp != 0) {
+                    return _sortDirections[i] > 0 ? cmp < 0 : cmp > 0;
+                }
+            }
+            return left.inputOrdinal < right.inputOrdinal;
+        });
+
+        for (size_t start = 0; start < _buffer.size();) {
+            size_t end = start + 1;
+            while (end < _buffer.size() && samePartition(_buffer[start], _buffer[end])) {
+                ++end;
+            }
+            evaluatePartition(start, end);
+            start = end;
+        }
+
+        _initialized = true;
+        return GetNextResult::makeEOF();
+    }
+
+    Value makePartitionKey(const Document& doc) const {
+        if (!_partitionBy) {
+            return Value();
+        }
+        return _partitionBy->evaluate(doc);
+    }
+
+    std::vector<Value> makeSortKeys(const Document& doc) {
+        std::vector<Value> keys;
+        if (_sortDirections.empty()) {
+            for (auto&& elem : _sortBy) {
+                _sortDirections.push_back(elem.numberInt());
+            }
+        }
+        for (auto&& elem : _sortBy) {
+            keys.push_back(doc.getNestedField(FieldPath(elem.fieldName())));
+        }
+        return keys;
+    }
+
+    bool samePartition(const BufferedDoc& left, const BufferedDoc& right) const {
+        return pExpCtx->getValueComparator().compare(left.partitionKey, right.partitionKey) == 0;
+    }
+
+    void evaluatePartition(size_t start, size_t end) {
+        const auto partitionSize = static_cast<int>(end - start);
+        for (size_t i = start; i < end; ++i) {
+            MutableDocument output(_buffer[i].doc);
+            const auto relativeIndex = static_cast<int>(i - start);
+            for (auto&& outSpec : _outputs) {
+                const int first = lowerIndex(outSpec.lower, relativeIndex, partitionSize);
+                const int last = upperIndex(outSpec.upper, relativeIndex, partitionSize);
+                output.setNestedField(outSpec.field,
+                                      evaluateWindow(outSpec, start, first, last));
+            }
+            _pending.push_back(output.freeze());
+        }
+    }
+
+    static int lowerIndex(const WindowBound& bound, int current, int partitionSize) {
+        switch (bound.kind) {
+            case BoundKind::kUnbounded:
+                return 0;
+            case BoundKind::kCurrent:
+                return current;
+            case BoundKind::kOffset:
+                return std::max(0, current + bound.offset);
+        }
+        MONGO_UNREACHABLE;
+    }
+
+    static int upperIndex(const WindowBound& bound, int current, int partitionSize) {
+        switch (bound.kind) {
+            case BoundKind::kUnbounded:
+                return partitionSize - 1;
+            case BoundKind::kCurrent:
+                return current;
+            case BoundKind::kOffset:
+                return std::min(partitionSize - 1, current + bound.offset);
+        }
+        MONGO_UNREACHABLE;
+    }
+
+    Value evaluateWindow(const OutputSpec& outSpec, size_t partitionStart, int first, int last) const {
+        if (first > last) {
+            return outSpec.opName == "$count" ? Value(0) : Value(BSONNULL);
+        }
+
+        if (outSpec.opName == "$count") {
+            return Value(last - first + 1);
+        }
+
+        if (outSpec.opName == "$first") {
+            return outSpec.argument->evaluate(_buffer[partitionStart + first].doc);
+        }
+        if (outSpec.opName == "$last") {
+            return outSpec.argument->evaluate(_buffer[partitionStart + last].doc);
+        }
+
+        bool haveValue = false;
+        Value minOrMax;
+        double sum = 0;
+        int count = 0;
+        for (int i = first; i <= last; ++i) {
+            auto value = outSpec.argument->evaluate(_buffer[partitionStart + i].doc);
+            if (outSpec.opName == "$sum" || outSpec.opName == "$avg") {
+                if (value.numeric()) {
+                    sum += value.coerceToDouble();
+                    ++count;
+                }
+                continue;
+            }
+            if (value.nullish()) {
+                continue;
+            }
+            if (!haveValue) {
+                minOrMax = value;
+                haveValue = true;
+                continue;
+            }
+            auto cmp = pExpCtx->getValueComparator().compare(value, minOrMax);
+            if ((outSpec.opName == "$min" && cmp < 0) || (outSpec.opName == "$max" && cmp > 0)) {
+                minOrMax = value;
+            }
+        }
+
+        if (outSpec.opName == "$sum") {
+            return numericValue(sum);
+        }
+        if (outSpec.opName == "$avg") {
+            return count == 0 ? Value(BSONNULL) : numericValue(sum / count);
+        }
+        return haveValue ? minOrMax : Value(BSONNULL);
+    }
+
+    static Value numericValue(double value) {
+        long long asLong = static_cast<long long>(value);
+        if (std::abs(value - static_cast<double>(asLong)) < 1e-9) {
+            if (asLong >= std::numeric_limits<int>::min() &&
+                asLong <= std::numeric_limits<int>::max()) {
+                return Value(static_cast<int>(asLong));
+            }
+            return Value(asLong);
+        }
+        return Value(value);
+    }
+
+    static Value windowBoundValue(const WindowBound& bound) {
+        switch (bound.kind) {
+            case BoundKind::kUnbounded:
+                return Value("unbounded"_sd);
+            case BoundKind::kCurrent:
+                return Value("current"_sd);
+            case BoundKind::kOffset:
+                return Value(bound.offset);
+        }
+        MONGO_UNREACHABLE;
+    }
+
+    boost::intrusive_ptr<Expression> _partitionBy;
+    BSONObj _sortBy;
+    std::vector<OutputSpec> _outputs;
+    bool _initialized = false;
+    bool _inputExhausted = false;
+    std::vector<BufferedDoc> _buffer;
+    std::vector<int> _sortDirections;
+    std::deque<Document> _pending;
+};
+
+constexpr StringData DocumentSourceSetWindowFields::kStageName;
+
+}  // namespace
+
+REGISTER_DOCUMENT_SOURCE(setWindowFields,
+                         LiteParsedDocumentSourceDefault::parse,
+                         DocumentSourceSetWindowFields::createFromBson);
+
+}  // namespace mongo
