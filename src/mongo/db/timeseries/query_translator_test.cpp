@@ -63,6 +63,39 @@ TEST(TimeSeriesQueryTranslator, KeepsUnpackFirstWhenNoBucketPredicateCanBeBuilt)
     ASSERT_BSONOBJ_EQ(fromjson("{$match: {v: 1}}"), pipeline[1]);
 }
 
+TEST(TimeSeriesQueryTranslator, AddsBucketMatchForAndAndOrPredicates) {
+    const auto start = Date_t::fromMillisSinceEpoch(1735689600000LL);
+    const auto end = Date_t::fromMillisSinceEpoch(1735776000000LL);
+
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {BSON("$match" << BSON("$and" << BSON_ARRAY(BSON("t" << BSON("$gte" << start))
+                                                    << BSON("v" << 1))
+                                  << "$or"
+                                  << BSON_ARRAY(BSON("tags.host" << "a")
+                                                << BSON("t" << BSON("$lt" << end)))) )});
+
+    ASSERT_EQUALS(3U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(
+        BSON("$match" << BSON("$and" << BSON_ARRAY(BSON("control.max.t" << BSON("$gte" << start)))
+                             << "$or" << BSON_ARRAY(BSON("meta.host" << "a")
+                                                    << BSON("control.min.t" << BSON("$lt" << end))))),
+        pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+}
+
+TEST(TimeSeriesQueryTranslator, DoesNotAddBucketOrWhenAnyBranchCannotBeTranslated) {
+    const auto start = Date_t::fromMillisSinceEpoch(1735689600000LL);
+
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {BSON("$match" << BSON("$or" << BSON_ARRAY(BSON("t" << BSON("$gte" << start))
+                                                   << BSON("v" << 1))))});
+
+    ASSERT_EQUALS(2U, pipeline.size());
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
+}
+
 TEST(TimeSeriesQueryTranslator, BucketAggregationRequestPreservesOptions) {
     AggregationRequest request(NamespaceString("db.metrics"), {fromjson("{$match: {v: 1}}")});
     const auto collation = BSON("locale" << "simple");

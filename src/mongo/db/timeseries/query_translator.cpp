@@ -107,6 +107,47 @@ bool translateMetaPath(StringData field, StringData metaField, std::string* out)
     return false;
 }
 
+BSONObj makeBucketMatchPredicate(const CollectionOptions& options, const BSONObj& userMatch);
+
+bool appendLogicalPredicate(BSONObjBuilder* builder,
+                            const CollectionOptions& options,
+                            const BSONElement& predicate) {
+    const auto opName = predicate.fieldNameStringData();
+    if (predicate.type() != mongo::Array) {
+        return false;
+    }
+
+    BSONArrayBuilder translatedChildren;
+    bool hasChildPredicate = false;
+
+    BSONForEach(child, predicate.Obj()) {
+        if (child.type() != mongo::Object) {
+            if (opName == "$or") {
+                return false;
+            }
+            continue;
+        }
+
+        const auto translatedChild = makeBucketMatchPredicate(options, child.Obj());
+        if (translatedChild.isEmpty()) {
+            if (opName == "$or") {
+                return false;
+            }
+            continue;
+        }
+
+        translatedChildren.append(translatedChild);
+        hasChildPredicate = true;
+    }
+
+    if (!hasChildPredicate) {
+        return false;
+    }
+
+    builder->append(opName, translatedChildren.arr());
+    return true;
+}
+
 BSONObj makeBucketMatchPredicate(const CollectionOptions& options, const BSONObj& userMatch) {
     invariant(options.timeseries);
     const auto& tsOptions = *options.timeseries;
@@ -116,6 +157,12 @@ BSONObj makeBucketMatchPredicate(const CollectionOptions& options, const BSONObj
 
     BSONForEach(predicate, userMatch) {
         const auto field = predicate.fieldNameStringData();
+        if (field == "$and" || field == "$or") {
+            hasBucketPredicate =
+                appendLogicalPredicate(&bucketMatch, options, predicate) || hasBucketPredicate;
+            continue;
+        }
+
         if (field == tsOptions.timeField) {
             hasBucketPredicate =
                 appendTimePredicate(&bucketMatch, tsOptions.timeField, predicate) ||

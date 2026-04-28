@@ -102,9 +102,10 @@ out of scope for the first working slice:
 - Logical `find` and `aggregate` operations translate to an aggregation over the bucket collection
   with `$_internalUnpackBucket`; native find executor unpacking is a later optimization.
 - Query translation injects a conservative bucket-level `$match` before unpacking for a leading
-  simple `$match` on the configured time field or `metaField`. The original measurement predicate
-  is still evaluated after unpacking, so bucket pruning is a performance optimization rather than
-  the source of query correctness.
+  `$match` on the configured time field or `metaField`. Simple predicates are translated directly;
+  `$and` keeps any translatable child predicate; `$or` is only pushed down when every branch has a
+  bucket-level translation. The original measurement predicate is still evaluated after unpacking,
+  so bucket pruning is a performance optimization rather than the source of query correctness.
 - Measurement-level updates and deletes are explicitly rejected on logical time-series collections.
   Implementing update/delete semantics is deferred to the Tier 3 parity phase.
 - TTL is bucket-level only and deletes entire buckets whose `control.max.<timeField>` is expired
