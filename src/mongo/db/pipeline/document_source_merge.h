@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "mongo/db/pipeline/document_source.h"
+#include "mongo/db/pipeline/expression.h"
 
 namespace mongo {
 
@@ -53,19 +54,27 @@ private:
                         WhenMatched whenMatched,
                         WhenNotMatched whenNotMatched,
                         BSONObj whenMatchedPipeline,
+                        BSONObj letSpec,
                         const boost::intrusive_ptr<ExpressionContext>& expCtx);
 
     void applyMerge(const BSONObj& doc);
     BSONObj buildQuery(const BSONObj& doc) const;
     BSONObj buildSetUpdate(const BSONObj& doc) const;
+    BSONObj buildLetVariables(const BSONObj& doc) const;
     void applyPipelineUpdate(const BSONObj& query, const BSONObj& doc);
     void assertLastWriteSucceeded(StringData operation) const;
+
+    struct LetVariable {
+        std::string name;
+        boost::intrusive_ptr<Expression> expression;
+    };
 
     NamespaceString _targetNss;
     std::vector<std::string> _onFields;
     WhenMatched _whenMatched;
     WhenNotMatched _whenNotMatched;
     BSONObj _whenMatchedPipeline;
+    std::vector<LetVariable> _letVariables;
     bool _done = false;
 };
 

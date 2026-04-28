@@ -18,6 +18,7 @@
 #include "mongo/db/pipeline/document.h"
 #include "mongo/db/pipeline/expression_context.h"
 #include "mongo/db/pipeline/mongo_process_interface.h"
+#include "mongo/db/pipeline/variables.h"
 #include "mongo/stdx/memory.h"
 
 namespace mongo {
@@ -156,6 +157,7 @@ struct MergeSpec {
     DocumentSourceMerge::WhenMatched whenMatched;
     DocumentSourceMerge::WhenNotMatched whenNotMatched;
     BSONObj whenMatchedPipeline;
+    BSONObj letSpec;
 };
 
 MergeSpec parseMergeSpec(const NamespaceString& sourceNss, const BSONElement& elem) {
@@ -164,6 +166,7 @@ MergeSpec parseMergeSpec(const NamespaceString& sourceNss, const BSONElement& el
                 {"_id"},
                 DocumentSourceMerge::WhenMatched::kMerge,
                 DocumentSourceMerge::WhenNotMatched::kInsert,
+                BSONObj(),
                 BSONObj()};
     }
 
@@ -180,7 +183,16 @@ MergeSpec parseMergeSpec(const NamespaceString& sourceNss, const BSONElement& el
         uassert(ErrorCodes::FailedToParse,
                 str::stream() << "unknown $merge option '" << fieldName << "'",
                 fieldName == "into"_sd || fieldName == "on"_sd ||
-                    fieldName == "whenMatched"_sd || fieldName == "whenNotMatched"_sd);
+                    fieldName == "whenMatched"_sd || fieldName == "whenNotMatched"_sd ||
+                    fieldName == "let"_sd);
+    }
+
+    BSONObj letSpec;
+    if (auto letElem = specObj["let"]) {
+        uassert(ErrorCodes::FailedToParse,
+                "$merge 'let' must be an object",
+                letElem.type() == BSONType::Object);
+        letSpec = letElem.Obj().getOwned();
     }
 
     auto whenMatched = parseWhenMatched(specObj["whenMatched"]);
@@ -196,7 +208,8 @@ MergeSpec parseMergeSpec(const NamespaceString& sourceNss, const BSONElement& el
             parseOnFields(specObj["on"]),
             whenMatched,
             parseWhenNotMatched(specObj["whenNotMatched"]),
-            whenMatchedPipeline};
+            whenMatchedPipeline,
+            letSpec};
 }
 
 }  // namespace
@@ -224,13 +237,22 @@ DocumentSourceMerge::DocumentSourceMerge(const NamespaceString& targetNss,
                                          WhenMatched whenMatched,
                                          WhenNotMatched whenNotMatched,
                                          BSONObj whenMatchedPipeline,
+                                         BSONObj letSpec,
                                          const intrusive_ptr<ExpressionContext>& expCtx)
     : DocumentSource(expCtx),
       _targetNss(targetNss),
       _onFields(std::move(onFields)),
       _whenMatched(whenMatched),
       _whenNotMatched(whenNotMatched),
-      _whenMatchedPipeline(whenMatchedPipeline.getOwned()) {}
+      _whenMatchedPipeline(whenMatchedPipeline.getOwned()) {
+    VariablesParseState vps = expCtx->variablesParseState;
+    for (auto&& variable : letSpec) {
+        auto name = variable.fieldNameStringData();
+        Variables::uassertValidNameForUserWrite(name);
+        _letVariables.push_back(
+            {name.toString(), Expression::parseOperand(expCtx, variable, vps)->optimize()});
+    }
+}
 
 const char* DocumentSourceMerge::getSourceName() const {
     return "$merge";
@@ -252,6 +274,7 @@ intrusive_ptr<DocumentSource> DocumentSourceMerge::createFromBson(
                                    parsed.whenMatched,
                                    parsed.whenNotMatched,
                                    parsed.whenMatchedPipeline,
+                                   parsed.letSpec,
                                    expCtx);
 }
 
@@ -292,6 +315,18 @@ void DocumentSourceMerge::assertLastWriteSucceeded(StringData operation) const {
             DBClientBase::getLastErrorString(err).empty());
 }
 
+BSONObj DocumentSourceMerge::buildLetVariables(const BSONObj& doc) const {
+    BSONObjBuilder letBuilder;
+    letBuilder.append("new", doc);
+
+    Document root(doc);
+    for (auto&& variable : _letVariables) {
+        variable.expression->evaluate(root).addToBsonObj(&letBuilder, variable.name);
+    }
+
+    return letBuilder.obj();
+}
+
 void DocumentSourceMerge::applyPipelineUpdate(const BSONObj& query, const BSONObj& doc) {
     BSONObjBuilder updateEntry;
     updateEntry.append("q", query);
@@ -306,7 +341,7 @@ void DocumentSourceMerge::applyPipelineUpdate(const BSONObj& query, const BSONOb
     cmd.append("update", _targetNss.coll());
     cmd.append("updates", updates.arr());
     cmd.append("ordered", true);
-    cmd.append("let", BSON("new" << doc));
+    cmd.append("let", buildLetVariables(doc));
 
     BSONObj info;
     bool ok = pExpCtx->mongoProcessInterface->directClient()->runCommand(
@@ -398,6 +433,14 @@ Value DocumentSourceMerge::serialize(boost::optional<ExplainOptions::Verbosity> 
             stages.emplace_back(Value(stage.Obj()));
         }
         spec["whenMatched"] = Value(stages);
+    }
+
+    if (!_letVariables.empty()) {
+        MutableDocument letSpec;
+        for (auto&& variable : _letVariables) {
+            letSpec[variable.name] = variable.expression->serialize(false);
+        }
+        spec["let"] = letSpec.freezeToValue();
     }
 
     return Value(Document{{getSourceName(), spec.freeze()}});

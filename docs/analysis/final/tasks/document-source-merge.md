@@ -99,6 +99,8 @@ Implemented an initial same-database sink stage:
 - Supports string `whenMatched` modes: `merge`, `replace`, `keepExisting`, and `fail`.
 - Supports `whenMatched: <pipeline>` by dispatching an internal pipeline-form update against the
   matched target document. The incoming source document is exposed as `$$new`.
+- Supports `$merge.let` for pipeline `whenMatched`; variables are evaluated against the incoming
+  source document and passed to the internal update command.
 - Supports `whenNotMatched` modes: `insert`, `discard`, and `fail`.
 - Writes through the existing direct-client write path and checks `getLastErrorDetailed()` after mutations.
 - Runtime coverage is in `tests/jstests/eloq_basic/agg_merge.js`.
@@ -106,8 +108,6 @@ Implemented an initial same-database sink stage:
 Deferred:
 
 - Cross-database output currently fails fast with `IllegalOperation`. The direct-client write path hit a catalog invariant when writing another database from an aggregation locked on the source database, so this needs a catalog/locking design pass.
-- `$merge.let` is not implemented in this checkpoint; the pipeline form currently exposes only the
-  default `$$new` variable for the incoming source document.
 - Dotted `on` fields, explicit authorization tests, and large streaming coverage remain open.
 
 ## Notes from source analyses

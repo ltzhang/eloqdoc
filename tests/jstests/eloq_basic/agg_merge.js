@@ -81,6 +81,22 @@ source.aggregate([
 ]).toArray();
 assert.eq({_id: 2, item: "banana-new", qty: 14, seen: 2}, target.findOne({_id: 2}));
 
+assert.commandWorked(target.update({_id: 2}, {$set: {qty: 20, seen: 2}}));
+assert.commandWorked(source.update({_id: 2}, {$set: {qty: 6, item: "banana-let"}}));
+source.aggregate([
+    {$match: {_id: 2}},
+    {
+        $merge: {
+            into: target.getName(),
+            let: {incomingQty: "$qty", incomingItem: "$item"},
+            whenMatched: [
+                {$set: {qty: {$add: ["$qty", "$$incomingQty"]}, item: "$$incomingItem"}},
+            ],
+        },
+    },
+]).toArray();
+assert.eq({_id: 2, item: "banana-let", qty: 26, seen: 2}, target.findOne({_id: 2}));
+
 assert.commandFailedWithCode(db.runCommand({
     aggregate: source.getName(),
     pipeline: [
