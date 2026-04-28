@@ -10,6 +10,8 @@
 
 #include <string>
 
+#include <boost/optional.hpp>
+
 #include "mongo/base/status.h"
 #include "mongo/db/jsobj.h"
 
@@ -20,6 +22,8 @@ struct TimeseriesOptions {
     std::string timeField;
     std::string metaField;
     std::string granularity = "seconds";
+    boost::optional<long long> bucketMaxSpanSeconds;
+    boost::optional<long long> bucketRoundingSeconds;
 
     bool hasMetaField() const {
         return !metaField.empty();

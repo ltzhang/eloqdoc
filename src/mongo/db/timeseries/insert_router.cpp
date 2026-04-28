@@ -28,6 +28,13 @@ long long granularityMillis(const std::string& granularity) {
     return 1000LL;
 }
 
+long long bucketRoundingMillis(const TimeseriesOptions& options) {
+    if (options.bucketRoundingSeconds) {
+        return *options.bucketRoundingSeconds * 1000LL;
+    }
+    return granularityMillis(options.granularity);
+}
+
 BSONObj wrapMetaForKey(const BSONElement& meta) {
     if (meta.eoo()) {
         return BSONObj();
@@ -62,7 +69,7 @@ StatusWith<BSONObj> makeBucketDocument(const NamespaceString& logicalNss,
     }
 
     const auto time = timeElem.Date();
-    const long long span = granularityMillis(tsOptions.granularity);
+    const long long span = bucketRoundingMillis(tsOptions);
     const long long roundedMillis = (time.toMillisSinceEpoch() / span) * span;
 
     BucketKey key{logicalNss, wrapMetaForKey(metaElem), roundedMillis};

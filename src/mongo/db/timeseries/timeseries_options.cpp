@@ -44,6 +44,15 @@ Status parseTimeseriesOptions(const BSONElement& elem, TimeseriesOptions* out) {
                 return {ErrorCodes::TypeMismatch,
                         str::stream() << "'timeseries." << name << "' has to be numeric."};
             }
+            if (field.numberLong() <= 0) {
+                return {ErrorCodes::BadValue,
+                        str::stream() << "'timeseries." << name << "' must be positive."};
+            }
+            if (name == "bucketMaxSpanSeconds") {
+                parsed.bucketMaxSpanSeconds = field.numberLong();
+            } else {
+                parsed.bucketRoundingSeconds = field.numberLong();
+            }
         } else {
             return {ErrorCodes::InvalidOptions,
                     str::stream() << "'timeseries." << name << "' is not supported."};
@@ -76,6 +85,12 @@ void appendTimeseriesOptions(BSONObjBuilder* builder, const TimeseriesOptions& o
         ts.append("metaField", options.metaField);
     }
     ts.append("granularity", options.granularity);
+    if (options.bucketMaxSpanSeconds) {
+        ts.append("bucketMaxSpanSeconds", *options.bucketMaxSpanSeconds);
+    }
+    if (options.bucketRoundingSeconds) {
+        ts.append("bucketRoundingSeconds", *options.bucketRoundingSeconds);
+    }
     ts.doneFast();
 }
 

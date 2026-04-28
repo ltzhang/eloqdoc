@@ -474,7 +474,9 @@ bool CollectionOptions::matchesStorageOptions(const CollectionOptions& other,
     if (timeseries) {
         if (timeseries->timeField != other.timeseries->timeField ||
             timeseries->metaField != other.timeseries->metaField ||
-            timeseries->granularity != other.timeseries->granularity) {
+            timeseries->granularity != other.timeseries->granularity ||
+            timeseries->bucketMaxSpanSeconds != other.timeseries->bucketMaxSpanSeconds ||
+            timeseries->bucketRoundingSeconds != other.timeseries->bucketRoundingSeconds) {
             return false;
         }
     }
