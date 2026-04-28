@@ -231,6 +231,8 @@ Status userAllowedCreateNS(StringData db, StringData coll) {
             return Status::OK();
         if (coll == "system.users")
             return Status::OK();
+        if (coll.startsWith("system.statistics."))
+            return Status::OK();
         if (coll == DurableViewCatalog::viewsCollectionName())
             return Status::OK();
         if (db == "admin") {

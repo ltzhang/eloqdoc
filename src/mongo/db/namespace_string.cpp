@@ -102,6 +102,9 @@ bool NamespaceString::isLegalClientSystemNS() const {
     if (coll() == "system.js")
         return true;
 
+    if (coll().startsWith("system.statistics."))
+        return true;
+
     if (coll() == kSystemDotViewsCollectionName)
         return true;
 

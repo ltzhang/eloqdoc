@@ -62,13 +62,21 @@ public:
 
 ## Acceptance criteria
 
-- `db.runCommand({analyze: "c"})` succeeds and creates entries in `system.statistics.c`.
-- Stats include cardinality, min/max, histogram for scalar fields.
-- `sampleSize`/`sampleRate` honored.
-- Re-running replaces previous stats.
-- Reply summarizes fields analyzed and rows sampled.
+- [x] `db.runCommand({analyze: "c"})` succeeds and creates entries in `system.statistics.c`.
+- [x] Stats include cardinality, min/max, histogram for scalar fields.
+- [x] `sampleSize`/`sampleRate` honored.
+- [x] Re-running replaces previous stats.
+- [x] Reply summarizes fields analyzed and rows sampled.
 - (If optimizer integration done) Cost estimates for `find` queries with histograms differ from estimates without.
 - **Test entry point:** `tests/jstests/eloq_basic/analyze.js`.
+
+## Implementation notes
+
+Initial EloqDoc support lands as a compact `BasicCommand` in `src/mongo/db/commands/analyze.cpp`. It scans the target collection through the local direct client, analyzes top-level scalar fields, and persists one document per field into `system.statistics.<collection>`. Each stats document records the source namespace, field name, sampled document count, observed value count, cardinality, min/max, and a basic value-frequency histogram.
+
+The initial sampling implementation honors `sampleSize` and `sampleRate` by limiting the number of documents read from the collection. It is deterministic rather than random and does not yet reuse `$sample`; that is an intentional first-slice simplification for the parser + stats-persistence milestone. The query optimizer does not consume these stats yet.
+
+Because MongoDB 4.0 treats most `system.*` collections as protected client namespaces, this backport also allows `system.statistics.*` as a legal client system namespace so the command can replace and write stats through the existing write path.
 
 ## Notes from source analyses
 
