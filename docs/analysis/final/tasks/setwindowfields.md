@@ -13,8 +13,9 @@ Window-function aggregation: compute aggregates over a sliding "window" of adjac
 and standard output operators `$sum`, `$avg`, `$count`, `$min`, `$max`, `$first`, and
 `$last`. It also supports position-based window operators `$documentNumber`, `$rank`,
 `$denseRank`, and `$shift`, plus numeric `$expMovingAvg`, `$locf`, `$covariancePop`, and
-`$covarianceSamp`. Date range units, spill/removable optimizations, and `$integral`/`$derivative`
-remain deferred.
+`$covarianceSamp`. `$integral` and `$derivative` are supported for numeric inputs over one numeric
+sort key without `unit`. Date range units, date/time-unit window operators, and spill/removable
+optimizations remain deferred.
 
 ```js
 db.sales.aggregate([
@@ -101,6 +102,8 @@ The window executor must support:
 - [x] `$locf` carries the latest non-null value forward within each partition.
 - [x] `$covariancePop` and `$covarianceSamp` produce correct population/sample covariance for
   numeric two-expression inputs.
+- [x] `$integral` and `$derivative` produce correct numeric results for one numeric sort key
+  without `unit`.
 - [x] Removable accumulators ($sum, $avg, $count) maintain correct state under sliding-window updates.
 - [x] Non-removable accumulators ($min, $max) work correctly (may be slower).
 - [x] Empty windows return null per accumulator's null-policy (`$count` returns `0`).
@@ -116,8 +119,8 @@ implement incremental removable accumulator state.
 
 Numeric `range` windows require exactly one `sortBy` key and all values in that key must be
 numeric. `range` with `unit` remains unsupported, so date/time range windows are still a follow-up
-slice along with implicit sort planning, large-partition memory bounds, and remaining math-heavy
-window-only operators.
+slice along with window-operator `unit` handling, implicit sort planning, large-partition memory
+bounds, and remaining edge-case breadth.
 
 ## Notes from source analyses
 

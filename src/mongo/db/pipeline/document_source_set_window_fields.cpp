@@ -78,6 +78,10 @@ public:
                 avgSpec["input"] = out.argument->serialize(false);
                 avgSpec["alpha"] = numericValue(out.expMovingAvgAlpha);
                 outSpec[out.opName] = avgSpec.freezeToValue();
+            } else if (out.opName == "$integral" || out.opName == "$derivative") {
+                MutableDocument operatorSpec;
+                operatorSpec["input"] = out.argument->serialize(false);
+                outSpec[out.opName] = operatorSpec.freezeToValue();
             } else {
                 outSpec[out.opName] = out.argument ? out.argument->serialize(false) : Value(Document());
             }
@@ -237,7 +241,8 @@ private:
                     out.opName == "$rank" || out.opName == "$denseRank" ||
                     out.opName == "$shift" || out.opName == "$expMovingAvg" ||
                     out.opName == "$locf" || out.opName == "$covariancePop" ||
-                    out.opName == "$covarianceSamp");
+                    out.opName == "$covarianceSamp" || out.opName == "$integral" ||
+                    out.opName == "$derivative");
 
         if (out.opName == "$count") {
             uassert(6789330,
@@ -252,6 +257,8 @@ private:
             parseShiftSpec(expCtx, *opElem, &out);
         } else if (out.opName == "$expMovingAvg") {
             parseExpMovingAvgSpec(expCtx, *opElem, &out);
+        } else if (out.opName == "$integral" || out.opName == "$derivative") {
+            parseIntegralDerivativeSpec(expCtx, *opElem, &out);
         } else {
             if (out.opName == "$covariancePop" || out.opName == "$covarianceSamp") {
                 uassert(6789355,
@@ -278,6 +285,11 @@ private:
                     !windowElem);
         } else {
             parseWindow(windowElem, &out);
+            if (out.opName == "$integral" || out.opName == "$derivative") {
+                uassert(6789361,
+                        str::stream() << out.opName << " requires an explicit window option",
+                        out.hasWindow);
+            }
         }
         return out;
     }
@@ -351,6 +363,32 @@ private:
                     str::stream() << "unknown $setWindowFields $expMovingAvg option '"
                                   << fieldName << "'",
                     fieldName == "input"_sd || fieldName == "N"_sd || fieldName == "alpha"_sd);
+        }
+    }
+
+    static void parseIntegralDerivativeSpec(const boost::intrusive_ptr<ExpressionContext>& expCtx,
+                                            BSONElement opElem,
+                                            OutputSpec* out) {
+        uassert(6789357,
+                str::stream() << out->opName << " argument must be an object",
+                opElem.type() == BSONType::Object);
+        auto spec = opElem.Obj();
+        auto inputElem = spec["input"];
+        uassert(6789358, str::stream() << out->opName << " requires input", inputElem);
+
+        VariablesParseState vps = expCtx->variablesParseState;
+        out->argument = Expression::parseOperand(expCtx, inputElem, vps)->optimize();
+
+        for (auto&& option : spec) {
+            auto fieldName = option.fieldNameStringData();
+            uassert(6789359,
+                    str::stream() << "unknown $setWindowFields " << out->opName << " option '"
+                                  << fieldName << "'",
+                    fieldName == "input"_sd || fieldName == "unit"_sd);
+            uassert(6789360,
+                    str::stream() << out->opName
+                                  << " unit is not supported in this checkpoint",
+                    fieldName != "unit"_sd);
         }
     }
 
@@ -543,6 +581,12 @@ private:
         if (outSpec.opName == "$covariancePop" || outSpec.opName == "$covarianceSamp") {
             return evaluateCovariance(outSpec, partitionStart, first, last);
         }
+        if (outSpec.opName == "$integral") {
+            return evaluateIntegral(outSpec, partitionStart, first, last);
+        }
+        if (outSpec.opName == "$derivative") {
+            return evaluateDerivative(outSpec, partitionStart, first, last);
+        }
         return evaluateWindow(outSpec, partitionStart, first, last);
     }
 
@@ -616,6 +660,82 @@ private:
         const double covariance = sumXY - (sumX * sumY / count);
         const double denominator = outSpec.opName == "$covarianceSamp" ? count - 1 : count;
         return numericValue(covariance / denominator);
+    }
+
+    Value evaluateIntegral(const OutputSpec& outSpec,
+                           size_t partitionStart,
+                           int first,
+                           int last) const {
+        if (first >= last) {
+            return Value(0);
+        }
+
+        bool havePrevious = false;
+        double previousX = 0;
+        double previousY = 0;
+        double area = 0;
+        for (int i = first; i <= last; ++i) {
+            const double x = numericSortKey(partitionStart, i);
+            auto input = outSpec.argument->evaluate(_buffer[partitionStart + i].doc);
+            if (!input.numeric()) {
+                continue;
+            }
+            const double y = input.coerceToDouble();
+            if (havePrevious) {
+                area += ((previousY + y) / 2.0) * (x - previousX);
+            }
+            previousX = x;
+            previousY = y;
+            havePrevious = true;
+        }
+        return numericValue(area);
+    }
+
+    Value evaluateDerivative(const OutputSpec& outSpec,
+                             size_t partitionStart,
+                             int first,
+                             int last) const {
+        if (first >= last) {
+            return Value(BSONNULL);
+        }
+
+        bool haveFirst = false;
+        double firstX = 0;
+        double firstY = 0;
+        bool haveLast = false;
+        double lastX = 0;
+        double lastY = 0;
+        for (int i = first; i <= last; ++i) {
+            const double x = numericSortKey(partitionStart, i);
+            auto input = outSpec.argument->evaluate(_buffer[partitionStart + i].doc);
+            if (!input.numeric()) {
+                continue;
+            }
+            const double y = input.coerceToDouble();
+            if (!haveFirst) {
+                firstX = x;
+                firstY = y;
+                haveFirst = true;
+            }
+            lastX = x;
+            lastY = y;
+            haveLast = true;
+        }
+        if (!haveFirst || !haveLast || firstX == lastX) {
+            return Value(BSONNULL);
+        }
+        return numericValue((lastY - firstY) / (lastX - firstX));
+    }
+
+    double numericSortKey(size_t partitionStart, int relativeIndex) const {
+        uassert(6789362,
+                "$setWindowFields integral/derivative require exactly one sortBy field",
+                _sortDirections.size() == 1);
+        auto sortKey = _buffer[partitionStart + relativeIndex].sortKeys[0];
+        uassert(6789363,
+                "$setWindowFields integral/derivative require numeric sort keys",
+                sortKey.numeric());
+        return sortKey.coerceToDouble();
     }
 
     int rankFor(size_t partitionStart, size_t partitionEnd, int relativeIndex) const {

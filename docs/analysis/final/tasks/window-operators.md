@@ -13,7 +13,8 @@ Operators that only make sense inside `$setWindowFields` — they read window-po
 `$expMovingAvg` is also implemented for numeric inputs with both `N` and `alpha` forms, and
 `$locf` is implemented for last-observation carry-forward inside a partition. `$covariancePop`
 and `$covarianceSamp` are implemented for numeric two-expression inputs over the existing
-document and numeric-range windows. `$integral` and `$derivative` remain deferred.
+document and numeric-range windows. `$integral` and `$derivative` are implemented for numeric
+inputs over one numeric sort key without `unit`. Date/time-unit semantics remain deferred.
 
 | Operator | Description |
 | -------- | ----------- |
@@ -74,6 +75,8 @@ One file per operator group (or one mega-file `window_functions.cpp`):
 - [x] `$locf` carries the latest non-null value forward within each partition.
 - [x] `$covariancePop` and `$covarianceSamp` produce correct population/sample covariance for
   numeric two-expression inputs.
+- [x] `$integral` and `$derivative` produce correct numeric results for one numeric sort key
+  without `unit`.
 - Operators that don't support `remove()` (rank, denseRank, documentNumber) trigger window-recomputation correctly when window slides.
 - Date-aware operators (`$integral`, `$derivative`) produce time-unit-correct values.
 - [x] `$shift` with absent positions returns null (or default if specified).
@@ -81,8 +84,10 @@ One file per operator group (or one mega-file `window_functions.cpp`):
   for the initial position-based slice, plus
   `tests/jstests/eloq_basic/agg_set_window_fields/exp_moving_avg.js` for `$expMovingAvg`,
   `tests/jstests/eloq_basic/agg_set_window_fields/locf.js` for `$locf`, and
-  `tests/jstests/eloq_basic/agg_set_window_fields/covariance.js` for covariance. Adapt
-  `jstests/aggregation/sources/setWindowFields/` operator-specific tests as coverage grows.
+  `tests/jstests/eloq_basic/agg_set_window_fields/covariance.js` for covariance, and
+  `tests/jstests/eloq_basic/agg_set_window_fields/integral_derivative.js` for the numeric
+  integral/derivative slice. Adapt `jstests/aggregation/sources/setWindowFields/`
+  operator-specific tests as coverage grows.
 
 Current `$expMovingAvg` semantic differences: this checkpoint computes numeric inputs through
 double arithmetic and does not preserve Decimal128 result type yet.
@@ -90,6 +95,10 @@ double arithmetic and does not preserve Decimal128 result type yet.
 Current covariance semantic differences: this checkpoint skips non-numeric or malformed evaluated
 pairs and computes numeric inputs through double arithmetic. Decimal128 result preservation and
 upstream edge-case breadth remain follow-up work.
+
+Current `$integral`/`$derivative` semantic differences: this checkpoint requires exactly one
+numeric `sortBy` key, rejects `unit`, computes through double arithmetic, and does not yet support
+date/time axes.
 
 ## Notes from source analyses
 
