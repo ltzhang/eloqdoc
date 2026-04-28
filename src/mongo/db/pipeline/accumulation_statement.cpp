@@ -78,17 +78,21 @@ BSONObj rewriteTopBottomSpec(StringData accName, BSONElement specElem) {
             isTopBottomNAccumulator(accName) || n.eoo());
 
     BSONObjBuilder rewritten;
+    BSONObjBuilder rewrittenSortBy;
     {
         BSONObjBuilder sortKey(rewritten.subobjStart("__sortKey"));
+        int sortKeyIndex = 0;
         for (auto&& sortElem : sortBy.Obj()) {
             uassert(6789305,
                     str::stream() << accName << " sortBy fields must have direction 1 or -1",
                     sortElem.isNumber() &&
                         (sortElem.numberInt() == 1 || sortElem.numberInt() == -1));
-            sortKey.append(sortElem.fieldName(), str::stream() << "$" << sortElem.fieldName());
+            std::string internalName = str::stream() << "__sortKey" << sortKeyIndex++;
+            sortKey.append(internalName, str::stream() << "$" << sortElem.fieldName());
+            rewrittenSortBy.append(internalName, sortElem.numberInt());
         }
     }
-    rewritten.appendAs(sortBy, "__sortBy");
+    rewritten.append("__sortBy", rewrittenSortBy.obj());
     rewritten.appendAs(output, "__output");
     if (isTopBottomNAccumulator(accName)) {
         rewritten.appendAs(n, "__n");

@@ -10,12 +10,12 @@ Eight accumulators that retain N values per group instead of one.
 
 **Checkpoint status:** `$firstN`, `$lastN`, `$minN`, `$maxN`, `$top`, `$topN`,
 `$bottom`, and `$bottomN` are implemented for `$group`. Current `{top,bottom}` support
-handles simple source-field `sortBy` specifications and buffers each group's candidate values
-before sorting/truncating on output. `$firstN`, `$lastN`, `$minN`, and `$maxN` are also
+handles source-field and dotted source-field `sortBy` specifications and buffers each group's
+candidate values before sorting/truncating on output. `$firstN`, `$lastN`, `$minN`, and `$maxN` are also
 implemented as `$setWindowFields` outputs over the existing document and numeric-range windows.
 `$top`, `$topN`, `$bottom`, and `$bottomN` are also implemented as `$setWindowFields` outputs with
-the same simple source-field `sortBy` support. `$percentile` and `$median` window support is tracked
-in [`percentile-median-accumulators.md`](./percentile-median-accumulators.md).
+the same source-field and dotted source-field `sortBy` support. `$percentile` and `$median` window
+support is tracked in [`percentile-median-accumulators.md`](./percentile-median-accumulators.md).
 
 | Accumulator | Behavior |
 | ----------- | -------- |
@@ -109,9 +109,9 @@ containing evaluated sort keys, the literal sort specification, the evaluated ou
 The accumulator buffers candidate values per group, sorts them by the requested `sortBy` order, and
 returns either a single output value or the first `n` outputs.
 
-Deferred semantic differences: this checkpoint is not heap-bounded, does not support dotted
-`sortBy` field names in the group parser rewrite, and uses the same simple source-field `sortBy`
-model for window `{top,bottom}N`.
+Deferred semantic differences: this checkpoint is not heap-bounded and still uses a source-field
+`sortBy` model for `{top,bottom}N`; computed sort expressions beyond field paths remain follow-up
+work.
 
 ## Notes from source analyses
 
