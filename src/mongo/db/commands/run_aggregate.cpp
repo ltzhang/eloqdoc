@@ -429,6 +429,7 @@ Status runAggregate(OperationContext* opCtx,
                 bucketRequest.setUnwrappedReadPref(request.getUnwrappedReadPref());
                 auto bucketCmd = bucketRequest.serializeToCommandObj().toBson();
                 ctx.reset();
+                uassertStatusOK(timeseries::ensureBucketCollection(opCtx, nss));
                 return runAggregate(opCtx, bucketNss, bucketRequest, bucketCmd, result);
             }
         }

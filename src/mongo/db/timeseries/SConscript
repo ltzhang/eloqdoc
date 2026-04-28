@@ -20,7 +20,10 @@ env.Library(
         'timeseries_namespace.cpp',
     ],
     LIBDEPS=[
+        '$BUILD_DIR/mongo/db/catalog/database',
+        '$BUILD_DIR/mongo/db/db_raii',
         '$BUILD_DIR/mongo/db/namespace_string',
+        '$BUILD_DIR/mongo/db/storage/write_unit_of_work',
     ],
 )
 

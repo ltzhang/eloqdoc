@@ -339,6 +339,7 @@ public:
                 auto bucketCmd = bucketRequest.serializeToCommandObj().toBson();
 
                 ctx.reset();
+                uassertStatusOK(timeseries::ensureBucketCollection(opCtx, nss));
                 uassertStatusOK(runAggregate(opCtx, bucketNss, bucketRequest, bucketCmd, result));
                 return true;
             }

@@ -457,6 +457,13 @@ bool insertBatchAndHandleErrors(OperationContext* opCtx,
             const auto bucketNss = timeseries::makeBucketNamespace(wholeOp.getNamespace());
             boost::optional<AutoGetCollection> bucketCollection;
             bucketCollection.emplace(opCtx, bucketNss, MODE_IX);
+            if (!bucketCollection->getCollection()) {
+                bucketCollection.reset();
+                collection.reset();
+                uassertStatusOK(timeseries::ensureBucketCollection(opCtx, wholeOp.getNamespace()));
+                acquireCollection();
+                bucketCollection.emplace(opCtx, bucketNss, MODE_IX);
+            }
             uassert(ErrorCodes::NamespaceNotFound,
                     str::stream() << "missing time-series bucket collection " << bucketNss.ns(),
                     bucketCollection->getCollection());
