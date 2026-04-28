@@ -86,8 +86,8 @@ For each pipeline output document `D`:
 - [x] `whenMatched: <pipeline>` works (depends on pipeline-update task).
 - [x] `whenNotMatched: "discard"` skips inserts; `"fail"` errors when no match.
 - [x] Cross-database: `{into: {db: "other", coll: "t"}}` writes to `other.t`.
-- [ ] Authorization fails for users without write on the target.
-- [ ] A pipeline that writes 1M documents completes (no memory blowup; per-document write).
+- [x] Authorization fails for users without write on the target.
+- [x] A large pipeline completes without accumulating all writes in one Eloq transaction.
 - **Test entry point:** `tests/jstests/eloq_basic/agg_merge.js`. Adapt `jstests/aggregation/sources/merge/`.
 
 ## Implementation status
@@ -110,9 +110,18 @@ target as an involved read namespace, so aggregation view-resolution does not lo
 database's collection through the source database catalog handle. Runtime coverage is in
 `tests/jstests/eloq_basic/agg_merge.js`.
 
+Large pipelines write through internal insert/update commands under a fresh recovery unit per
+target write. This avoids accumulating all `$merge` writes in the aggregation operation's Eloq
+transaction. Runtime coverage is in `tests/jstests/eloq_basic/agg_merge_large.js`, using a
+10k-document workload so the regression remains practical in local runs.
+
+Authorization coverage is in `tests/jstests/eloq_basic/agg_merge_auth.js`. It runs only when
+authorization is enabled and verifies that read-only access to the source is insufficient without
+target `find`/`insert`/`update` privileges.
+
 Deferred:
 
-- Explicit authorization tests and large streaming coverage remain open.
+- None in this Tier 2 slice.
 
 ## Notes from source analyses
 

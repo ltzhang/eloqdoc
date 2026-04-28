@@ -61,7 +61,11 @@ private:
     BSONObj buildQuery(const BSONObj& doc) const;
     BSONObj buildSetUpdate(const BSONObj& doc) const;
     BSONObj buildLetVariables(const BSONObj& doc) const;
+    bool runWriteCommandWithFreshRecoveryUnit(const BSONObj& cmd, BSONObj* info);
+    void runInsertCommand(const BSONObj& doc);
+    void runUpdateCommand(const BSONObj& query, const BSONObj& update, StringData operation);
     void applyPipelineUpdate(const BSONObj& query, const BSONObj& doc);
+    void assertWriteCommandSucceeded(StringData operation, bool ok, const BSONObj& info) const;
     void assertLastWriteSucceeded(StringData operation) const;
 
     struct LetVariable {

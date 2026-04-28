@@ -19,8 +19,11 @@
 #include "mongo/db/pipeline/document.h"
 #include "mongo/db/pipeline/expression_context.h"
 #include "mongo/db/pipeline/mongo_process_interface.h"
+#include "mongo/db/storage/storage_engine.h"
+#include "mongo/db/storage/write_unit_of_work.h"
 #include "mongo/db/pipeline/variables.h"
 #include "mongo/stdx/memory.h"
+#include "mongo/util/scopeguard.h"
 
 namespace mongo {
 
@@ -323,6 +326,28 @@ void DocumentSourceMerge::assertLastWriteSucceeded(StringData operation) const {
             DBClientBase::getLastErrorString(err).empty());
 }
 
+void DocumentSourceMerge::assertWriteCommandSucceeded(StringData operation,
+                                                      bool ok,
+                                                      const BSONObj& info) const {
+    uassert(51101, str::stream() << "$merge " << operation << " failed: " << info, ok);
+
+    auto writeErrors = info["writeErrors"];
+    if (writeErrors && writeErrors.type() == BSONType::Array && !writeErrors.Obj().isEmpty()) {
+        const auto firstError = writeErrors.Obj().firstElement().Obj();
+        const auto code = firstError["code"].numberInt();
+        uasserted(ErrorCodes::Error(code),
+                  str::stream() << "$merge " << operation << " failed: " << firstError);
+    }
+
+    auto writeConcernError = info["writeConcernError"];
+    if (writeConcernError && writeConcernError.type() == BSONType::Object) {
+        const auto wcError = writeConcernError.Obj();
+        const auto code = wcError["code"].numberInt();
+        uasserted(ErrorCodes::Error(code),
+                  str::stream() << "$merge " << operation << " failed: " << wcError);
+    }
+}
+
 BSONObj DocumentSourceMerge::buildLetVariables(const BSONObj& doc) const {
     BSONObjBuilder letBuilder;
     letBuilder.append("new", doc);
@@ -333,6 +358,21 @@ BSONObj DocumentSourceMerge::buildLetVariables(const BSONObj& doc) const {
     }
 
     return letBuilder.obj();
+}
+
+bool DocumentSourceMerge::runWriteCommandWithFreshRecoveryUnit(const BSONObj& cmd, BSONObj* info) {
+    auto opCtx = pExpCtx->opCtx;
+    RecoveryUnit* originalRu = opCtx->releaseRecoveryUnit();
+    WriteUnitOfWork::RecoveryUnitState originalRuState = opCtx->getRecoveryUnitState();
+    auto restoreOriginalRu = MakeGuard([opCtx, originalRu, originalRuState] {
+        opCtx->setRecoveryUnit(originalRu, originalRuState);
+    });
+
+    RecoveryUnit* freshRu = opCtx->getServiceContext()->getStorageEngine()->newRecoveryUnit();
+    opCtx->setRecoveryUnit(freshRu, WriteUnitOfWork::RecoveryUnitState::kNotInUnitOfWork);
+
+    return pExpCtx->mongoProcessInterface->directClient()->runCommand(
+        _targetNss.db().toString(), cmd, *info);
 }
 
 void DocumentSourceMerge::applyPipelineUpdate(const BSONObj& query, const BSONObj& doc) {
@@ -352,9 +392,44 @@ void DocumentSourceMerge::applyPipelineUpdate(const BSONObj& query, const BSONOb
     cmd.append("let", buildLetVariables(doc));
 
     BSONObj info;
-    bool ok = pExpCtx->mongoProcessInterface->directClient()->runCommand(
-        _targetNss.db().toString(), cmd.obj(), info);
-    uassert(51101, str::stream() << "$merge pipeline update failed: " << info, ok);
+    bool ok = runWriteCommandWithFreshRecoveryUnit(cmd.obj(), &info);
+    assertWriteCommandSucceeded("pipeline update", ok, info);
+}
+
+void DocumentSourceMerge::runInsertCommand(const BSONObj& doc) {
+    BSONArrayBuilder documents;
+    documents.append(doc);
+
+    BSONObjBuilder cmd;
+    cmd.append("insert", _targetNss.coll());
+    cmd.append("documents", documents.arr());
+    cmd.append("ordered", true);
+
+    BSONObj info;
+    bool ok = runWriteCommandWithFreshRecoveryUnit(cmd.obj(), &info);
+    assertWriteCommandSucceeded("insert", ok, info);
+}
+
+void DocumentSourceMerge::runUpdateCommand(const BSONObj& query,
+                                           const BSONObj& update,
+                                           StringData operation) {
+    BSONObjBuilder updateEntry;
+    updateEntry.append("q", query);
+    updateEntry.append("u", update);
+    updateEntry.append("multi", false);
+    updateEntry.append("upsert", false);
+
+    BSONArrayBuilder updates;
+    updates.append(updateEntry.obj());
+
+    BSONObjBuilder cmd;
+    cmd.append("update", _targetNss.coll());
+    cmd.append("updates", updates.arr());
+    cmd.append("ordered", true);
+
+    BSONObj info;
+    bool ok = runWriteCommandWithFreshRecoveryUnit(cmd.obj(), &info);
+    assertWriteCommandSucceeded(operation, ok, info);
 }
 
 void DocumentSourceMerge::applyMerge(const BSONObj& doc) {
@@ -369,8 +444,7 @@ void DocumentSourceMerge::applyMerge(const BSONObj& doc) {
         uassert(ErrorCodes::NoMatchingDocument,
                 str::stream() << "$merge could not find a matching document for " << query,
                 _whenNotMatched != WhenNotMatched::kFail);
-        conn->insert(_targetNss.ns(), doc);
-        assertLastWriteSucceeded("insert");
+        runInsertCommand(doc);
         return;
     }
 
@@ -381,16 +455,14 @@ void DocumentSourceMerge::applyMerge(const BSONObj& doc) {
         case WhenMatched::kKeepExisting:
             return;
         case WhenMatched::kReplace:
-            conn->update(_targetNss.ns(), query, doc, false, false);
-            assertLastWriteSucceeded("replace");
+            runUpdateCommand(query, doc, "replace");
             return;
         case WhenMatched::kMerge: {
             auto update = buildSetUpdate(doc);
             if (update["$set"].Obj().isEmpty()) {
                 return;
             }
-            conn->update(_targetNss.ns(), query, update, false, false);
-            assertLastWriteSucceeded("update");
+            runUpdateCommand(query, update, "update");
             return;
         }
         case WhenMatched::kPipeline:
