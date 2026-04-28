@@ -13,8 +13,9 @@ Eight accumulators that retain N values per group instead of one.
 handles simple source-field `sortBy` specifications and buffers each group's candidate values
 before sorting/truncating on output. `$firstN`, `$lastN`, `$minN`, and `$maxN` are also
 implemented as `$setWindowFields` outputs over the existing document and numeric-range windows.
-Window support for `$top`, `$topN`, `$bottom`, `$bottomN`, `$percentile`, and `$median` remains
-deferred.
+`$top`, `$topN`, `$bottom`, and `$bottomN` are also implemented as `$setWindowFields` outputs with
+the same simple source-field `sortBy` support. `$percentile` and `$median` window support is tracked
+in [`percentile-median-accumulators.md`](./percentile-median-accumulators.md).
 
 | Accumulator | Behavior |
 | ----------- | -------- |
@@ -89,13 +90,16 @@ REGISTER_ACCUMULATOR(minN, AccumulatorMinN::create);
 - [x] `$top` / `$bottom` (single-value forms) match the equivalent `$topN: 1`.
 - [x] `$topN` / `$bottomN` with `sortBy` honor the sort and `output` projection.
 - [x] `$firstN` / `$lastN` / `$minN` / `$maxN` work as `$setWindowFields` outputs.
+- [x] `$top` / `$topN` / `$bottom` / `$bottomN` work as `$setWindowFields` outputs.
 - [x] `n <= 0` rejected.
 - [x] `n > input.size()` returns all values without padding.
 - [x] BSON canonical comparison used consistently (mixed types comparable).
 - [x] **Test entry point:** `tests/jstests/eloq_basic/accumulator_n_value.js`.
   Adapted coverage covers `{first,last,min,max}_n` and `{top,bottom}_n` group accumulators.
   `tests/jstests/eloq_basic/agg_set_window_fields/n_value_operators.js` covers the window
-  integration slice for `{first,last,min,max}N`.
+  integration slice for `{first,last,min,max}N`, and
+  `tests/jstests/eloq_basic/agg_set_window_fields/top_bottom_operators.js` covers the window
+  integration slice for `{top,bottom}N`.
 
 ## Implementation notes
 
@@ -106,8 +110,8 @@ The accumulator buffers candidate values per group, sorts them by the requested 
 returns either a single output value or the first `n` outputs.
 
 Deferred semantic differences: this checkpoint is not heap-bounded, does not support dotted
-`sortBy` field names in the parser rewrite, and does not yet expose `{top,bottom}N` as window
-operators.
+`sortBy` field names in the group parser rewrite, and uses the same simple source-field `sortBy`
+model for window `{top,bottom}N`.
 
 ## Notes from source analyses
 

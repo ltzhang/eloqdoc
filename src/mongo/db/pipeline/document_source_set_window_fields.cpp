@@ -99,6 +99,14 @@ public:
                     operatorSpec["p"] = Value(pValues);
                 }
                 outSpec[out.opName] = operatorSpec.freezeToValue();
+            } else if (isTopBottomOperator(out.opName)) {
+                MutableDocument operatorSpec;
+                operatorSpec["sortBy"] = Value(Document(out.topBottomSortBy));
+                operatorSpec["output"] = out.argument->serialize(false);
+                if (isTopBottomNOperator(out.opName)) {
+                    operatorSpec["n"] = Value(out.nValueCount);
+                }
+                outSpec[out.opName] = operatorSpec.freezeToValue();
             } else {
                 outSpec[out.opName] = out.argument ? out.argument->serialize(false) : Value(Document());
             }
@@ -198,6 +206,7 @@ private:
         double expMovingAvgAlpha = 0;
         int nValueCount = 0;
         std::vector<double> percentiles;
+        BSONObj topBottomSortBy;
         bool hasWindow = false;
         WindowType windowType = WindowType::kDocuments;
         WindowBound lower;
@@ -250,6 +259,7 @@ private:
                        0,
                        0,
                        {},
+                       {},
                        false,
                        WindowType::kDocuments,
                        {},
@@ -264,7 +274,7 @@ private:
                     out.opName == "$locf" || out.opName == "$covariancePop" ||
                     out.opName == "$covarianceSamp" || out.opName == "$integral" ||
                     out.opName == "$derivative" || isNValueOperator(out.opName) ||
-                    isPercentileOperator(out.opName));
+                    isPercentileOperator(out.opName) || isTopBottomOperator(out.opName));
 
         if (out.opName == "$count") {
             uassert(6789330,
@@ -285,6 +295,8 @@ private:
             parseNValueSpec(expCtx, *opElem, &out);
         } else if (isPercentileOperator(out.opName)) {
             parsePercentileSpec(expCtx, *opElem, &out);
+        } else if (isTopBottomOperator(out.opName)) {
+            parseTopBottomSpec(expCtx, *opElem, &out);
         } else {
             if (out.opName == "$covariancePop" || out.opName == "$covarianceSamp") {
                 uassert(6789355,
@@ -500,6 +512,64 @@ private:
         }
     }
 
+    static bool isTopBottomOperator(const std::string& opName) {
+        return opName == "$top" || opName == "$topN" || opName == "$bottom" ||
+            opName == "$bottomN";
+    }
+
+    static bool isTopBottomNOperator(const std::string& opName) {
+        return opName == "$topN" || opName == "$bottomN";
+    }
+
+    static void parseTopBottomSpec(const boost::intrusive_ptr<ExpressionContext>& expCtx,
+                                   BSONElement opElem,
+                                   OutputSpec* out) {
+        uassert(6789375,
+                str::stream() << out->opName << " argument must be an object",
+                opElem.type() == BSONType::Object);
+        auto spec = opElem.Obj();
+        auto sortByElem = spec["sortBy"];
+        auto outputElem = spec["output"];
+        auto nElem = spec["n"];
+        uassert(6789376,
+                str::stream() << out->opName << " requires object sortBy",
+                sortByElem.type() == BSONType::Object);
+        uassert(6789377, str::stream() << out->opName << " requires output", outputElem);
+
+        auto sortBy = sortByElem.Obj().getOwned();
+        uassert(6789378, str::stream() << out->opName << " sortBy must not be empty", !sortBy.isEmpty());
+        for (auto&& sortElem : sortBy) {
+            uassert(6789379,
+                    str::stream() << out->opName << " sortBy directions must be 1 or -1",
+                    sortElem.isNumber() &&
+                        (sortElem.numberInt() == 1 || sortElem.numberInt() == -1));
+        }
+        out->topBottomSortBy = sortBy;
+
+        if (isTopBottomNOperator(out->opName)) {
+            uassert(6789380,
+                    str::stream() << out->opName << " requires positive integer n",
+                    nElem.isNumber() && nElem.numberInt() == nElem.numberDouble() &&
+                        nElem.numberInt() > 0);
+            out->nValueCount = nElem.numberInt();
+        } else {
+            uassert(6789381, str::stream() << out->opName << " does not accept n", !nElem);
+            out->nValueCount = 1;
+        }
+
+        VariablesParseState vps = expCtx->variablesParseState;
+        out->argument = Expression::parseOperand(expCtx, outputElem, vps)->optimize();
+
+        for (auto&& option : spec) {
+            auto fieldName = option.fieldNameStringData();
+            uassert(6789382,
+                    str::stream() << "unknown $setWindowFields " << out->opName << " option '"
+                                  << fieldName << "'",
+                    fieldName == "sortBy"_sd || fieldName == "output"_sd ||
+                        (isTopBottomNOperator(out->opName) && fieldName == "n"_sd));
+        }
+    }
+
     static void parseWindow(BSONElement windowElem, OutputSpec* out) {
         if (!windowElem) {
             out->lower = {BoundKind::kCurrent, 0};
@@ -700,6 +770,9 @@ private:
         }
         if (isPercentileOperator(outSpec.opName)) {
             return evaluatePercentile(outSpec, partitionStart, first, last);
+        }
+        if (isTopBottomOperator(outSpec.opName)) {
+            return evaluateTopBottom(outSpec, partitionStart, first, last);
         }
         return evaluateWindow(outSpec, partitionStart, first, last);
     }
@@ -902,6 +975,65 @@ private:
             return percentileValues.empty() ? Value(BSONNULL) : percentileValues.front();
         }
         return Value(percentileValues);
+    }
+
+    Value evaluateTopBottom(const OutputSpec& outSpec,
+                            size_t partitionStart,
+                            int first,
+                            int last) const {
+        struct Candidate {
+            std::vector<Value> sortKeys;
+            Value output;
+            size_t ordinal;
+        };
+
+        std::vector<int> directions;
+        std::vector<FieldPath> sortFields;
+        for (auto&& sortElem : outSpec.topBottomSortBy) {
+            directions.push_back(sortElem.numberInt());
+            sortFields.emplace_back(sortElem.fieldName());
+        }
+
+        std::vector<Candidate> candidates;
+        size_t ordinal = 0;
+        for (int i = first; i <= last; ++i) {
+            const auto& doc = _buffer[partitionStart + i].doc;
+            std::vector<Value> sortKeys;
+            sortKeys.reserve(sortFields.size());
+            for (auto&& field : sortFields) {
+                sortKeys.push_back(doc.getNestedField(field));
+            }
+            candidates.push_back({std::move(sortKeys), outSpec.argument->evaluate(doc), ordinal++});
+        }
+        if (candidates.empty()) {
+            return Value(BSONNULL);
+        }
+
+        const bool top = outSpec.opName == "$top" || outSpec.opName == "$topN";
+        std::stable_sort(candidates.begin(), candidates.end(), [&](const Candidate& left,
+                                                                   const Candidate& right) {
+            for (size_t i = 0; i < directions.size(); ++i) {
+                auto cmp = pExpCtx->getValueComparator().compare(left.sortKeys[i],
+                                                                 right.sortKeys[i]) *
+                    directions[i];
+                if (cmp != 0) {
+                    return top ? cmp < 0 : cmp > 0;
+                }
+            }
+            return left.ordinal < right.ordinal;
+        });
+
+        if (!isTopBottomNOperator(outSpec.opName)) {
+            return candidates.front().output;
+        }
+
+        std::vector<Value> output;
+        const size_t count = std::min(candidates.size(), static_cast<size_t>(outSpec.nValueCount));
+        output.reserve(count);
+        for (size_t i = 0; i < count; ++i) {
+            output.push_back(candidates[i].output);
+        }
+        return Value(output);
     }
 
     static Value interpolatePercentile(const std::vector<double>& values, double percentile) {
