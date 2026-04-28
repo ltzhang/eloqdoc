@@ -73,6 +73,11 @@ public:
                     shiftSpec["default"] = out.shiftDefault->serialize(false);
                 }
                 outSpec[out.opName] = shiftSpec.freezeToValue();
+            } else if (out.opName == "$expMovingAvg") {
+                MutableDocument avgSpec;
+                avgSpec["input"] = out.argument->serialize(false);
+                avgSpec["alpha"] = numericValue(out.expMovingAvgAlpha);
+                outSpec[out.opName] = avgSpec.freezeToValue();
             } else {
                 outSpec[out.opName] = out.argument ? out.argument->serialize(false) : Value(Document());
             }
@@ -169,6 +174,7 @@ private:
         boost::intrusive_ptr<Expression> argument;
         boost::intrusive_ptr<Expression> shiftDefault;
         int shiftBy = 0;
+        double expMovingAvgAlpha = 0;
         bool hasWindow = false;
         WindowType windowType = WindowType::kDocuments;
         WindowBound lower;
@@ -218,6 +224,7 @@ private:
                        nullptr,
                        nullptr,
                        0,
+                       0,
                        false,
                        WindowType::kDocuments,
                        {},
@@ -228,7 +235,7 @@ private:
                     out.opName == "$min" || out.opName == "$max" || out.opName == "$first" ||
                     out.opName == "$last" || out.opName == "$documentNumber" ||
                     out.opName == "$rank" || out.opName == "$denseRank" ||
-                    out.opName == "$shift");
+                    out.opName == "$shift" || out.opName == "$expMovingAvg");
 
         if (out.opName == "$count") {
             uassert(6789330,
@@ -241,13 +248,16 @@ private:
                     opElem->type() == BSONType::Object && opElem->Obj().isEmpty());
         } else if (out.opName == "$shift") {
             parseShiftSpec(expCtx, *opElem, &out);
+        } else if (out.opName == "$expMovingAvg") {
+            parseExpMovingAvgSpec(expCtx, *opElem, &out);
         } else {
             VariablesParseState vps = expCtx->variablesParseState;
             out.argument = Expression::parseOperand(expCtx, *opElem, vps)->optimize();
         }
 
         if (out.opName == "$documentNumber" || out.opName == "$rank" ||
-            out.opName == "$denseRank" || out.opName == "$shift") {
+            out.opName == "$denseRank" || out.opName == "$shift" ||
+            out.opName == "$expMovingAvg") {
             uassert(6789338,
                     str::stream() << out.opName << " does not accept a window option",
                     !windowElem);
@@ -286,6 +296,46 @@ private:
                                   << "'",
                     fieldName == "output"_sd || fieldName == "by"_sd ||
                         fieldName == "default"_sd);
+        }
+    }
+
+    static void parseExpMovingAvgSpec(const boost::intrusive_ptr<ExpressionContext>& expCtx,
+                                      BSONElement opElem,
+                                      OutputSpec* out) {
+        uassert(6789349,
+                "$setWindowFields $expMovingAvg argument must be an object",
+                opElem.type() == BSONType::Object);
+        auto spec = opElem.Obj();
+        auto inputElem = spec["input"];
+        auto nElem = spec["N"];
+        auto alphaElem = spec["alpha"];
+        uassert(6789350, "$setWindowFields $expMovingAvg requires input", inputElem);
+        uassert(6789351,
+                "$setWindowFields $expMovingAvg requires exactly one of N or alpha",
+                static_cast<bool>(nElem) != static_cast<bool>(alphaElem));
+
+        VariablesParseState vps = expCtx->variablesParseState;
+        out->argument = Expression::parseOperand(expCtx, inputElem, vps)->optimize();
+        if (nElem) {
+            uassert(6789352,
+                    "$setWindowFields $expMovingAvg N must be a positive integer",
+                    nElem.isNumber() && nElem.numberInt() == nElem.numberDouble() &&
+                        nElem.numberInt() > 0);
+            out->expMovingAvgAlpha = 2.0 / (static_cast<double>(nElem.numberInt()) + 1.0);
+        } else {
+            uassert(6789353,
+                    "$setWindowFields $expMovingAvg alpha must be a number in (0, 1]",
+                    alphaElem.isNumber() && alphaElem.numberDouble() > 0 &&
+                        alphaElem.numberDouble() <= 1);
+            out->expMovingAvgAlpha = alphaElem.numberDouble();
+        }
+
+        for (auto&& option : spec) {
+            auto fieldName = option.fieldNameStringData();
+            uassert(6789354,
+                    str::stream() << "unknown $setWindowFields $expMovingAvg option '"
+                                  << fieldName << "'",
+                    fieldName == "input"_sd || fieldName == "N"_sd || fieldName == "alpha"_sd);
         }
     }
 
@@ -469,7 +519,32 @@ private:
             }
             return outSpec.argument->evaluate(_buffer[partitionStart + target].doc);
         }
+        if (outSpec.opName == "$expMovingAvg") {
+            return evaluateExpMovingAvg(outSpec, partitionStart, relativeIndex);
+        }
         return evaluateWindow(outSpec, partitionStart, first, last);
+    }
+
+    Value evaluateExpMovingAvg(const OutputSpec& outSpec,
+                               size_t partitionStart,
+                               int relativeIndex) const {
+        bool initialized = false;
+        double average = 0;
+        for (int i = 0; i <= relativeIndex; ++i) {
+            auto value = outSpec.argument->evaluate(_buffer[partitionStart + i].doc);
+            if (!value.numeric()) {
+                continue;
+            }
+            const double current = value.coerceToDouble();
+            if (!initialized) {
+                average = current;
+                initialized = true;
+            } else {
+                average = outSpec.expMovingAvgAlpha * current +
+                    (1 - outSpec.expMovingAvgAlpha) * average;
+            }
+        }
+        return initialized ? numericValue(average) : Value(BSONNULL);
     }
 
     int rankFor(size_t partitionStart, size_t partitionEnd, int relativeIndex) const {

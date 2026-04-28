@@ -12,8 +12,8 @@ Window-function aggregation: compute aggregates over a sliding "window" of adjac
 `sortBy`, `documents` windows, numeric `range` windows over a single numeric sort key,
 and standard output operators `$sum`, `$avg`, `$count`, `$min`, `$max`, `$first`, and
 `$last`. It also supports position-based window operators `$documentNumber`, `$rank`,
-`$denseRank`, and `$shift`. Date range units, spill/removable optimizations, and
-math-heavy window-only operators remain deferred.
+`$denseRank`, and `$shift`, plus numeric `$expMovingAvg`. Date range units,
+spill/removable optimizations, and math-heavy window-only operators remain deferred.
 
 ```js
 db.sales.aggregate([
@@ -95,8 +95,8 @@ The window executor must support:
 - [x] Numeric range-window: `[-2, 0]` correctly slides over non-uniform numeric sort values.
 - Range-window: `[-7, 0], unit: "day"` correctly slides over time-based windows even with non-uniform document timestamps.
 - [x] Window-only operators (`$rank`, `$denseRank`, `$documentNumber`) produce correct values within each partition.
-- `$expMovingAvg` produces correct values with both `N` and `alpha` forms.
 - [x] `$shift` produces correct lag/lead values.
+- [x] `$expMovingAvg` produces correct values with both `N` and `alpha` forms.
 - [x] Removable accumulators ($sum, $avg, $count) maintain correct state under sliding-window updates.
 - [x] Non-removable accumulators ($min, $max) work correctly (may be slower).
 - [x] Empty windows return null per accumulator's null-policy (`$count` returns `0`).
