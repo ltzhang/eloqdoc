@@ -85,7 +85,7 @@ For each pipeline output document `D`:
 - [x] Each `whenMatched` mode produces correct results: `replace`, `keepExisting`, `merge`, `fail`.
 - [x] `whenMatched: <pipeline>` works (depends on pipeline-update task).
 - [x] `whenNotMatched: "discard"` skips inserts; `"fail"` errors when no match.
-- [ ] Cross-database: `{into: {db: "other", coll: "t"}}` writes to `other.t`.
+- [x] Cross-database: `{into: {db: "other", coll: "t"}}` writes to `other.t`.
 - [ ] Authorization fails for users without write on the target.
 - [ ] A pipeline that writes 1M documents completes (no memory blowup; per-document write).
 - **Test entry point:** `tests/jstests/eloq_basic/agg_merge.js`. Adapt `jstests/aggregation/sources/merge/`.
@@ -105,9 +105,13 @@ Implemented an initial same-database sink stage:
 - Writes through the existing direct-client write path and checks `getLastErrorDetailed()` after mutations.
 - Runtime coverage is in `tests/jstests/eloq_basic/agg_merge.js`.
 
+Cross-database output is supported. `$merge` declares target write privileges without reporting the
+target as an involved read namespace, so aggregation view-resolution does not look up another
+database's collection through the source database catalog handle. Runtime coverage is in
+`tests/jstests/eloq_basic/agg_merge.js`.
+
 Deferred:
 
-- Cross-database output currently fails fast with `IllegalOperation`. The direct-client write path hit a catalog invariant when writing another database from an aggregation locked on the source database, so this needs a catalog/locking design pass.
 - Explicit authorization tests and large streaming coverage remain open.
 
 ## Notes from source analyses

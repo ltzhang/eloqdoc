@@ -106,11 +106,8 @@ source.aggregate([
 assert.eq({_id: 40, sku: {code: "dotted"}, qty: 2, existing: true},
           target.findOne({"sku.code": "dotted"}));
 
-assert.commandFailedWithCode(db.runCommand({
-    aggregate: source.getName(),
-    pipeline: [
-        {$match: {_id: 3}},
-        {$merge: {into: {db: otherDb.getName(), coll: crossTarget.getName()}}},
-    ],
-    cursor: {},
-}), ErrorCodes.IllegalOperation);
+source.aggregate([
+    {$match: {_id: 3}},
+    {$merge: {into: {db: otherDb.getName(), coll: crossTarget.getName()}}},
+]).toArray();
+assert.eq([{_id: 3, item: "cherry", qty: 3}], crossTarget.find().toArray());

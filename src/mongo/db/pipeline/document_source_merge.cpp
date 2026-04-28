@@ -35,9 +35,6 @@ NamespaceString parseTargetNamespace(const NamespaceString& sourceNss, const BSO
         uassert(ErrorCodes::InvalidNamespace,
                 str::stream() << "Invalid $merge target namespace, " << targetNss.ns(),
                 targetNss.isValid() && !targetNss.isCommand());
-        uassert(ErrorCodes::IllegalOperation,
-                "$merge cross-database target is not supported by EloqDoc yet",
-                targetNss.db() == sourceNss.db());
         return targetNss;
     }
 
@@ -68,11 +65,25 @@ NamespaceString parseTargetNamespace(const NamespaceString& sourceNss, const BSO
     uassert(ErrorCodes::InvalidNamespace,
             str::stream() << "Invalid $merge target namespace, " << targetNss.ns(),
             targetNss.isValid() && !targetNss.isCommand());
-    uassert(ErrorCodes::IllegalOperation,
-            "$merge cross-database target is not supported by EloqDoc yet",
-            targetNss.db() == sourceNss.db());
     return targetNss;
 }
+
+class LiteParsedDocumentSourceMerge final : public LiteParsedDocumentSource {
+public:
+    explicit LiteParsedDocumentSourceMerge(PrivilegeVector privileges)
+        : _requiredPrivileges(std::move(privileges)) {}
+
+    stdx::unordered_set<NamespaceString> getInvolvedNamespaces() const final {
+        return stdx::unordered_set<NamespaceString>();
+    }
+
+    PrivilegeVector requiredPrivileges(bool isMongos) const final {
+        return _requiredPrivileges;
+    }
+
+private:
+    PrivilegeVector _requiredPrivileges;
+};
 
 std::vector<std::string> parseOnFields(BSONElement elem) {
     if (!elem) {
@@ -216,7 +227,7 @@ MergeSpec parseMergeSpec(const NamespaceString& sourceNss, const BSONElement& el
 
 }  // namespace
 
-std::unique_ptr<LiteParsedDocumentSourceForeignCollections> DocumentSourceMerge::liteParse(
+std::unique_ptr<LiteParsedDocumentSource> DocumentSourceMerge::liteParse(
     const AggregationRequest& request, const BSONElement& spec) {
     auto parsed = parseMergeSpec(request.getNamespaceString(), spec);
 
@@ -228,8 +239,7 @@ std::unique_ptr<LiteParsedDocumentSourceForeignCollections> DocumentSourceMerge:
     PrivilegeVector privileges{
         Privilege(ResourcePattern::forExactNamespace(parsed.targetNss), actions)};
 
-    return stdx::make_unique<LiteParsedDocumentSourceForeignCollections>(
-        std::move(parsed.targetNss), std::move(privileges));
+    return stdx::make_unique<LiteParsedDocumentSourceMerge>(std::move(privileges));
 }
 
 REGISTER_DOCUMENT_SOURCE(merge, DocumentSourceMerge::liteParse, DocumentSourceMerge::createFromBson);

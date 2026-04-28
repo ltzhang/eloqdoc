@@ -17,7 +17,7 @@ namespace mongo {
 
 class DocumentSourceMerge final : public DocumentSource, public NeedsMergerDocumentSource {
 public:
-    static std::unique_ptr<LiteParsedDocumentSourceForeignCollections> liteParse(
+    static std::unique_ptr<LiteParsedDocumentSource> liteParse(
         const AggregationRequest& request, const BSONElement& spec);
 
     ~DocumentSourceMerge() final = default;
