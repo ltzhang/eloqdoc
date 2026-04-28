@@ -30,6 +30,10 @@ void appendRangePredicate(BSONObjBuilder* builder,
     predicate.doneFast();
 }
 
+bool appendTimeInPredicate(BSONObjBuilder* builder,
+                           StringData timeField,
+                           const BSONElement& predicate);
+
 bool appendTimePredicate(BSONObjBuilder* builder,
                          StringData timeField,
                          const BSONElement& predicate) {
@@ -68,6 +72,8 @@ bool appendTimePredicate(BSONObjBuilder* builder,
             eqPredicate = op;
             hasEqPredicate = true;
             hasPredicate = true;
+        } else if (opName == "$in") {
+            return appendTimeInPredicate(builder, timeField, op);
         } else {
             return false;
         }
@@ -86,6 +92,38 @@ bool appendTimePredicate(BSONObjBuilder* builder,
         builder->append(minPath, minBuilder.obj());
     }
     return hasPredicate;
+}
+
+bool appendTimeInPredicate(BSONObjBuilder* builder,
+                           StringData timeField,
+                           const BSONElement& predicate) {
+    if (predicate.type() != mongo::Array) {
+        return false;
+    }
+
+    const auto minPath = makeControlPath("min", timeField);
+    const auto maxPath = makeControlPath("max", timeField);
+
+    BSONArrayBuilder choices;
+    bool hasChoice = false;
+    BSONForEach(value, predicate.Obj()) {
+        if (value.type() != mongo::Date) {
+            return false;
+        }
+
+        BSONObjBuilder choice;
+        appendRangePredicate(&choice, minPath, "$lte", value);
+        appendRangePredicate(&choice, maxPath, "$gte", value);
+        choices.append(choice.obj());
+        hasChoice = true;
+    }
+
+    if (!hasChoice) {
+        return false;
+    }
+
+    builder->append("$or", choices.arr());
+    return true;
 }
 
 bool translateMetaPath(StringData field, StringData metaField, std::string* out) {

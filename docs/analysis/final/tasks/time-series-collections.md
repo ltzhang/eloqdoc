@@ -103,7 +103,8 @@ out of scope for the first working slice:
   with `$_internalUnpackBucket`; native find executor unpacking is a later optimization.
 - Query translation injects a conservative bucket-level `$match` before unpacking for a leading
   `$match` on the configured time field or `metaField`. Simple predicates are translated directly;
-  `$and` keeps any translatable child predicate; `$or` is only pushed down when every branch has a
+  time-field `$in` over BSON dates is converted to bucket-level equality-range disjunctions; `$and`
+  keeps any translatable child predicate; `$or` is only pushed down when every branch has a
   bucket-level translation. The original measurement predicate is still evaluated after unpacking,
   so bucket pruning is a performance optimization rather than the source of query correctness.
 - Measurement-level updates and deletes are explicitly rejected on logical time-series collections.

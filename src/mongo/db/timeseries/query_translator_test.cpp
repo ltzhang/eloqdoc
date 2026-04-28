@@ -96,6 +96,25 @@ TEST(TimeSeriesQueryTranslator, DoesNotAddBucketOrWhenAnyBranchCannotBeTranslate
     ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
 }
 
+TEST(TimeSeriesQueryTranslator, AddsBucketMatchForTimeInPredicate) {
+    const auto first = Date_t::fromMillisSinceEpoch(1735689600000LL);
+    const auto second = Date_t::fromMillisSinceEpoch(1735776000000LL);
+
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(),
+                           {BSON("$match" << BSON("t" << BSON("$in" << BSON_ARRAY(first
+                                                                                   << second))))});
+
+    ASSERT_EQUALS(3U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(
+        BSON("$match" << BSON("$or" << BSON_ARRAY(BSON("control.min.t" << BSON("$lte" << first)
+                                                     << "control.max.t" << BSON("$gte" << first))
+                                                 << BSON("control.min.t" << BSON("$lte" << second)
+                                                     << "control.max.t" << BSON("$gte" << second))))),
+        pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+}
+
 TEST(TimeSeriesQueryTranslator, BucketAggregationRequestPreservesOptions) {
     AggregationRequest request(NamespaceString("db.metrics"), {fromjson("{$match: {v: 1}}")});
     const auto collation = BSON("locale" << "simple");
