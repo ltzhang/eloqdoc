@@ -8,6 +8,11 @@
 
 Eight accumulators that retain N values per group instead of one.
 
+**Checkpoint status:** `$firstN`, `$lastN`, `$minN`, and `$maxN` are implemented for
+`$group`. `$top`, `$topN`, `$bottom`, and `$bottomN` remain deferred because they need
+custom accumulator parsing for `sortBy` plus source-document access beyond the current
+unary accumulator parser.
+
 | Accumulator | Behavior |
 | ----------- | -------- |
 | `$minN` | Bottom-N values by BSON comparison. |
@@ -54,8 +59,7 @@ REGISTER_ACCUMULATOR(minN, AccumulatorMinN::create);
 
 ## Files to create
 
-- `src/mongo/db/pipeline/accumulator_min_max_n.cpp` (`$minN`, `$maxN`)
-- `src/mongo/db/pipeline/accumulator_first_last_n.cpp` (`$firstN`, `$lastN`)
+- `src/mongo/db/pipeline/accumulator_n_value.cpp` (`$firstN`, `$lastN`, `$minN`, `$maxN`)
 - `src/mongo/db/pipeline/accumulator_top_bottom.cpp` (`$top`, `$topN`, `$bottom`, `$bottomN`)
 
 ## Files to modify
@@ -70,18 +74,22 @@ REGISTER_ACCUMULATOR(minN, AccumulatorMinN::create);
 ## EloqDoc-specific considerations
 
 - **Memory.** N can be large; bound it. Stock MongoDB enforces a system limit on the heap size to prevent abuse. Match.
+- **Checkpoint implementation.** `$minN` / `$maxN` currently collect all values for the group
+  and sort/truncate on output. Replacing that with bounded heaps remains part of the deferred
+  memory-bound work.
 - **No storage interaction.** All state in pipeline memory.
 
 ## Acceptance criteria
 
-- `$minN` / `$maxN` produce correct sorted arrays of N values.
-- `$firstN` / `$lastN` produce values in insertion order, not sorted.
+- [x] `$minN` / `$maxN` produce correct sorted arrays of N values.
+- [x] `$firstN` / `$lastN` produce values in insertion order, not sorted.
 - `$top` / `$bottom` (single-value forms) match the equivalent `$topN: 1`.
 - `$topN` / `$bottomN` with `sortBy` honor the sort and `output` projection.
-- `n <= 0` rejected.
-- `n > input.size()` returns all values without padding.
-- BSON canonical comparison used consistently (mixed types comparable).
-- **Test entry point:** `tests/jstests/eloq_basic/accumulator_n_value.js`. Adapt `jstests/aggregation/accumulators/{first,last,min,max,top,bottom}_n.js`.
+- [x] `n <= 0` rejected.
+- [x] `n > input.size()` returns all values without padding.
+- [x] BSON canonical comparison used consistently (mixed types comparable).
+- [x] **Test entry point:** `tests/jstests/eloq_basic/accumulator_n_value.js`.
+  Adapted coverage currently covers `{first,last,min,max}_n`; `{top,bottom}_n` remains deferred.
 
 ## Notes from source analyses
 

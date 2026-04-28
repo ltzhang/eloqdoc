@@ -166,6 +166,7 @@ env.Library(
         'accumulator_function.cpp',
         'accumulator_last.cpp',
         'accumulator_min_max.cpp',
+        'accumulator_n_value.cpp',
         'accumulator_push.cpp',
         'accumulator_std_dev.cpp',
         'accumulator_sum.cpp',
