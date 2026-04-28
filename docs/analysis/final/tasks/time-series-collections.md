@@ -105,6 +105,8 @@ out of scope for the first working slice:
   simple `$match` on the configured time field or `metaField`. The original measurement predicate
   is still evaluated after unpacking, so bucket pruning is a performance optimization rather than
   the source of query correctness.
+- Measurement-level updates and deletes are explicitly rejected on logical time-series collections.
+  Implementing update/delete semantics is deferred to the Tier 3 parity phase.
 - TTL is bucket-level only and deletes entire buckets whose `control.max.<timeField>` is expired
   by the collection-level `expireAfterSeconds` option.
 - Explain output can expose `system.buckets.<collection>` until a later compatibility pass rewrites

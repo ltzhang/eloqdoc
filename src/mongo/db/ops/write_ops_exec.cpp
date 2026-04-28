@@ -222,6 +222,21 @@ void makeCollection(OperationContext* opCtx, const NamespaceString& ns) {
     });
 }
 
+void assertNotTimeSeriesCollection(OperationContext* opCtx,
+                                   const NamespaceString& ns,
+                                   StringData operation) {
+    AutoGetCollection collection(opCtx, ns, MODE_IS);
+    if (!collection.getCollection()) {
+        return;
+    }
+
+    const auto collectionOptions =
+        collection.getCollection()->getCatalogEntry()->getCollectionOptions(opCtx);
+    uassert(ErrorCodes::IllegalOperation,
+            str::stream() << "Cannot " << operation << " time-series collection " << ns.ns(),
+            !collectionOptions.timeseries);
+}
+
 /**
  * Returns true if the operation can continue.
  */
@@ -852,6 +867,7 @@ WriteResult performUpdates(OperationContext* opCtx, const write_ops::Update& who
     // invariant(!opCtx->lockState()->inAWriteUnitOfWork() ||
     //           (session && session->inActiveOrKilledMultiDocumentTransaction()));
     uassertStatusOK(userAllowedWriteNS(wholeOp.getNamespace()));
+    assertNotTimeSeriesCollection(opCtx, wholeOp.getNamespace(), "update");
 
     DisableDocumentValidationIfTrue docValidationDisabler(
         opCtx, wholeOp.getWriteCommandBase().getBypassDocumentValidation());
@@ -1002,6 +1018,7 @@ WriteResult performDeletes(OperationContext* opCtx, const write_ops::Delete& who
     // invariant(!opCtx->lockState()->inAWriteUnitOfWork() ||
     //           (session && session->inActiveOrKilledMultiDocumentTransaction()));
     uassertStatusOK(userAllowedWriteNS(wholeOp.getNamespace()));
+    assertNotTimeSeriesCollection(opCtx, wholeOp.getNamespace(), "delete from");
 
     DisableDocumentValidationIfTrue docValidationDisabler(
         opCtx, wholeOp.getWriteCommandBase().getBypassDocumentValidation());

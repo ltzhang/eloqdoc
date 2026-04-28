@@ -11,4 +11,11 @@
         control: {},
         data: {}
     }));
+
+    assert.commandFailedWithCode(
+        testDB.metrics.update({v: 1}, {$set: {v: 2}}),
+        ErrorCodes.IllegalOperation);
+    assert.commandFailedWithCode(
+        testDB.metrics.remove({v: 1}),
+        ErrorCodes.IllegalOperation);
 })();
