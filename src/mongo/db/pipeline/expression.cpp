@@ -33,6 +33,7 @@
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
+#include <cmath>
 #include <cstdio>
 #include <vector>
 
@@ -518,6 +519,182 @@ const char* ExpressionArray::getOpName() const {
     // This should never be called, but is needed to inherit from ExpressionNary.
     return "$array";
 }
+
+namespace {
+
+Value interpolatePercentileExpression(const vector<double>& values, double percentile) {
+    if (values.empty()) {
+        return Value(BSONNULL);
+    }
+    if (values.size() == 1) {
+        return Value(values.front());
+    }
+
+    double rank = percentile * static_cast<double>(values.size() - 1);
+    size_t lower = static_cast<size_t>(std::floor(rank));
+    size_t upper = static_cast<size_t>(std::ceil(rank));
+    if (lower == upper) {
+        return Value(values[lower]);
+    }
+
+    double fraction = rank - static_cast<double>(lower);
+    return Value(values[lower] + (values[upper] - values[lower]) * fraction);
+}
+
+vector<double> parsePercentileExpressionP(BSONElement pElem, StringData opName) {
+    uassert(6789392,
+            str::stream() << opName << " requires 'p' to be an array",
+            pElem && pElem.type() == BSONType::Array);
+
+    vector<double> percentiles;
+    for (auto&& percentileElem : pElem.Obj()) {
+        uassert(6789393,
+                str::stream() << opName << " requires numeric percentile values",
+                percentileElem.isNumber());
+        const double percentile = percentileElem.numberDouble();
+        uassert(6789394,
+                str::stream() << opName << " requires percentiles to be in [0, 1]",
+                percentile >= 0 && percentile <= 1);
+        percentiles.push_back(percentile);
+    }
+
+    uassert(6789395,
+            str::stream() << opName << " requires at least one percentile",
+            !percentiles.empty());
+    return percentiles;
+}
+
+class ExpressionPercentileBase : public Expression {
+public:
+    ExpressionPercentileBase(const intrusive_ptr<ExpressionContext>& expCtx,
+                             StringData opName,
+                             bool median)
+        : Expression(expCtx), _opName(opName.toString()), _median(median) {}
+
+    static intrusive_ptr<Expression> parsePercentile(
+        const intrusive_ptr<ExpressionContext>& expCtx,
+        BSONElement expr,
+        const VariablesParseState& vps) {
+        return parse(expCtx, expr, vps, "$percentile"_sd, false);
+    }
+
+    static intrusive_ptr<Expression> parseMedian(const intrusive_ptr<ExpressionContext>& expCtx,
+                                                 BSONElement expr,
+                                                 const VariablesParseState& vps) {
+        return parse(expCtx, expr, vps, "$median"_sd, true);
+    }
+
+    intrusive_ptr<Expression> optimize() final {
+        _input = _input->optimize();
+        if (dynamic_cast<ExpressionConstant*>(_input.get())) {
+            return ExpressionConstant::create(getExpressionContext(), evaluate(Document{}));
+        }
+        return this;
+    }
+
+    Value serialize(bool explain) const final {
+        MutableDocument spec;
+        spec["input"] = _input->serialize(explain);
+        spec["method"] = Value("approximate"_sd);
+        if (!_median) {
+            vector<Value> pValues;
+            pValues.reserve(_percentiles.size());
+            for (double percentile : _percentiles) {
+                pValues.push_back(Value(percentile));
+            }
+            spec["p"] = Value(pValues);
+        }
+        return Value(Document{{_opName, spec.freezeToValue()}});
+    }
+
+    Value evaluate(const Document& root) const final {
+        auto input = _input->evaluate(root);
+        if (input.nullish()) {
+            return _median ? Value(BSONNULL) : nullPercentileArray();
+        }
+
+        uassert(6789396,
+                str::stream() << _opName << " expression input must evaluate to an array",
+                input.getType() == BSONType::Array);
+
+        vector<double> values;
+        for (const auto& element : input.getArray()) {
+            if (element.numeric()) {
+                values.push_back(element.coerceToDouble());
+            }
+        }
+        std::sort(values.begin(), values.end());
+
+        vector<Value> percentileValues;
+        percentileValues.reserve(_percentiles.size());
+        for (double percentile : _percentiles) {
+            percentileValues.push_back(interpolatePercentileExpression(values, percentile));
+        }
+
+        if (_median) {
+            return percentileValues.empty() ? Value(BSONNULL) : percentileValues.front();
+        }
+        return Value(percentileValues);
+    }
+
+    void _doAddDependencies(DepsTracker* deps) const final {
+        _input->addDependencies(deps);
+    }
+
+private:
+    static intrusive_ptr<Expression> parse(const intrusive_ptr<ExpressionContext>& expCtx,
+                                           BSONElement expr,
+                                           const VariablesParseState& vps,
+                                           StringData opName,
+                                           bool median) {
+        uassert(6789397,
+                str::stream() << opName << " requires an object argument",
+                expr.type() == BSONType::Object);
+
+        auto spec = expr.Obj();
+        auto inputElem = spec["input"];
+        auto methodElem = spec["method"];
+        uassert(6789398, str::stream() << opName << " requires 'input'", inputElem);
+        uassert(6789399,
+                str::stream() << opName << " requires method: 'approximate'",
+                methodElem && methodElem.type() == BSONType::String &&
+                    methodElem.valueStringData() == "approximate"_sd);
+
+        auto expression = new ExpressionPercentileBase(expCtx, opName, median);
+        expression->_input = Expression::parseOperand(expCtx, inputElem, vps);
+        expression->_percentiles =
+            median ? vector<double>{0.5} : parsePercentileExpressionP(spec["p"], opName);
+
+        for (auto&& option : spec) {
+            auto fieldName = option.fieldNameStringData();
+            uassert(6789400,
+                    str::stream() << "unknown " << opName << " option '" << fieldName << "'",
+                    fieldName == "input"_sd || fieldName == "method"_sd ||
+                        (!median && fieldName == "p"_sd));
+        }
+
+        return expression;
+    }
+
+    Value nullPercentileArray() const {
+        vector<Value> values;
+        values.reserve(_percentiles.size());
+        for (size_t i = 0; i < _percentiles.size(); ++i) {
+            values.push_back(Value(BSONNULL));
+        }
+        return Value(values);
+    }
+
+    string _opName;
+    bool _median;
+    intrusive_ptr<Expression> _input;
+    vector<double> _percentiles;
+};
+
+}  // namespace
+
+REGISTER_EXPRESSION(percentile, ExpressionPercentileBase::parsePercentile);
+REGISTER_EXPRESSION(median, ExpressionPercentileBase::parseMedian);
 
 /* ------------------------- ExpressionArrayElemAt -------------------------- */
 

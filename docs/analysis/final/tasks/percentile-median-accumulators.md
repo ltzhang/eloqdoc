@@ -12,8 +12,9 @@ Approximate percentile and median accumulators using the t-digest algorithm. Ava
 numeric inputs with `method: "approximate"`. This checkpoint uses exact in-memory sorting for
 compatibility on bounded result sets. `$percentile` and `$median` are also implemented as
 `$setWindowFields` outputs over the existing document and numeric-range windows with the same exact
-in-memory percentile calculation. The bounded-memory t-digest sketch, merge serialization, and
-plain-expression support remain deferred.
+in-memory percentile calculation. `$percentile` and `$median` are also available as plain
+expressions over array input. The bounded-memory t-digest sketch and merge serialization remain
+deferred.
 
 ```js
 db.c.aggregate([
@@ -89,6 +90,7 @@ REGISTER_ACCUMULATOR(median, AccumulatorMedian::create);
 - [x] Non-numeric input is skipped.
 - Merge path produces digests equivalent to single-pass digests on combined input.
 - [x] `$percentile` and `$median` work as `$setWindowFields` outputs.
+- [x] `$percentile` and `$median` work as plain expressions over array input.
 - [x] **Test entry point:** `tests/jstests/eloq_basic/accumulator_percentile.js`.
   Adapt `jstests/aggregation/accumulators/percentile.js`.
   `tests/jstests/eloq_basic/agg_set_window_fields/percentile_median.js` covers the window
@@ -102,8 +104,9 @@ Initial support is registered in `accumulator_percentile.cpp`. The parser accept
 This intentionally differs from MongoDB's t-digest-backed approximate implementation, but preserves
 the user-visible accumulator API for small and moderate groups.
 
-Deferred semantic differences: this checkpoint is not memory-bounded, does not serialize/merge
-partial digests, and does not expose `$percentile` / `$median` as plain expressions.
+Deferred semantic differences: this checkpoint is not memory-bounded and does not serialize/merge
+partial digests. Plain-expression support uses the same exact interpolation helper over numeric
+array elements, skipping non-numeric entries.
 
 ## Notes from source analyses
 

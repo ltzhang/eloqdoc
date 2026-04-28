@@ -46,3 +46,35 @@ assert.commandFailed(db.runCommand({
     ],
     cursor: {},
 }));
+
+assert.commandWorked(coll.insert({_id: 7, values: [1, 2, 3, 4, "ignored"]}));
+
+result = coll.aggregate([
+    {$match: {_id: 7}},
+    {
+        $project: {
+            _id: 0,
+            p50p75: {
+                $percentile: {
+                    input: "$values",
+                    p: [0.5, 0.75],
+                    method: "approximate",
+                },
+            },
+            median: {$median: {input: "$values", method: "approximate"}},
+            emptyMedian: {$median: {input: [null, "ignored"], method: "approximate"}},
+        },
+    },
+]).toArray();
+
+assert.eq([{p50p75: [2.5, 3.25], median: 2.5, emptyMedian: null}], result);
+
+assert.commandFailed(db.runCommand({
+    aggregate: coll.getName(),
+    pipeline: [{
+        $project: {
+            bad: {$percentile: {input: [1, 2], p: [1.2], method: "approximate"}},
+        },
+    }],
+    cursor: {},
+}));
