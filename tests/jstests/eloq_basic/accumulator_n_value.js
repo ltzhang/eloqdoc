@@ -46,6 +46,48 @@ assert.commandFailed(db.runCommand({
     cursor: {},
 }));
 
+result = coll.aggregate([
+    {$sort: {_id: 1}},
+    {
+        $group: {
+            _id: "$group",
+            topScore: {$top: {sortBy: {score: -1}, output: "$label"}},
+            bottomScore: {$bottom: {sortBy: {score: -1}, output: "$label"}},
+            topTwo: {$topN: {sortBy: {score: -1}, output: "$label", n: 2}},
+            bottomTwo: {$bottomN: {sortBy: {score: -1}, output: "$label", n: 2}},
+        }
+    },
+    {$sort: {_id: 1}},
+]).toArray();
+
+assert.eq([
+    {
+        _id: "a",
+        topScore: "third",
+        bottomScore: "second",
+        topTwo: ["third", "first"],
+        bottomTwo: ["second", "fourth"],
+    },
+    {
+        _id: "b",
+        topScore: "only",
+        bottomScore: "only",
+        topTwo: ["only"],
+        bottomTwo: ["only"],
+    },
+], result);
+
+assert.commandFailed(db.runCommand({
+    aggregate: coll.getName(),
+    pipeline: [{
+        $group: {
+            _id: null,
+            bad: {$topN: {sortBy: {score: -1}, output: "$label", n: 0}},
+        }
+    }],
+    cursor: {},
+}));
+
 assert.commandFailed(db.runCommand({
     aggregate: coll.getName(),
     pipeline: [{$group: {_id: null, bad: {$minN: {input: "$score", n: "two"}}}}],

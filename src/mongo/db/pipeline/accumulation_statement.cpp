@@ -32,6 +32,7 @@
 
 #include "mongo/db/pipeline/accumulation_statement.h"
 
+#include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/db/pipeline/accumulator.h"
 #include "mongo/db/pipeline/value.h"
 #include "mongo/util/assert_util.h"
@@ -46,6 +47,56 @@ using std::string;
 namespace {
 // Used to keep track of which Accumulators are registered under which name.
 static StringMap<Accumulator::Factory> factoryMap;
+
+bool isTopBottomAccumulator(StringData accName) {
+    return accName == "$top"_sd || accName == "$topN"_sd || accName == "$bottom"_sd ||
+        accName == "$bottomN"_sd;
+}
+
+bool isTopBottomNAccumulator(StringData accName) {
+    return accName == "$topN"_sd || accName == "$bottomN"_sd;
+}
+
+BSONObj rewriteTopBottomSpec(StringData accName, BSONElement specElem) {
+    uassert(6789300,
+            str::stream() << accName << " requires an object argument",
+            specElem.type() == BSONType::Object);
+
+    BSONObj spec = specElem.Obj();
+    BSONElement sortBy = spec["sortBy"];
+    BSONElement output = spec["output"];
+    BSONElement n = spec["n"];
+    uassert(6789301,
+            str::stream() << accName << " requires an object 'sortBy'",
+            sortBy.type() == BSONType::Object && !sortBy.Obj().isEmpty());
+    uassert(6789302, str::stream() << accName << " requires 'output'", !output.eoo());
+    uassert(6789303,
+            str::stream() << accName << " requires 'n'",
+            !isTopBottomNAccumulator(accName) || !n.eoo());
+    uassert(6789304,
+            str::stream() << accName << " does not accept 'n'",
+            isTopBottomNAccumulator(accName) || n.eoo());
+
+    BSONObjBuilder rewritten;
+    {
+        BSONObjBuilder sortKey(rewritten.subobjStart("__sortKey"));
+        for (auto&& sortElem : sortBy.Obj()) {
+            uassert(6789305,
+                    str::stream() << accName << " sortBy fields must have direction 1 or -1",
+                    sortElem.isNumber() &&
+                        (sortElem.numberInt() == 1 || sortElem.numberInt() == -1));
+            sortKey.append(sortElem.fieldName(), str::stream() << "$" << sortElem.fieldName());
+        }
+    }
+    rewritten.appendAs(sortBy, "__sortBy");
+    rewritten.appendAs(output, "__output");
+    if (isTopBottomNAccumulator(accName)) {
+        rewritten.appendAs(n, "__n");
+    } else {
+        rewritten.append("__n", 1);
+    }
+    return rewritten.obj();
+}
 }  // namespace
 
 void AccumulationStatement::registerAccumulator(std::string name, Accumulator::Factory factory) {
@@ -102,6 +153,12 @@ AccumulationStatement AccumulationStatement::parseAccumulationStatement(
                 specElem.type() == BSONType::Object && specElem.Obj().isEmpty());
         return {fieldName.toString(),
                 ExpressionConstant::create(expCtx, Value(1)),
+                AccumulationStatement::getFactory(accName)};
+    }
+
+    if (isTopBottomAccumulator(accName)) {
+        return {fieldName.toString(),
+                Expression::parseObject(expCtx, rewriteTopBottomSpec(accName, specElem), vps),
                 AccumulationStatement::getFactory(accName)};
     }
 

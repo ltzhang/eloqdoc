@@ -8,10 +8,10 @@
 
 Eight accumulators that retain N values per group instead of one.
 
-**Checkpoint status:** `$firstN`, `$lastN`, `$minN`, and `$maxN` are implemented for
-`$group`. `$top`, `$topN`, `$bottom`, and `$bottomN` remain deferred because they need
-custom accumulator parsing for `sortBy` plus source-document access beyond the current
-unary accumulator parser.
+**Checkpoint status:** `$firstN`, `$lastN`, `$minN`, `$maxN`, `$top`, `$topN`,
+`$bottom`, and `$bottomN` are implemented for `$group`. Current `{top,bottom}` support
+handles simple source-field `sortBy` specifications and buffers each group's candidate values
+before sorting/truncating on output.
 
 | Accumulator | Behavior |
 | ----------- | -------- |
@@ -83,13 +83,25 @@ REGISTER_ACCUMULATOR(minN, AccumulatorMinN::create);
 
 - [x] `$minN` / `$maxN` produce correct sorted arrays of N values.
 - [x] `$firstN` / `$lastN` produce values in insertion order, not sorted.
-- `$top` / `$bottom` (single-value forms) match the equivalent `$topN: 1`.
-- `$topN` / `$bottomN` with `sortBy` honor the sort and `output` projection.
+- [x] `$top` / `$bottom` (single-value forms) match the equivalent `$topN: 1`.
+- [x] `$topN` / `$bottomN` with `sortBy` honor the sort and `output` projection.
 - [x] `n <= 0` rejected.
 - [x] `n > input.size()` returns all values without padding.
 - [x] BSON canonical comparison used consistently (mixed types comparable).
 - [x] **Test entry point:** `tests/jstests/eloq_basic/accumulator_n_value.js`.
-  Adapted coverage currently covers `{first,last,min,max}_n`; `{top,bottom}_n` remains deferred.
+  Adapted coverage covers `{first,last,min,max}_n` and `{top,bottom}_n` group accumulators.
+
+## Implementation notes
+
+`$top`, `$topN`, `$bottom`, and `$bottomN` use a small parser rewrite in
+`accumulation_statement.cpp` so the existing unary accumulator execution path receives an object
+containing evaluated sort keys, the literal sort specification, the evaluated output, and `n`.
+The accumulator buffers candidate values per group, sorts them by the requested `sortBy` order, and
+returns either a single output value or the first `n` outputs.
+
+Deferred semantic differences: this checkpoint is not heap-bounded, does not support dotted
+`sortBy` field names in the parser rewrite, and only covers `$group` usage. Window integration
+remains part of `$setWindowFields` work.
 
 ## Notes from source analyses
 
