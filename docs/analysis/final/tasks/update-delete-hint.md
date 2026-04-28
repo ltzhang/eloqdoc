@@ -47,7 +47,8 @@ The work is in `getExecutorUpdate` and `getExecutorDelete` plumbing, not in inve
 - [x] `update`/`delete` with valid `hint` (string or object) execute against the hinted index when applicable.
 - [x] Invalid hint (nonexistent index name, mismatched key pattern) returns `BadValue`.
 - [x] `hint` honored when the predicate is non-trivial; explain output reflects it.
-- [ ] A hint that prevents a unique-index scan when needed for `_id` lookup must be rejected (matches upstream).
+- [x] `_id` update/delete with an explicit non-`_id` hint bypasses the IDHACK path and honors
+  the requested hint (matches MongoDB 8.0 behavior).
 - **Test entry point:** `tests/jstests/eloq_basic/write_hint.js`. Adapt `jstests/core/update_hint.js`, `jstests/core/delete_hint.js`.
 
 ## Implementation status
@@ -59,8 +60,10 @@ Implemented in `6baabc77`:
 - Update/delete request plumbing carries the hint through normal execution and explain setup.
 - Runtime and explain-shape coverage is in `tests/jstests/eloq_basic/write_hint.js`.
 
-Deferred: the `_id`/unique-index edge case. The current test verifies execution, hinted
-UPDATE/DELETE explain shapes, invalid hint rejection, and parse validation.
+The `_id`/unique-index edge was rechecked against MongoDB 8.0.10: an explicit non-`_id` hint is
+allowed, and the write honors the hinted plan instead of requiring the `_id` index. The focused test
+now verifies hinted UPDATE/DELETE explain shapes for `_id` predicates, normal execution, invalid hint
+rejection, and parse validation.
 
 ## Notes from source analyses
 

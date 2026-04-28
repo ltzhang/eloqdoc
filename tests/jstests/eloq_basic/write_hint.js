@@ -44,6 +44,32 @@ assert.eq(1, coll.findOne({_id: 1}).hits);
 assert.eq(1, coll.findOne({_id: 2}).hits);
 assert.eq(0, coll.findOne({_id: 3}).hits);
 
+updateExplain = assert.commandWorked(db.runCommand({
+    explain: {
+        update: coll.getName(),
+        updates: [{
+            q: {_id: 1},
+            u: {$inc: {hits: 1}},
+            hint: "active_category",
+        }],
+    },
+    verbosity: "queryPlanner",
+}));
+assert.eq("UPDATE", updateExplain.queryPlanner.winningPlan.stage, tojson(updateExplain));
+assert(planHasIndexName(updateExplain.queryPlanner.winningPlan, "active_category"),
+       tojson(updateExplain));
+
+res = assert.commandWorked(db.runCommand({
+    update: coll.getName(),
+    updates: [{
+        q: {_id: 1},
+        u: {$inc: {hits: 1}},
+        hint: "active_category",
+    }],
+}));
+assert.eq(1, res.n, tojson(res));
+assert.eq(2, coll.findOne({_id: 1}).hits);
+
 let deleteExplain = coll.explain("queryPlanner").remove(
     {stale: true}, {justOne: false, hint: {stale: 1}});
 assert.eq("DELETE", deleteExplain.queryPlanner.winningPlan.stage, tojson(deleteExplain));
@@ -59,8 +85,36 @@ res = assert.commandWorked(db.runCommand({
     }],
 }));
 assert.eq(2, res.n, tojson(res));
-assert.eq([{_id: 1, category: "a", active: true, stale: false, hits: 1}],
+assert.eq([{_id: 1, category: "a", active: true, stale: false, hits: 2}],
           coll.find({}, {_id: 1, category: 1, active: 1, stale: 1, hits: 1}).toArray());
+
+assert.commandWorked(coll.insert({_id: 4, category: "d", active: true, stale: true, hits: 0}));
+
+deleteExplain = assert.commandWorked(db.runCommand({
+    explain: {
+        delete: coll.getName(),
+        deletes: [{
+            q: {_id: 4},
+            limit: 1,
+            hint: "stale_idx",
+        }],
+    },
+    verbosity: "queryPlanner",
+}));
+assert.eq("DELETE", deleteExplain.queryPlanner.winningPlan.stage, tojson(deleteExplain));
+assert(planHasIndexName(deleteExplain.queryPlanner.winningPlan, "stale_idx"),
+       tojson(deleteExplain));
+
+res = assert.commandWorked(db.runCommand({
+    delete: coll.getName(),
+    deletes: [{
+        q: {_id: 4},
+        limit: 1,
+        hint: "stale_idx",
+    }],
+}));
+assert.eq(1, res.n, tojson(res));
+assert.eq(null, coll.findOne({_id: 4}));
 
 assert.commandFailedWithCode(db.runCommand({
     update: coll.getName(),
