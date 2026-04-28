@@ -34,12 +34,14 @@ Deferred to later phases:
 - Create buckets as ordinary collections first. Clustered collection support can improve storage locality later without blocking correctness.
 - Keep the bucket catalog deliberately conservative: one open bucket per `(namespace, meta value, rounded time)` and a small fixed document limit. This avoids hard storage-side dependencies.
 - For MVP read routing, prefer aggregation translation over teaching the find executor to unpack buckets directly. `find` can be converted to an equivalent aggregation in the command layer.
+- Store `expireAfterSeconds` as a time-series collection option. In this 4.0.3 tree it is otherwise index metadata only, so collection-level time-series TTL must be added explicitly.
+- Implement bucket TTL with a dedicated `src/mongo/db/ttl.cpp` scan path over time-series collection options. Do not rely on the existing TTL-index cache for collection-level time-series TTL.
 - Use clean-room implementation only. Newer MongoDB source may inform externally visible behavior and test expectations, but implementation must be adapted independently to this 4.0.3 tree.
 
 ## File Map
 
-- Modify `src/mongo/db/catalog/collection_options.h`: add `TimeseriesOptions` and helper predicates.
-- Modify `src/mongo/db/catalog/collection_options.cpp`: parse, validate, serialize, and compare `timeseries`.
+- Modify `src/mongo/db/catalog/collection_options.h`: add `TimeseriesOptions`, `expireAfterSeconds`, and helper predicates.
+- Modify `src/mongo/db/catalog/collection_options.cpp`: parse, validate, serialize, and compare `timeseries` and `expireAfterSeconds`.
 - Create `src/mongo/db/timeseries/timeseries_options.h`.
 - Create `src/mongo/db/timeseries/timeseries_options.cpp`.
 - Create `src/mongo/db/timeseries/timeseries_namespace.h`.
@@ -61,7 +63,7 @@ Deferred to later phases:
 - Modify `src/mongo/db/pipeline/SConscript`: add the new pipeline stage and unit test.
 - Modify `src/mongo/db/commands/find_cmd.cpp`: translate finds on time-series collections to aggregate commands.
 - Modify `src/mongo/db/commands/pipeline_command.cpp` or `src/mongo/db/commands/run_aggregate.cpp`: translate top-level aggregate commands on time-series collections.
-- Modify TTL code after locating the exact active EloqDoc TTL monitor file; current task doc names `src/mongo/db/ttl.cpp`, but this tree must be verified in the task.
+- Modify `src/mongo/db/ttl.cpp`: add a collection-option time-series bucket expiration pass beside the existing TTL-index pass.
 - Create tests under `tests/jstests/eloq_basic/timeseries/`.
 
 ## Build And Test Commands
@@ -256,7 +258,7 @@ void appendTimeseriesOptions(BSONObjBuilder* builder, const TimeseriesOptions& o
 
 - [ ] **Step 4: Wire options into `CollectionOptions`**
 
-In `src/mongo/db/catalog/collection_options.h`, include the helper header and add the optional field:
+In `src/mongo/db/catalog/collection_options.h`, include the helper header and add the optional fields:
 
 ```cpp
 #include "mongo/db/timeseries/timeseries_options.h"
@@ -264,9 +266,10 @@ In `src/mongo/db/catalog/collection_options.h`, include the helper header and ad
 
 ```cpp
 boost::optional<timeseries::TimeseriesOptions> timeseries;
+boost::optional<long long> expireAfterSeconds;
 ```
 
-In `CollectionOptions::parse()`, handle `timeseries` before the unknown-field rejection:
+In `CollectionOptions::parse()`, handle `timeseries` and `expireAfterSeconds` before the unknown-field rejection:
 
 ```cpp
 } else if (fieldName == "timeseries") {
@@ -276,6 +279,23 @@ In `CollectionOptions::parse()`, handle `timeseries` before the unknown-field re
         return status;
     }
     timeseries = parsed;
+} else if (fieldName == "expireAfterSeconds") {
+    if (!e.isNumber()) {
+        return {ErrorCodes::TypeMismatch, "'expireAfterSeconds' has to be numeric."};
+    }
+    if (e.numberLong() < 0) {
+        return {ErrorCodes::BadValue, "'expireAfterSeconds' must be non-negative."};
+    }
+    expireAfterSeconds = e.numberLong();
+```
+
+After the parse loop, reject collection-level `expireAfterSeconds` unless this is a time-series collection:
+
+```cpp
+if (expireAfterSeconds && !timeseries) {
+    return {ErrorCodes::InvalidOptions,
+            "'expireAfterSeconds' is only supported with time-series collections."};
+}
 ```
 
 In `CollectionOptions::appendBSON()`, serialize it:
@@ -284,9 +304,12 @@ In `CollectionOptions::appendBSON()`, serialize it:
 if (timeseries) {
     timeseries::appendTimeseriesOptions(builder, *timeseries);
 }
+if (expireAfterSeconds) {
+    builder->append("expireAfterSeconds", *expireAfterSeconds);
+}
 ```
 
-In `CollectionOptions::matchesStorageOptions()`, compare the three fields when either side has `timeseries`.
+In `CollectionOptions::matchesStorageOptions()`, compare the three `timeseries` fields and `expireAfterSeconds` when either side has time-series options.
 
 - [ ] **Step 5: Add library target**
 
@@ -400,26 +423,44 @@ NamespaceString makeBucketNamespace(const NamespaceString& logicalNss) {
 }
 
 bool isBucketNamespace(const NamespaceString& nss) {
-    return nss.coll().find("system.buckets.") == 0;
+    return nss.coll().startsWith("system.buckets.");
 }
 
 }  // namespace timeseries
 }  // namespace mongo
 ```
 
-- [ ] **Step 4: Create bucket collection after logical collection**
+- [ ] **Step 4: Verify create-collection transaction behavior**
 
-In `src/mongo/db/catalog/create_collection.cpp`, after the logical collection is created and before the unit of work commits, check `collectionOptions.timeseries`. If present, create `timeseries::makeBucketNamespace(nss)` with ordinary `CollectionOptions` and `autoIndexId = NO` only if the buckets namespace does not already exist.
+Before modifying create, verify EloqDoc's `Database::userCreateNS()` and storage-engine `createCollection()` behavior. This tree has an insert-path comment stating that "create collection operation commits transaction"; if two `createCollection()` calls cannot be made atomic, the implementation must be idempotent and able to repair a missing bucket collection.
+
+Run:
+
+```bash
+rg -n "create collection operation commits transaction|createCollection\\(" src/mongo/db/modules/eloq src/mongo/db/catalog src/mongo/db/storage/kv
+```
+
+Expected: identify whether bucket creation can share the logical collection's `WriteUnitOfWork`. If not, keep Task 2's create path best-effort and add the reconciliation helper described in Step 5.
+
+- [ ] **Step 5: Create bucket collection after logical collection**
+
+In `src/mongo/db/catalog/create_collection.cpp`, reject time-series collection names under `system.buckets.*` before the `writeConflictRetry` lambda. `userAllowedCreateNS()` already rejects this namespace class, but keep this check near command validation as defense-in-depth:
+
+```cpp
+if (options["timeseries"]) {
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series collections cannot be created under system.buckets",
+            !timeseries::isBucketNamespace(nss));
+}
+```
+
+After the logical collection is created and before the unit of work commits, check `collectionOptions.timeseries`. If present, create `timeseries::makeBucketNamespace(nss)` with ordinary `CollectionOptions` and `autoIndexId = NO` only if the buckets namespace does not already exist.
 
 Implementation shape:
 
 ```cpp
 if (collectionOptions.timeseries) {
     auto bucketNss = timeseries::makeBucketNamespace(nss);
-    uassert(ErrorCodes::InvalidOptions,
-            "time-series collections cannot be created under system.buckets",
-            !timeseries::isBucketNamespace(nss));
-
     CollectionOptions bucketOptions;
     bucketOptions.autoIndexId = CollectionOptions::NO;
     if (!db->getCollection(opCtx, bucketNss)) {
@@ -432,7 +473,14 @@ if (collectionOptions.timeseries) {
 }
 ```
 
-- [ ] **Step 5: Build and run create tests**
+Add a helper such as `timeseries::ensureBucketCollection()` and call it from:
+- the explicit create path in this task;
+- the insert router before writing buckets;
+- the read translator before querying buckets, or fail with a clear repairable error.
+
+If Step 4 confirms that logical and bucket collection creation are not atomic in EloqDoc, add a startup or first-use reconciliation pass that scans collections with `options.timeseries`, creates missing `system.buckets.<name>` collections, and leaves existing buckets untouched.
+
+- [ ] **Step 6: Build and run create tests**
 
 Run:
 
@@ -443,7 +491,7 @@ python scripts/buildscripts/resmoke.py --suite=eloq_basic tests/jstests/eloq_bas
 
 Expected: exit 0.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/mongo/db/timeseries/timeseries_namespace.h src/mongo/db/timeseries/timeseries_namespace.cpp src/mongo/db/catalog/create_collection.cpp src/mongo/db/commands/dbcommands.cpp src/mongo/db/SConscript tests/jstests/eloq_basic/timeseries/create_buckets.js
@@ -547,6 +595,25 @@ private:
 }  // namespace mongo
 ```
 
+In `bucket_catalog.cpp`, build `_openBuckets` keys from namespace, rounded time, and a canonicalized meta object. Do not append `BSONObj::objdata()` directly for object-valued meta fields because BSON field order is not canonical. A simple MVP helper is:
+
+```cpp
+BSONObj canonicalizeMetaForKey(const BSONObj& meta) {
+    std::map<std::string, BSONElement> fields;
+    BSONForEach(elem, meta) {
+        fields.emplace(elem.fieldName(), elem);
+    }
+
+    BSONObjBuilder bob;
+    for (const auto& entry : fields) {
+        bob.appendAs(entry.second, entry.first);
+    }
+    return bob.obj();
+}
+```
+
+Use `canonicalizeMetaForKey(meta).toString(false)` or an equivalent stable serialization when forming the string key. This intentionally treats `{a: 1, b: 2}` and `{b: 2, a: 1}` as the same bucket meta value for MVP routing.
+
 - [ ] **Step 4: Implement insert routing**
 
 Create `insert_router.h/cpp` with:
@@ -583,12 +650,15 @@ For the first MVP, each input document may produce a replacement bucket document
 
 In `write_ops_exec.cpp`, after acquiring the target collection and before `insertDocuments()`, read its `CollectionOptions`. If `options.timeseries` is present:
 - Resolve the buckets namespace.
-- Acquire the buckets collection.
+- Call `timeseries::ensureBucketCollection()` so crash recovery from a missing buckets namespace is automatic on first use.
+- Acquire the buckets collection directly with `AutoGetCollection(opCtx, bucketNss, MODE_IX)`.
 - Convert measurement statements to bucket statements through `routeInsert()`.
-- Insert into the buckets collection.
+- Insert into the buckets collection by calling `collection->insertDocuments(...)` inside the current insert path's write-conflict handling and a `WriteUnitOfWork`.
 - Report one successful result per input measurement.
 
-Reject direct inserts into `system.buckets.*` unless they come from internal routing.
+Do not recursively call `performInserts()` for the routed bucket write. `performInserts()` begins with `userAllowedWriteNS(wholeOp.getNamespace())`, and `userAllowedWriteNS()` delegates to `userAllowedCreateNS()`, which rejects `system.buckets.*` because it is not on the explicit `system.*` allowlist in `src/mongo/db/ops/insert.cpp`.
+
+Reject direct client inserts into `system.buckets.*` unless they come from internal routing.
 
 - [ ] **Step 6: Build and run insert tests**
 
@@ -809,6 +879,7 @@ Only build coarse bucket predicates for simple time comparisons and `metaField` 
 - [ ] **Step 4: Route aggregate commands**
 
 In the aggregate command path, after parsing `AggregationRequest` and acquiring enough catalog state to inspect the namespace, if the target collection has `CollectionOptions::timeseries`:
+- Call `timeseries::ensureBucketCollection()` or verify the buckets namespace exists before translation, so non-atomic create recovery works on first read as well as first write.
 - Change the aggregation namespace to `system.buckets.<name>`.
 - Prefix the pipeline with the coarse `$match` and `$_internalUnpackBucket`.
 - Preserve the user's original pipeline after unpack.
@@ -821,7 +892,7 @@ In `find_cmd.cpp`, after parsing the find request and before normal executor pla
 - `pipeline: <translated pipeline>`
 - `cursor: <original cursor options>`
 
-Preserve simple `sort`, `skip`, `limit`, and projection by using `QueryRequest::asAggregationCommand()` as the starting point, then translate that aggregation.
+Preserve simple `sort`, `skip`, `limit`, and projection by using `QueryRequest::asAggregationCommand()` as the starting point, then translate that aggregation. As with aggregate, ensure the buckets collection exists before dispatching to `runAggregate()`.
 
 - [ ] **Step 6: Build and run read tests**
 
@@ -844,18 +915,20 @@ git commit -m "Translate time-series reads through bucket unpacking"
 ### Task 6: Add Bucket-Level TTL
 
 **Files:**
-- Modify: active TTL monitor source file found by `rg -n "TTL|ttl|expireAfterSeconds" src/mongo/db`
+- Modify: `src/mongo/db/ttl.cpp`
+- Modify: `src/mongo/db/timeseries/timeseries_namespace.h`
+- Modify: `src/mongo/db/timeseries/timeseries_namespace.cpp`
 - Test: `tests/jstests/eloq_basic/timeseries/ttl.js`
 
-- [ ] **Step 1: Locate the active TTL implementation**
+- [ ] **Step 1: Confirm the active TTL implementation**
 
 Run:
 
 ```bash
-rg -n "TTL|ttl|expireAfterSeconds" src/mongo/db
+sed -n '77,285p' src/mongo/db/ttl.cpp
 ```
 
-Expected: identify the file that scans TTL indexes or applies `expireAfterSeconds` in this EloqDoc branch.
+Expected: confirm that `TTLMonitor::doTTLPass()` currently gathers TTL indexes and that `doTTLForIndex()` deletes through an index descriptor. This verifies that collection-level time-series TTL needs a separate scan path.
 
 - [ ] **Step 2: Add the failing jstest**
 
@@ -880,12 +953,38 @@ Create `tests/jstests/eloq_basic/timeseries/ttl.js`:
 })();
 ```
 
-- [ ] **Step 3: Implement bucket expiration**
+- [ ] **Step 3: Collect time-series TTL namespaces**
 
-In the TTL monitor source found in Step 1:
-- When a collection has `options.timeseries` and `expireAfterSeconds`, scan the corresponding buckets namespace.
+In `TTLMonitor::doTTLPass()`, while iterating all collections, read each collection's catalog options:
+
+```cpp
+auto options = coll->getCatalogEntry()->getCollectionOptions(&opCtx);
+if (options.timeseries && options.expireAfterSeconds) {
+    timeseriesTTLCollections.push_back(
+        TimeseriesTTLCollection{collectionNSS, *options.timeseries, *options.expireAfterSeconds});
+}
+```
+
+Keep this list separate from `ttlIndexes`. The existing `ttlIndexes` path is index-based and should remain unchanged for normal TTL indexes.
+
+- [ ] **Step 4: Implement bucket expiration**
+
+Add a helper in `src/mongo/db/ttl.cpp`:
+
+```cpp
+void doTTLForTimeseriesCollection(OperationContext* opCtx,
+                                  const NamespaceString& logicalNss,
+                                  const timeseries::TimeseriesOptions& options,
+                                  long long expireAfterSeconds,
+                                  int limit);
+```
+
+Behavior:
+- Resolve `timeseries::makeBucketNamespace(logicalNss)`.
+- Acquire the buckets collection with `AutoGetCollection(opCtx, bucketNss, MODE_IX)`.
 - Delete buckets where `control.max.<timeField> < Date_t::now() - expireAfterSeconds`.
 - Do not unpack buckets or delete individual measurements in this MVP.
+- Do not require or create a TTL index on `control.max.<timeField>` in this task; keeping bucket internals out of `listIndexes` is preferred for the MVP.
 
 Query shape:
 
@@ -893,7 +992,9 @@ Query shape:
 {"control.max.<timeField>": {$lt: expirationDate}}
 ```
 
-- [ ] **Step 4: Build and run TTL test**
+The implementation can use a collection scan delete plan for the first slice. If an index is later added on the buckets collection, that is a performance follow-up and should be documented separately.
+
+- [ ] **Step 5: Build and run TTL test**
 
 Run:
 
@@ -904,11 +1005,11 @@ python scripts/buildscripts/resmoke.py --suite=eloq_basic tests/jstests/eloq_bas
 
 Expected: exit 0.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add tests/jstests/eloq_basic/timeseries/ttl.js
-git add <active TTL monitor source file>
+git add src/mongo/db/ttl.cpp src/mongo/db/timeseries/timeseries_namespace.h src/mongo/db/timeseries/timeseries_namespace.cpp
 git commit -m "Expire time-series buckets by max time"
 ```
 
@@ -969,6 +1070,7 @@ In `docs/analysis/final/tasks/time-series-collections.md`, add an implementation
 - Bucket packing is conservative and optimized later.
 - The first read path translates to aggregation rather than native find executor unpacking.
 - TTL is bucket-level only.
+- Explain output may expose `system.buckets.<collection>` until a later compatibility pass rewrites explain results back to the logical time-series namespace.
 
 - [ ] **Step 4: Run the complete focused test set**
 
