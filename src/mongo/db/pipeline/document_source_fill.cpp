@@ -16,6 +16,7 @@
 
 #include "mongo/platform/basic.h"
 
+#include <deque>
 #include <vector>
 
 #include "mongo/db/jsobj.h"
@@ -35,6 +36,7 @@ public:
     enum class RuleType {
         kLiteral,
         kLocf,
+        kLinear,
     };
 
     struct Rule {
@@ -62,6 +64,17 @@ public:
 
     GetNextResult getNext() final {
         pExpCtx->checkForInterrupt();
+
+        if (_hasLinearRule) {
+            loadBufferedOutput();
+            if (_bufferedOutput.empty()) {
+                return GetNextResult::makeEOF();
+            }
+
+            auto output = std::move(_bufferedOutput.front());
+            _bufferedOutput.pop_front();
+            return GetNextResult(std::move(output));
+        }
 
         auto next = pSource->getNext();
         if (!next.isAdvanced()) {
@@ -104,8 +117,10 @@ public:
             MutableDocument ruleSpec;
             if (rule.type == RuleType::kLiteral) {
                 ruleSpec["value"] = rule.literal;
-            } else {
+            } else if (rule.type == RuleType::kLocf) {
                 ruleSpec["method"] = Value("locf"_sd);
+            } else {
+                ruleSpec["method"] = Value("linear"_sd);
             }
             output[rule.field.fullPath()] = ruleSpec.freezeToValue();
         }
@@ -194,9 +209,16 @@ public:
                         "$fill method must be a string",
                         methodElem.type() == BSONType::String);
                 uassert(6789128,
-                        "$fill currently supports only method: 'locf'",
-                        methodElem.str() == "locf");
-                rule.type = RuleType::kLocf;
+                        "$fill currently supports only method: 'locf' or 'linear'",
+                        methodElem.str() == "locf" || methodElem.str() == "linear");
+                if (methodElem.str() == "locf") {
+                    rule.type = RuleType::kLocf;
+                } else {
+                    uassert(6789133,
+                            "$fill method: 'linear' requires sortBy",
+                            !sortBy.isEmpty());
+                    rule.type = RuleType::kLinear;
+                }
             } else {
                 rule.literal = Value(valueElem);
             }
@@ -212,6 +234,15 @@ public:
     }
 
 private:
+    bool hasLinearRule() const {
+        for (const auto& rule : _rules) {
+            if (rule.type == RuleType::kLinear) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void resetLocfStateForNewPartition(const Document& input) {
         if (_partitionByFields.empty()) {
             return;
@@ -272,6 +303,137 @@ private:
         _haveLastSortKey = true;
     }
 
+    double extractLinearSortValue(const Document& input) const {
+        invariant(!_sortFields.empty());
+        auto value = input.getNestedField(_sortFields.front().field);
+        uassert(6789134, "$fill linear sortBy field must be numeric", value.numeric());
+        return value.coerceToDouble();
+    }
+
+    void setBufferedField(std::vector<Document>* docs,
+                          size_t index,
+                          const FieldPath& field,
+                          const Value& value) const {
+        MutableDocument output((*docs)[index]);
+        output.setNestedField(field, value);
+        (*docs)[index] = output.freeze();
+    }
+
+    void interpolateLinearRule(std::vector<Document>* docs,
+                               size_t begin,
+                               size_t end,
+                               const Rule& rule) const {
+        boost::optional<size_t> previousAnchor;
+        for (size_t i = begin; i < end; ++i) {
+            auto current = (*docs)[i].getNestedField(rule.field);
+            if (current.nullish()) {
+                continue;
+            }
+
+            uassert(6789135, "$fill linear values must be numeric or null", current.numeric());
+            if (previousAnchor) {
+                double previousX = extractLinearSortValue((*docs)[*previousAnchor]);
+                double nextX = extractLinearSortValue((*docs)[i]);
+                double previousY = (*docs)[*previousAnchor]
+                                       .getNestedField(rule.field)
+                                       .coerceToDouble();
+                double nextY = current.coerceToDouble();
+
+                if (nextX != previousX) {
+                    for (size_t gap = *previousAnchor + 1; gap < i; ++gap) {
+                        auto gapValue = (*docs)[gap].getNestedField(rule.field);
+                        if (!gapValue.nullish()) {
+                            continue;
+                        }
+
+                        double gapX = extractLinearSortValue((*docs)[gap]);
+                        double ratio = (gapX - previousX) / (nextX - previousX);
+                        setBufferedField(
+                            docs, gap, rule.field, Value(previousY + (nextY - previousY) * ratio));
+                    }
+                }
+            }
+            previousAnchor = i;
+        }
+    }
+
+    void applyLinearRules(std::vector<Document>* docs) const {
+        size_t partitionStart = 0;
+        Value previousPartitionKey;
+        bool havePartition = false;
+
+        for (size_t i = 0; i <= docs->size(); ++i) {
+            bool atEnd = i == docs->size();
+            Value partitionKey;
+            if (!atEnd && !_partitionByFields.empty()) {
+                partitionKey = makePartitionKey((*docs)[i]);
+            }
+
+            bool startsNewPartition = atEnd;
+            if (!atEnd && !_partitionByFields.empty()) {
+                startsNewPartition = !havePartition ||
+                    pExpCtx->getValueComparator().compare(partitionKey, previousPartitionKey) != 0;
+            }
+
+            if (startsNewPartition) {
+                if (havePartition || atEnd) {
+                    for (const auto& rule : _rules) {
+                        if (rule.type == RuleType::kLinear) {
+                            interpolateLinearRule(docs, partitionStart, i, rule);
+                        }
+                    }
+                }
+                partitionStart = i;
+                previousPartitionKey = partitionKey;
+                havePartition = !atEnd;
+            }
+        }
+    }
+
+    void loadBufferedOutput() {
+        if (_loadedBufferedOutput) {
+            return;
+        }
+        _loadedBufferedOutput = true;
+
+        std::vector<Document> docs;
+        while (true) {
+            auto next = pSource->getNext();
+            uassert(6789136, "$fill linear does not support paused input", !next.isPaused());
+            if (next.isEOF()) {
+                break;
+            }
+
+            auto input = next.releaseDocument();
+            resetLocfStateForNewPartition(input);
+            validateSortOrder(input);
+
+            MutableDocument output(input);
+            for (auto& rule : _rules) {
+                auto current = input.getNestedField(rule.field);
+                if (rule.type == RuleType::kLiteral) {
+                    if (current.nullish()) {
+                        output.setNestedField(rule.field, rule.literal);
+                    }
+                } else if (rule.type == RuleType::kLocf) {
+                    if (current.nullish()) {
+                        if (!rule.lastSeen.missing()) {
+                            output.setNestedField(rule.field, rule.lastSeen);
+                        }
+                    } else {
+                        rule.lastSeen = current;
+                    }
+                }
+            }
+            docs.push_back(output.freeze());
+        }
+
+        applyLinearRules(&docs);
+        for (auto& doc : docs) {
+            _bufferedOutput.push_back(std::move(doc));
+        }
+    }
+
     std::vector<Rule> _rules;
     BSONObj _sortBy;
     std::vector<FieldPath> _partitionByFields;
@@ -280,6 +442,9 @@ private:
     Value _currentPartitionKey;
     bool _haveLastSortKey = false;
     std::vector<Value> _lastSortKey;
+    bool _hasLinearRule = hasLinearRule();
+    bool _loadedBufferedOutput = false;
+    std::deque<Document> _bufferedOutput;
 };
 
 constexpr StringData DocumentSourceFill::kStageName;
