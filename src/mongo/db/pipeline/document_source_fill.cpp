@@ -323,7 +323,10 @@ private:
     double extractLinearSortValue(const Document& input) const {
         invariant(!_sortFields.empty());
         auto value = input.getNestedField(_sortFields.front().field);
-        uassert(6789134, "$fill linear sortBy field must be numeric", value.numeric());
+        if (value.getType() == BSONType::Date) {
+            return static_cast<double>(value.getDate().toMillisSinceEpoch());
+        }
+        uassert(6789134, "$fill linear sortBy field must be numeric or date", value.numeric());
         return value.coerceToDouble();
     }
 

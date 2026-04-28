@@ -110,6 +110,31 @@ assert.eq([
     {_id: 5, sensor: "b", ts: 2, temp: 20},
 ], result);
 
+coll.drop();
+assert.commandWorked(coll.insert([
+    {_id: 1, ts: new Date(0), temp: 10},
+    {_id: 2, ts: new Date(60000), temp: null},
+    {_id: 3, ts: new Date(180000), temp: 16},
+]));
+
+result = coll.aggregate([
+    {$sort: {ts: 1}},
+    {
+        $fill: {
+            sortBy: {ts: 1},
+            output: {
+                temp: {method: "linear"},
+            },
+        }
+    },
+]).toArray();
+
+assert.eq([
+    {_id: 1, ts: new Date(0), temp: 10},
+    {_id: 2, ts: new Date(60000), temp: 12},
+    {_id: 3, ts: new Date(180000), temp: 16},
+], result);
+
 assert.commandFailed(db.runCommand({
     aggregate: coll.getName(),
     pipeline: [

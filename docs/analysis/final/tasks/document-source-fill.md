@@ -32,7 +32,8 @@ Documents must be sorted within each partition; `$fill` does not sort itself (ca
 `method: "locf"`, including `partitionByFields` state reset and `sortBy` order validation.
 Numeric `method: "linear"` is implemented through a buffered compatibility path.
 `partitionBy` expressions are supported for partition state reset. Date-valued `method: "linear"`
-interpolation is supported over numeric `sortBy` values by interpolating epoch milliseconds.
+interpolation is supported by interpolating epoch milliseconds. Linear interpolation accepts
+numeric or date `sortBy` values as the interpolation axis.
 
 ## Extension pattern
 
@@ -89,12 +90,12 @@ uses the resulting value as the partition key.
 When `sortBy` is supplied, EloqDoc validates that incoming documents are sorted by the declared
 sort keys within each partition and errors on out-of-order input.
 `linear` rules buffer the source stream, interpolate nullish values between surrounding numeric or
-date observations by the first numeric `sortBy` field, and leave leading/trailing nullish values
-unchanged. Mixed numeric/date anchors for a single output field are rejected.
+date observations by the first numeric or date `sortBy` field, and leave leading/trailing nullish
+values unchanged. Mixed numeric/date anchors for a single output field are rejected.
 
 Deferred semantic differences: MongoDB supports bounded/spilling linear buffers and broader sort
-semantics. EloqDoc currently limits `linear` interpolation to numeric `sortBy` fields with numeric
-or date output values.
+semantics. EloqDoc currently limits `linear` interpolation to numeric/date `sortBy` fields with
+numeric or date output values.
 
 ## Notes from source analyses
 
