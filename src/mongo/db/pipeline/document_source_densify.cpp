@@ -38,17 +38,23 @@ public:
     DocumentSourceDensify(const boost::intrusive_ptr<ExpressionContext>& expCtx,
                           FieldPath field,
                           double step,
+                          double inputStep,
                           double lower,
                           double upper,
                           BoundsMode boundsMode,
-                          std::vector<FieldPath> partitionByFields)
+                          std::vector<FieldPath> partitionByFields,
+                          bool dateMode,
+                          std::string unit)
         : DocumentSource(expCtx),
           _field(std::move(field)),
           _step(step),
+          _inputStep(inputStep),
           _lower(lower),
           _upper(upper),
           _boundsMode(boundsMode),
           _partitionByFields(std::move(partitionByFields)),
+          _dateMode(dateMode),
+          _unit(std::move(unit)),
           _nextValue(lower) {}
 
     GetNextResult getNext() final {
@@ -119,7 +125,7 @@ public:
                 }
             }
 
-            double current = extractNumericField(doc);
+            double current = extractDensifyField(doc);
             if (_haveLastInput) {
                 uassert(6789103,
                         "$densify requires input documents to be sorted ascending",
@@ -147,10 +153,14 @@ public:
 
     Value serialize(boost::optional<ExplainOptions::Verbosity> explain = boost::none) const final {
         MutableDocument range;
-        range["step"] = numericValue(_step);
+        range["step"] = numericValue(_inputStep);
+        if (!_unit.empty()) {
+            range["unit"] = Value(_unit);
+        }
         switch (_boundsMode) {
             case BoundsMode::kExplicit:
-                range["bounds"] = Value(std::vector<Value>{numericValue(_lower), numericValue(_upper)});
+                range["bounds"] = Value(std::vector<Value>{densifyValue(_lower),
+                                                           densifyValue(_upper)});
                 break;
             case BoundsMode::kFull:
                 range["bounds"] = Value("full"_sd);
@@ -214,18 +224,33 @@ public:
         BSONElement stepElem = range["step"];
         BSONElement boundsElem = range["bounds"];
         uassert(6789108, "$densify requires a numeric 'range.step'", stepElem.isNumber());
-        double step = stepElem.numberDouble();
-        uassert(6789109, "$densify requires 'range.step' to be positive", step > 0);
-        uassert(6789110,
-                "$densify date units are not supported in this compatibility checkpoint",
-                range["unit"].eoo());
+        double inputStep = stepElem.numberDouble();
+        uassert(6789109, "$densify requires 'range.step' to be positive", inputStep > 0);
+
+        BSONElement unitElem = range["unit"];
+        bool dateMode = false;
+        std::string unit;
+        double step = inputStep;
+        if (!unitElem.eoo()) {
+            uassert(6789384, "$densify unit must be a string", unitElem.type() == BSONType::String);
+            unit = unitElem.str();
+            step = inputStep * unitMillis(unit);
+            dateMode = true;
+        }
         BoundsMode boundsMode = BoundsMode::kExplicit;
         std::vector<double> bounds{0, 0};
         if (boundsElem.type() == BSONType::Array) {
             bounds.clear();
             for (auto&& bound : boundsElem.Obj()) {
-                uassert(6789112, "$densify bounds must be numeric", bound.isNumber());
-                bounds.push_back(bound.numberDouble());
+                if (dateMode) {
+                    uassert(6789386,
+                            "$densify date bounds must be dates",
+                            bound.type() == BSONType::Date);
+                    bounds.push_back(static_cast<double>(bound.Date().toMillisSinceEpoch()));
+                } else {
+                    uassert(6789112, "$densify bounds must be numeric", bound.isNumber());
+                    bounds.push_back(bound.numberDouble());
+                }
             }
             uassert(6789113, "$densify requires exactly two bounds", bounds.size() == 2);
             uassert(6789114, "$densify lower bound must be <= upper bound", bounds[0] <= bounds[1]);
@@ -248,10 +273,13 @@ public:
         return new DocumentSourceDensify(expCtx,
                                          FieldPath(fieldElem.str()),
                                          step,
+                                         inputStep,
                                          bounds[0],
                                          bounds[1],
                                          boundsMode,
-                                         std::move(partitionByFields));
+                                         std::move(partitionByFields),
+                                         dateMode,
+                                         std::move(unit));
     }
 
 private:
@@ -275,7 +303,7 @@ private:
     Document makeSyntheticDocument(double value) {
         MutableDocument doc;
         addPartitionFields(doc);
-        doc.setNestedField(_field, numericValue(value));
+        doc.setNestedField(_field, densifyValue(value));
         _nextValue += _step;
         return doc.freeze();
     }
@@ -283,12 +311,18 @@ private:
     Document makeSyntheticDocument(double value, const Value& partitionKey) const {
         MutableDocument doc;
         addPartitionFields(doc, partitionKey);
-        doc.setNestedField(_field, numericValue(value));
+        doc.setNestedField(_field, densifyValue(value));
         return doc.freeze();
     }
 
-    double extractNumericField(const Document& doc) const {
+    double extractDensifyField(const Document& doc) const {
         auto value = doc.getNestedField(_field);
+        if (_dateMode) {
+            uassert(6789387,
+                    "$densify field must be present and date",
+                    value.getType() == BSONType::Date);
+            return static_cast<double>(value.getDate().toMillisSinceEpoch());
+        }
         uassert(6789115, "$densify field must be present and numeric", value.numeric());
         return value.coerceToDouble();
     }
@@ -357,7 +391,7 @@ private:
             }
 
             auto doc = next.releaseDocument();
-            _bufferedInput.push_back({doc, makePartitionKey(doc), extractNumericField(doc)});
+            _bufferedInput.push_back({doc, makePartitionKey(doc), extractDensifyField(doc)});
         }
 
         if (_bufferedInput.empty()) {
@@ -439,12 +473,45 @@ private:
         return Value(value);
     }
 
+    Value densifyValue(double value) const {
+        if (_dateMode) {
+            return Value(Date_t::fromMillisSinceEpoch(static_cast<long long>(std::llround(value))));
+        }
+        return numericValue(value);
+    }
+
+    static double unitMillis(const std::string& unit) {
+        if (unit == "millisecond") {
+            return 1;
+        }
+        if (unit == "second") {
+            return 1000;
+        }
+        if (unit == "minute") {
+            return 60 * 1000;
+        }
+        if (unit == "hour") {
+            return 60 * 60 * 1000;
+        }
+        if (unit == "day") {
+            return 24 * 60 * 60 * 1000;
+        }
+        if (unit == "week") {
+            return 7 * 24 * 60 * 60 * 1000;
+        }
+        uasserted(6789385,
+                  "$densify date unit must be millisecond, second, minute, hour, day, or week");
+    }
+
     FieldPath _field;
     double _step;
+    double _inputStep;
     double _lower;
     double _upper;
     BoundsMode _boundsMode;
     std::vector<FieldPath> _partitionByFields;
+    bool _dateMode;
+    std::string _unit;
     double _nextValue;
     bool _inputExhausted = false;
     bool _havePartition = false;

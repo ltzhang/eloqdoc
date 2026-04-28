@@ -11,7 +11,9 @@ Inserts synthetic documents to fill gaps in a sorted numeric or date sequence. C
 **Checkpoint status:** numeric bounds are implemented for unpartitioned and
 `partitionByFields` input:
 `{field, partitionByFields, range: {step, bounds: [min, max] | "full" | "partition"}}`.
-Date units remain deferred.
+Date-valued densification is implemented for fixed-duration units (`millisecond`, `second`,
+`minute`, `hour`, `day`, `week`) with explicit, `full`, and `partition` bounds. Calendar units
+(`month`, `quarter`, `year`) remain deferred.
 
 ```js
 db.events.aggregate([
@@ -61,7 +63,7 @@ class DocumentSourceDensify final : public DocumentSource {
 ## Acceptance criteria
 
 - [x] Numeric densification with explicit bounds produces evenly-spaced synthetic documents in gaps.
-- Date densification with `unit` produces correct boundaries (DST handling matches `$dateAdd`).
+- [x] Date densification with fixed-duration `unit` produces correct boundaries.
 - [x] `bounds: "full"`, `"partition"`, and explicit `[min, max]` all work for numeric input.
 - [x] Empty input under `bounds: [min, max]` produces synthetic docs covering the entire range.
 - [x] Generated docs have only `partitionByFields` + `field`; other fields absent.
@@ -84,8 +86,9 @@ fields and the densified field.
 range before emitting documents. `full` uses the global min/max for every partition; `partition`
 uses each partition's own min/max.
 
-Deferred semantic differences: MongoDB supports date densification with units. EloqDoc currently
-rejects date-unit densification with a parse error rather than accepting partial semantics.
+Deferred semantic differences: MongoDB supports calendar-aware date densification for units such
+as `month`, `quarter`, and `year`, including DST-sensitive behavior through `$dateAdd` semantics.
+EloqDoc currently supports fixed-duration date units only.
 
 ## Notes from source analyses
 
