@@ -17,6 +17,7 @@
 
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/db/bson/dotted_path_support.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_session.h"
@@ -27,6 +28,8 @@
 
 namespace mongo {
 namespace {
+
+namespace dps = dotted_path_support;
 
 bool isAnalyzableScalar(BSONElement elem) {
     switch (elem.type()) {
@@ -229,7 +232,7 @@ public:
             sampledDocuments++;
 
             if (key) {
-                auto elem = doc[*key];
+                auto elem = dps::extractElementAtPath(doc, *key);
                 if (!elem.eoo()) {
                     statsByField[*key].observe(elem);
                 }

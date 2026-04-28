@@ -11,6 +11,7 @@ The `analyze` command computes and persists statistics (in particular: histogram
 ```js
 db.runCommand({analyze: "c"})                                       // all "appropriate" fields
 db.runCommand({analyze: "c", key: "category", sampleSize: 10000})   // one field
+db.runCommand({analyze: "c", key: "meta.score"})                    // one dotted field path
 db.runCommand({analyze: "c", sampleRate: 0.1})                      // 10% sample
 ```
 
@@ -72,7 +73,7 @@ public:
 
 ## Implementation notes
 
-Initial EloqDoc support lands as a compact `BasicCommand` in `src/mongo/db/commands/analyze.cpp`. It scans the target collection through the local direct client, analyzes top-level scalar fields, and persists one document per field into `system.statistics.<collection>`. Each stats document records the source namespace, field name, sampled document count, observed value count, cardinality, min/max, and a basic value-frequency histogram.
+Initial EloqDoc support lands as a compact `BasicCommand` in `src/mongo/db/commands/analyze.cpp`. It scans the target collection through the local direct client, analyzes top-level scalar fields by default, and persists one document per field into `system.statistics.<collection>`. When `key` is supplied, it may name either a top-level field or a dotted field path such as `meta.score`. Each stats document records the source namespace, field name, sampled document count, observed value count, cardinality, min/max, and a basic value-frequency histogram.
 
 The initial sampling implementation honors `sampleSize` and `sampleRate` by limiting the number of documents read from the collection. It is deterministic rather than random and does not yet reuse `$sample`; that is an intentional first-slice simplification for the parser + stats-persistence milestone. The query optimizer does not consume these stats yet.
 

@@ -5,10 +5,10 @@ coll.drop();
 assert.writeOK(stats.remove({}));
 
 assert.writeOK(coll.insert([
-    {_id: 1, category: "a", score: 10, ignored: {nested: true}},
-    {_id: 2, category: "b", score: 20},
-    {_id: 3, category: "a", score: 30},
-    {_id: 4, category: "c", score: 40},
+    {_id: 1, category: "a", score: 10, meta: {score: 10}, ignored: {nested: true}},
+    {_id: 2, category: "b", score: 20, meta: {score: 20}},
+    {_id: 3, category: "a", score: 30, meta: {score: 30}},
+    {_id: 4, category: "c", score: 40, meta: {score: 40}},
 ]));
 
 let res = assert.commandWorked(db.runCommand({analyze: coll.getName(), key: "score"}));
@@ -23,6 +23,14 @@ assert.eq(4, docs[0].cardinality, tojson(docs));
 assert.eq(10, docs[0].min, tojson(docs));
 assert.eq(40, docs[0].max, tojson(docs));
 assert.gt(docs[0].histogram.length, 0, tojson(docs));
+
+res = assert.commandWorked(db.runCommand({analyze: coll.getName(), key: "meta.score"}));
+assert.eq(["meta.score"], res.fields, tojson(res));
+docs = stats.find().sort({field: 1}).toArray();
+assert.eq(1, docs.length, tojson(docs));
+assert.eq("meta.score", docs[0].field, tojson(docs));
+assert.eq(10, docs[0].min, tojson(docs));
+assert.eq(40, docs[0].max, tojson(docs));
 
 res = assert.commandWorked(db.runCommand({analyze: coll.getName()}));
 assert.eq(4, res.sampledDocuments, tojson(res));
