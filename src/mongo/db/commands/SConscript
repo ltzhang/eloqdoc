@@ -208,6 +208,7 @@ env.Library(
 env.Library(
     target="standalone",
     source=[
+        "bulk_write.cpp",
         "count_cmd.cpp",
         "create_indexes.cpp",
         "current_op.cpp",
