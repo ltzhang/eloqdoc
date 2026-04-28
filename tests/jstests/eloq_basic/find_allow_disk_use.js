@@ -47,6 +47,18 @@ try {
     assert.eq(100, sorted.length, tojson(sorted));
     assert.eq({_id: 99, x: 1}, sorted[0], tojson(sorted));
     assert.eq({_id: 0, x: 100}, sorted[99], tojson(sorted));
+
+    const cursor = coll.find({}, {_id: 1, x: 1})
+                       .sort({payload: 1, x: 1})
+                       .allowDiskUse()
+                       .batchSize(11);
+    for (let expectedX = 1; expectedX <= 100; ++expectedX) {
+        assert(cursor.hasNext(), "expected x " + expectedX);
+        const doc = cursor.next();
+        assert.eq(100 - expectedX, doc._id, tojson(doc));
+        assert.eq(expectedX, doc.x, tojson(doc));
+    }
+    assert(!cursor.hasNext());
 } finally {
     assert.commandWorked(db.adminCommand(
         {setParameter: 1, internalQueryExecMaxBlockingSortBytes: oldSortLimit}));

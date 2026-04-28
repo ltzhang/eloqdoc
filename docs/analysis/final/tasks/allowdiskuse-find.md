@@ -53,7 +53,7 @@ bool allowDiskUse = cmdObj["allowDiskUse"].trueValue();
 - [x] A `find` with sort exceeding 100 MB *fails* without `allowDiskUse`.
 - [x] The same query *succeeds* with `allowDiskUse: true`.
 - [x] After completion, temp files are cleaned up.
-- [ ] Cursor pause/resume during a spilled sort still produces correct output.
+- [x] Cursor pause/resume during a spilled sort still produces correct output.
 - **Test entry point:** `tests/jstests/eloq_basic/find_allow_disk_use.js`.
 
 ## Implementation notes
