@@ -235,7 +235,8 @@ private:
                     out.opName == "$min" || out.opName == "$max" || out.opName == "$first" ||
                     out.opName == "$last" || out.opName == "$documentNumber" ||
                     out.opName == "$rank" || out.opName == "$denseRank" ||
-                    out.opName == "$shift" || out.opName == "$expMovingAvg");
+                    out.opName == "$shift" || out.opName == "$expMovingAvg" ||
+                    out.opName == "$locf");
 
         if (out.opName == "$count") {
             uassert(6789330,
@@ -257,7 +258,7 @@ private:
 
         if (out.opName == "$documentNumber" || out.opName == "$rank" ||
             out.opName == "$denseRank" || out.opName == "$shift" ||
-            out.opName == "$expMovingAvg") {
+            out.opName == "$expMovingAvg" || out.opName == "$locf") {
             uassert(6789338,
                     str::stream() << out.opName << " does not accept a window option",
                     !windowElem);
@@ -522,6 +523,9 @@ private:
         if (outSpec.opName == "$expMovingAvg") {
             return evaluateExpMovingAvg(outSpec, partitionStart, relativeIndex);
         }
+        if (outSpec.opName == "$locf") {
+            return evaluateLocf(outSpec, partitionStart, relativeIndex);
+        }
         return evaluateWindow(outSpec, partitionStart, first, last);
     }
 
@@ -545,6 +549,20 @@ private:
             }
         }
         return initialized ? numericValue(average) : Value(BSONNULL);
+    }
+
+    Value evaluateLocf(const OutputSpec& outSpec, size_t partitionStart, int relativeIndex) const {
+        Value last;
+        bool haveValue = false;
+        for (int i = 0; i <= relativeIndex; ++i) {
+            auto value = outSpec.argument->evaluate(_buffer[partitionStart + i].doc);
+            if (value.nullish()) {
+                continue;
+            }
+            last = value;
+            haveValue = true;
+        }
+        return haveValue ? last : Value(BSONNULL);
     }
 
     int rankFor(size_t partitionStart, size_t partitionEnd, int relativeIndex) const {

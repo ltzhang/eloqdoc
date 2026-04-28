@@ -12,7 +12,7 @@ Window-function aggregation: compute aggregates over a sliding "window" of adjac
 `sortBy`, `documents` windows, numeric `range` windows over a single numeric sort key,
 and standard output operators `$sum`, `$avg`, `$count`, `$min`, `$max`, `$first`, and
 `$last`. It also supports position-based window operators `$documentNumber`, `$rank`,
-`$denseRank`, and `$shift`, plus numeric `$expMovingAvg`. Date range units,
+`$denseRank`, and `$shift`, plus numeric `$expMovingAvg` and `$locf`. Date range units,
 spill/removable optimizations, and math-heavy window-only operators remain deferred.
 
 ```js
@@ -97,6 +97,7 @@ The window executor must support:
 - [x] Window-only operators (`$rank`, `$denseRank`, `$documentNumber`) produce correct values within each partition.
 - [x] `$shift` produces correct lag/lead values.
 - [x] `$expMovingAvg` produces correct values with both `N` and `alpha` forms.
+- [x] `$locf` carries the latest non-null value forward within each partition.
 - [x] Removable accumulators ($sum, $avg, $count) maintain correct state under sliding-window updates.
 - [x] Non-removable accumulators ($min, $max) work correctly (may be slower).
 - [x] Empty windows return null per accumulator's null-policy (`$count` returns `0`).

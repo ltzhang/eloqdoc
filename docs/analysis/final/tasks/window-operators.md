@@ -10,8 +10,9 @@ Operators that only make sense inside `$setWindowFields` — they read window-po
 
 **Checkpoint status:** the first position-based set is implemented inside the initial
 `$setWindowFields` buffered executor: `$documentNumber`, `$rank`, `$denseRank`, and `$shift`.
-`$expMovingAvg` is also implemented for numeric inputs with both `N` and `alpha` forms.
-`$locf`, `$integral`, `$derivative`, and covariance operators remain deferred.
+`$expMovingAvg` is also implemented for numeric inputs with both `N` and `alpha` forms, and
+`$locf` is implemented for last-observation carry-forward inside a partition. `$integral`,
+`$derivative`, and covariance operators remain deferred.
 
 | Operator | Description |
 | -------- | ----------- |
@@ -69,13 +70,15 @@ One file per operator group (or one mega-file `window_functions.cpp`):
 
 - [x] `$rank`, `$denseRank`, `$documentNumber`, and `$shift` produce correct values against focused EloqDoc fixtures.
 - [x] `$expMovingAvg` produces correct values with both `N` and `alpha` forms.
+- [x] `$locf` carries the latest non-null value forward within each partition.
 - Operators that don't support `remove()` (rank, denseRank, documentNumber) trigger window-recomputation correctly when window slides.
 - Date-aware operators (`$integral`, `$derivative`) produce time-unit-correct values.
 - [x] `$shift` with absent positions returns null (or default if specified).
 - **Test entry point:** `tests/jstests/eloq_basic/agg_set_window_fields/position_operators.js`
   for the initial position-based slice, plus
-  `tests/jstests/eloq_basic/agg_set_window_fields/exp_moving_avg.js` for `$expMovingAvg`.
-  Adapt `jstests/aggregation/sources/setWindowFields/` operator-specific tests as coverage grows.
+  `tests/jstests/eloq_basic/agg_set_window_fields/exp_moving_avg.js` for `$expMovingAvg`
+  and `tests/jstests/eloq_basic/agg_set_window_fields/locf.js` for `$locf`. Adapt
+  `jstests/aggregation/sources/setWindowFields/` operator-specific tests as coverage grows.
 
 Current `$expMovingAvg` semantic differences: this checkpoint computes numeric inputs through
 double arithmetic and does not preserve Decimal128 result type yet.
