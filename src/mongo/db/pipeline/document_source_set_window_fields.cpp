@@ -82,6 +82,11 @@ public:
                 MutableDocument operatorSpec;
                 operatorSpec["input"] = out.argument->serialize(false);
                 outSpec[out.opName] = operatorSpec.freezeToValue();
+            } else if (isNValueOperator(out.opName)) {
+                MutableDocument operatorSpec;
+                operatorSpec["input"] = out.argument->serialize(false);
+                operatorSpec["n"] = Value(out.nValueCount);
+                outSpec[out.opName] = operatorSpec.freezeToValue();
             } else {
                 outSpec[out.opName] = out.argument ? out.argument->serialize(false) : Value(Document());
             }
@@ -179,6 +184,7 @@ private:
         boost::intrusive_ptr<Expression> shiftDefault;
         int shiftBy = 0;
         double expMovingAvgAlpha = 0;
+        int nValueCount = 0;
         bool hasWindow = false;
         WindowType windowType = WindowType::kDocuments;
         WindowBound lower;
@@ -229,6 +235,7 @@ private:
                        nullptr,
                        0,
                        0,
+                       0,
                        false,
                        WindowType::kDocuments,
                        {},
@@ -242,7 +249,7 @@ private:
                     out.opName == "$shift" || out.opName == "$expMovingAvg" ||
                     out.opName == "$locf" || out.opName == "$covariancePop" ||
                     out.opName == "$covarianceSamp" || out.opName == "$integral" ||
-                    out.opName == "$derivative");
+                    out.opName == "$derivative" || isNValueOperator(out.opName));
 
         if (out.opName == "$count") {
             uassert(6789330,
@@ -259,6 +266,8 @@ private:
             parseExpMovingAvgSpec(expCtx, *opElem, &out);
         } else if (out.opName == "$integral" || out.opName == "$derivative") {
             parseIntegralDerivativeSpec(expCtx, *opElem, &out);
+        } else if (isNValueOperator(out.opName)) {
+            parseNValueSpec(expCtx, *opElem, &out);
         } else {
             if (out.opName == "$covariancePop" || out.opName == "$covarianceSamp") {
                 uassert(6789355,
@@ -389,6 +398,39 @@ private:
                     str::stream() << out->opName
                                   << " unit is not supported in this checkpoint",
                     fieldName != "unit"_sd);
+        }
+    }
+
+    static bool isNValueOperator(const std::string& opName) {
+        return opName == "$firstN" || opName == "$lastN" || opName == "$minN" ||
+            opName == "$maxN";
+    }
+
+    static void parseNValueSpec(const boost::intrusive_ptr<ExpressionContext>& expCtx,
+                                BSONElement opElem,
+                                OutputSpec* out) {
+        uassert(6789364,
+                str::stream() << out->opName << " argument must be an object",
+                opElem.type() == BSONType::Object);
+        auto spec = opElem.Obj();
+        auto inputElem = spec["input"];
+        auto nElem = spec["n"];
+        uassert(6789365, str::stream() << out->opName << " requires input", inputElem);
+        uassert(6789366,
+                str::stream() << out->opName << " requires positive integer n",
+                nElem.isNumber() && nElem.numberInt() == nElem.numberDouble() &&
+                    nElem.numberInt() > 0);
+
+        VariablesParseState vps = expCtx->variablesParseState;
+        out->argument = Expression::parseOperand(expCtx, inputElem, vps)->optimize();
+        out->nValueCount = nElem.numberInt();
+
+        for (auto&& option : spec) {
+            auto fieldName = option.fieldNameStringData();
+            uassert(6789367,
+                    str::stream() << "unknown $setWindowFields " << out->opName << " option '"
+                                  << fieldName << "'",
+                    fieldName == "input"_sd || fieldName == "n"_sd);
         }
     }
 
@@ -587,6 +629,9 @@ private:
         if (outSpec.opName == "$derivative") {
             return evaluateDerivative(outSpec, partitionStart, first, last);
         }
+        if (isNValueOperator(outSpec.opName)) {
+            return evaluateNValue(outSpec, partitionStart, first, last);
+        }
         return evaluateWindow(outSpec, partitionStart, first, last);
     }
 
@@ -736,6 +781,34 @@ private:
                 "$setWindowFields integral/derivative require numeric sort keys",
                 sortKey.numeric());
         return sortKey.coerceToDouble();
+    }
+
+    Value evaluateNValue(const OutputSpec& outSpec,
+                         size_t partitionStart,
+                         int first,
+                         int last) const {
+        std::vector<Value> values;
+        if (first <= last) {
+            if (outSpec.opName == "$lastN") {
+                first = std::max(first, last - outSpec.nValueCount + 1);
+            }
+            for (int i = first; i <= last; ++i) {
+                values.push_back(outSpec.argument->evaluate(_buffer[partitionStart + i].doc));
+            }
+        }
+
+        if (outSpec.opName == "$minN" || outSpec.opName == "$maxN") {
+            std::sort(values.begin(), values.end(), [this, &outSpec](const auto& left,
+                                                                     const auto& right) {
+                auto cmp = pExpCtx->getValueComparator().compare(left, right);
+                return outSpec.opName == "$minN" ? cmp < 0 : cmp > 0;
+            });
+        }
+
+        if (static_cast<int>(values.size()) > outSpec.nValueCount) {
+            values.resize(outSpec.nValueCount);
+        }
+        return Value(values);
     }
 
     int rankFor(size_t partitionStart, size_t partitionEnd, int relativeIndex) const {
