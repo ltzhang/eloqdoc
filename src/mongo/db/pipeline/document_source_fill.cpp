@@ -17,6 +17,7 @@
 #include "mongo/platform/basic.h"
 
 #include <deque>
+#include <cmath>
 #include <vector>
 
 #include "mongo/db/jsobj.h"
@@ -326,6 +327,30 @@ private:
         return value.coerceToDouble();
     }
 
+    enum class LinearValueType { kNumeric, kDate };
+
+    LinearValueType linearValueType(const Value& value) const {
+        uassert(6789383,
+                "$fill linear values must be numeric, date, or null",
+                value.numeric() || value.getType() == BSONType::Date);
+        return value.getType() == BSONType::Date ? LinearValueType::kDate
+                                                 : LinearValueType::kNumeric;
+    }
+
+    double linearValueAsDouble(const Value& value, LinearValueType type) const {
+        if (type == LinearValueType::kDate) {
+            return static_cast<double>(value.getDate().toMillisSinceEpoch());
+        }
+        return value.coerceToDouble();
+    }
+
+    Value makeLinearValue(double value, LinearValueType type) const {
+        if (type == LinearValueType::kDate) {
+            return Value(Date_t::fromMillisSinceEpoch(static_cast<long long>(std::llround(value))));
+        }
+        return Value(value);
+    }
+
     void setBufferedField(std::vector<Document>* docs,
                           size_t index,
                           const FieldPath& field,
@@ -346,14 +371,18 @@ private:
                 continue;
             }
 
-            uassert(6789135, "$fill linear values must be numeric or null", current.numeric());
+            linearValueType(current);
             if (previousAnchor) {
                 double previousX = extractLinearSortValue((*docs)[*previousAnchor]);
                 double nextX = extractLinearSortValue((*docs)[i]);
-                double previousY = (*docs)[*previousAnchor]
-                                       .getNestedField(rule.field)
-                                       .coerceToDouble();
-                double nextY = current.coerceToDouble();
+                auto previousValue = (*docs)[*previousAnchor].getNestedField(rule.field);
+                auto previousType = linearValueType(previousValue);
+                auto nextType = linearValueType(current);
+                uassert(6789137,
+                        "$fill linear requires matching numeric/date value types",
+                        previousType == nextType);
+                double previousY = linearValueAsDouble(previousValue, previousType);
+                double nextY = linearValueAsDouble(current, nextType);
 
                 if (nextX != previousX) {
                     for (size_t gap = *previousAnchor + 1; gap < i; ++gap) {
@@ -365,7 +394,11 @@ private:
                         double gapX = extractLinearSortValue((*docs)[gap]);
                         double ratio = (gapX - previousX) / (nextX - previousX);
                         setBufferedField(
-                            docs, gap, rule.field, Value(previousY + (nextY - previousY) * ratio));
+                            docs,
+                            gap,
+                            rule.field,
+                            makeLinearValue(previousY + (nextY - previousY) * ratio,
+                                            previousType));
                     }
                 }
             }

@@ -31,8 +31,8 @@ Documents must be sorted within each partition; `$fill` does not sort itself (ca
 **Checkpoint status:** streaming fill is implemented for literal `value` replacement and
 `method: "locf"`, including `partitionByFields` state reset and `sortBy` order validation.
 Numeric `method: "linear"` is implemented through a buffered compatibility path.
-`partitionBy` expressions are supported for partition state reset. Date interpolation remains
-deferred.
+`partitionBy` expressions are supported for partition state reset. Date-valued `method: "linear"`
+interpolation is supported over numeric `sortBy` values by interpolating epoch milliseconds.
 
 ## Extension pattern
 
@@ -74,7 +74,7 @@ REGISTER_DOCUMENT_SOURCE(fill, ...);
 - [x] Literal-value mode replaces nulls with the supplied value.
 - [x] Per-partition state resets between partitions.
 - [x] `partitionBy` expressions reset state between partitions.
-- Date interpolation works (treats Date as numeric milliseconds).
+- [x] Date interpolation works (treats Date as numeric milliseconds).
 - [x] Out-of-order input within a partition produces an error.
 - **Test entry point:** `tests/jstests/eloq_basic/agg_fill.js`. Adapt `jstests/aggregation/sources/fill/`.
 
@@ -88,13 +88,13 @@ When `partitionBy` is supplied, EloqDoc evaluates the expression against each in
 uses the resulting value as the partition key.
 When `sortBy` is supplied, EloqDoc validates that incoming documents are sorted by the declared
 sort keys within each partition and errors on out-of-order input.
-Numeric `linear` rules buffer the source stream, interpolate nullish values between surrounding
-numeric observations by the first numeric `sortBy` field, and leave leading/trailing nullish values
-unchanged.
+`linear` rules buffer the source stream, interpolate nullish values between surrounding numeric or
+date observations by the first numeric `sortBy` field, and leave leading/trailing nullish values
+unchanged. Mixed numeric/date anchors for a single output field are rejected.
 
-Deferred semantic differences: MongoDB supports date interpolation, bounded/spilling linear buffers,
-and broader sort semantics. EloqDoc currently limits `linear` interpolation to numeric sort/value
-fields.
+Deferred semantic differences: MongoDB supports bounded/spilling linear buffers and broader sort
+semantics. EloqDoc currently limits `linear` interpolation to numeric `sortBy` fields with numeric
+or date output values.
 
 ## Notes from source analyses
 
