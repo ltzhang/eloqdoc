@@ -16,6 +16,8 @@ function decimalToNumber(value) {
     return parseFloat(tojson(value).replace(/^NumberDecimal\("([^"]+)"\)$/, "$1"));
 }
 
+// atanh is tested separately because its domain is (-1,1) open — the test data
+// includes x:1 (doc _id:2) which is outside that domain.
 let docs = coll.aggregate([
     {$sort: {_id: 1}},
     {
@@ -33,7 +35,6 @@ let docs = coll.aggregate([
             tanh: {$tanh: "$x"},
             asinh: {$asinh: "$x"},
             acosh: {$acosh: "$y"},
-            atanh: {$atanh: "$x"},
             radians: {$degreesToRadians: "$angle"},
             degrees: {$radiansToDegrees: {$degreesToRadians: "$angle"}},
         },
@@ -52,7 +53,15 @@ assertApprox(docs[0].cosh, 1, 1e-12, "cosh(0)");
 assertApprox(docs[0].tanh, 0, 1e-12, "tanh(0)");
 assertApprox(docs[0].asinh, 0, 1e-12, "asinh(0)");
 assertApprox(docs[0].acosh, 0, 1e-12, "acosh(1)");
-assertApprox(docs[0].atanh, 0, 1e-12, "atanh(0)");
+
+// atanh: test with doc _id:1 (x:0) only, since x:1 is a domain error.
+let atanhDocs = coll.aggregate([
+    {$match: {_id: {$in: [1, 3, 4]}}},
+    {$sort: {_id: 1}},
+    {$project: {_id: 1, atanh: {$atanh: "$x"}}},
+]).toArray();
+assertApprox(atanhDocs[0].atanh, 0, 1e-12, "atanh(0)");
+assert.eq(null, atanhDocs[1].atanh, "atanh(null)");
 assertApprox(docs[0].radians, Math.PI, 1e-12, "degreesToRadians(180)");
 assertApprox(docs[0].degrees, 180, 1e-10, "radiansToDegrees(pi)");
 
@@ -88,5 +97,17 @@ assert.commandFailed(db.runCommand({
 assert.commandFailed(db.runCommand({
     aggregate: coll.getName(),
     pipeline: [{$project: {bad: {$atanh: 2}}}],
+    cursor: {},
+}));
+
+// Boundary values -1 and 1 are outside the open domain (-1, 1) and must error.
+assert.commandFailed(db.runCommand({
+    aggregate: coll.getName(),
+    pipeline: [{$project: {bad: {$atanh: 1}}}],
+    cursor: {},
+}));
+assert.commandFailed(db.runCommand({
+    aggregate: coll.getName(),
+    pipeline: [{$project: {bad: {$atanh: -1}}}],
     cursor: {},
 }));

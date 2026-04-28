@@ -81,3 +81,52 @@ assert.commandFailed(db.runCommand({
     pipeline: [{$project: {bad: {$dateTrunc: {date: "$jan31"}}}}],
     cursor: {},
 }));
+
+function getSerializedOut(expr) {
+    const serialized = db.runCommand({
+        aggregate: coll.getName(),
+        pipeline: [{$project: {_id: 0, out: expr}}],
+        cursor: {},
+        explain: true,
+    });
+    assert.commandWorked(serialized);
+    assert(serialized.stages, tojson(serialized));
+    for (let i = 0; i < serialized.stages.length; ++i) {
+        if (serialized.stages[i].$project) {
+            return serialized.stages[i].$project.out;
+        }
+    }
+    throw new Error("missing serialized $project stage: " + tojson(serialized));
+}
+
+// Serialize round-trip: the serialized form must include required fields and be parseable.
+// This catches missing required fields (e.g. unit, timezone, startOfWeek) in serialize().
+function assertSerializedFields(expr, opName, expectedFields) {
+    const out = getSerializedOut(expr);
+    assert(out[opName], tojson(out));
+    expectedFields.forEach((field) => assert.neq(undefined, out[opName][field], tojson(out)));
+    assert.commandWorked(db.runCommand({
+        aggregate: coll.getName(),
+        pipeline: [{$project: {_id: 0, out: out}}],
+        cursor: {},
+    }));
+}
+
+assertSerializedFields({$dateAdd: {startDate: ISODate("2024-01-01"), unit: "month", amount: 1}},
+                       "$dateAdd",
+                       ["startDate", "unit", "amount"]);
+assertSerializedFields({
+    $dateAdd: {startDate: ISODate("2024-01-01"), unit: "day", amount: 1, timezone: "America/New_York"},
+}, "$dateAdd", ["startDate", "unit", "amount", "timezone"]);
+assertSerializedFields({$dateSubtract: {startDate: ISODate("2024-06-01"), unit: "week", amount: 2}},
+                       "$dateSubtract",
+                       ["startDate", "unit", "amount"]);
+assertSerializedFields({
+    $dateDiff: {startDate: ISODate("2024-01-01"), endDate: ISODate("2024-06-01"), unit: "day"},
+}, "$dateDiff", ["startDate", "endDate", "unit"]);
+assertSerializedFields({$dateTrunc: {date: ISODate("2024-01-15T12:34:56Z"), unit: "hour"}},
+                       "$dateTrunc",
+                       ["date", "unit", "binSize"]);
+assertSerializedFields({
+    $dateTrunc: {date: ISODate("2024-01-15T12:34:56Z"), unit: "week", startOfWeek: "monday"},
+}, "$dateTrunc", ["date", "unit", "binSize", "startOfWeek"]);

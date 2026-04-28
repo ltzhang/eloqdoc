@@ -245,7 +245,7 @@ public:
     explicit ExpressionHyperbolicArcTangent(const boost::intrusive_ptr<ExpressionContext>& expCtx)
         : ExpressionTrigBase<ExpressionHyperbolicArcTangent>(expCtx) {}
     Value evaluateNumericArg(const Value& input) const final {
-        return apply(input, std::atanh, -1.0, true, 1.0, true);
+        return apply(input, std::atanh, -1.0, false, 1.0, false);
     }
     const char* getOpName() const final {
         return "$atanh";

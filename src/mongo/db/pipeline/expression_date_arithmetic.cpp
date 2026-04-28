@@ -53,6 +53,21 @@ enum class DateUnit {
     kMillisecond,
 };
 
+StringData unitStr(DateUnit unit) {
+    switch (unit) {
+        case DateUnit::kYear:        return "year"_sd;
+        case DateUnit::kQuarter:     return "quarter"_sd;
+        case DateUnit::kMonth:       return "month"_sd;
+        case DateUnit::kWeek:        return "week"_sd;
+        case DateUnit::kDay:         return "day"_sd;
+        case DateUnit::kHour:        return "hour"_sd;
+        case DateUnit::kMinute:      return "minute"_sd;
+        case DateUnit::kSecond:      return "second"_sd;
+        case DateUnit::kMillisecond: return "millisecond"_sd;
+    }
+    MONGO_UNREACHABLE;
+}
+
 DateUnit parseUnit(StringData unit) {
     if (unit == "year") {
         return DateUnit::kYear;
@@ -175,6 +190,19 @@ long long floorDiv(long long value, long long divisor) {
     long long q = value / divisor;
     long long r = value % divisor;
     return (r != 0 && ((r < 0) != (divisor < 0))) ? q - 1 : q;
+}
+
+StringData weekdayName(int day) {
+    switch (day) {
+        case 0: return "sunday"_sd;
+        case 1: return "monday"_sd;
+        case 2: return "tuesday"_sd;
+        case 3: return "wednesday"_sd;
+        case 4: return "thursday"_sd;
+        case 5: return "friday"_sd;
+        case 6: return "saturday"_sd;
+    }
+    MONGO_UNREACHABLE;
 }
 
 int weekdayIndex(StringData day) {
@@ -330,7 +358,11 @@ public:
     Value serialize(bool explain) const final {
         MutableDocument spec;
         spec.addField("startDate", _startDate->serialize(explain));
+        spec.addField("unit", Value(unitStr(_unit)));
         spec.addField("amount", _amount->serialize(explain));
+        if (_timezone) {
+            spec.addField("timezone", _timezone->serialize(explain));
+        }
         return Value(Document{{SubClass::kName, spec.freezeToValue()}});
     }
 
@@ -431,6 +463,10 @@ public:
         MutableDocument spec;
         spec.addField("startDate", _startDate->serialize(explain));
         spec.addField("endDate", _endDate->serialize(explain));
+        spec.addField("unit", Value(unitStr(_unit)));
+        if (_timezone) {
+            spec.addField("timezone", _timezone->serialize(explain));
+        }
         return Value(Document{{"$dateDiff", spec.freezeToValue()}});
     }
 
@@ -505,7 +541,14 @@ public:
     Value serialize(bool explain) const final {
         MutableDocument spec;
         spec.addField("date", _date->serialize(explain));
+        spec.addField("unit", Value(unitStr(_unit)));
         spec.addField("binSize", _binSize->serialize(explain));
+        if (_timezone) {
+            spec.addField("timezone", _timezone->serialize(explain));
+        }
+        if (_unit == DateUnit::kWeek) {
+            spec.addField("startOfWeek", Value(weekdayName(_startOfWeek)));
+        }
         return Value(Document{{"$dateTrunc", spec.freezeToValue()}});
     }
 
