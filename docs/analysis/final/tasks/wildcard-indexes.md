@@ -99,8 +99,7 @@ class WildcardAccessMethod final : public IndexAccessMethod {
 ### Remaining work after first storage slice
 
 - Add planner/index-bounds support so predicates can use wildcard indexes as IXSCAN candidates.
-- Broaden jstest coverage for subtree wildcards, multikey arrays, and explain output once planner
-  integration lands.
+- Broaden jstest coverage for explain output once planner integration lands.
 
 ## Notes from source analyses
 
