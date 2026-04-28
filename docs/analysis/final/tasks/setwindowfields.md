@@ -17,8 +17,9 @@ and standard output operators `$sum`, `$avg`, `$count`, `$min`, `$max`, `$first`
 sort key without `unit`. `$firstN`, `$lastN`, `$minN`, and `$maxN` are supported as N-value window
 outputs. `$percentile` and `$median` are supported as exact in-memory percentile window outputs.
 `$top`, `$topN`, `$bottom`, and `$bottomN` are supported as top/bottom window outputs with simple
-source-field `sortBy`. Date range units, date/time-unit window operators, and spill/removable
-optimizations remain deferred.
+source-field `sortBy`. Range windows over date sort keys support fixed-duration `unit` values
+(`millisecond`, `second`, `minute`, `hour`, `day`, and `week`). Calendar date units, date/time-unit
+window operators, and spill/removable optimizations remain deferred.
 
 ```js
 db.sales.aggregate([
@@ -98,7 +99,7 @@ The window executor must support:
 
 - [x] Documents-window: `[-3, "current"]` produces correct moving aggregate over last 4 documents.
 - [x] Numeric range-window: `[-2, 0]` correctly slides over non-uniform numeric sort values.
-- Range-window: `[-7, 0], unit: "day"` correctly slides over time-based windows even with non-uniform document timestamps.
+- [x] Range-window: `[-7, 0], unit: "day"` correctly slides over time-based windows even with non-uniform document timestamps.
 - [x] Window-only operators (`$rank`, `$denseRank`, `$documentNumber`) produce correct values within each partition.
 - [x] `$shift` produces correct lag/lead values.
 - [x] `$expMovingAvg` produces correct values with both `N` and `alpha` forms.
@@ -124,9 +125,12 @@ and keeps the first slices simple, but it is intentionally not spill-capable and
 implement incremental removable accumulator state.
 
 Numeric `range` windows require exactly one `sortBy` key and all values in that key must be
-numeric. `range` with `unit` remains unsupported, so date/time range windows are still a follow-up
-slice along with window-operator `unit` handling, implicit sort planning, large-partition memory
-bounds, and remaining edge-case breadth.
+numeric. `range` with fixed-duration `unit` requires exactly one date-valued `sortBy` key and
+multiplies numeric bounds by the requested unit. This checkpoint supports `millisecond`, `second`,
+`minute`, `hour`, `day`, and `week`; calendar units (`month`, `quarter`, `year`) remain unsupported
+because they require calendar-aware date arithmetic instead of fixed millisecond scaling.
+Window-operator `unit` handling, implicit sort planning, large-partition memory bounds, and
+remaining edge-case breadth are still follow-up slices.
 
 ## Notes from source analyses
 

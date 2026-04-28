@@ -118,6 +118,9 @@ public:
                     window["documents"] = bounds;
                 } else {
                     window["range"] = bounds;
+                    if (!out.windowUnit.empty()) {
+                        window["unit"] = Value(out.windowUnit);
+                    }
                 }
                 outSpec["window"] = window.freezeToValue();
             }
@@ -209,6 +212,8 @@ private:
         BSONObj topBottomSortBy;
         bool hasWindow = false;
         WindowType windowType = WindowType::kDocuments;
+        double windowUnitMillis = 1;
+        std::string windowUnit;
         WindowBound lower;
         WindowBound upper;
     };
@@ -262,6 +267,8 @@ private:
                        {},
                        false,
                        WindowType::kDocuments,
+                       1,
+                       {},
                        {},
                        {}};
         uassert(6789329,
@@ -607,9 +614,22 @@ private:
                                   << "'",
                     fieldName == "documents"_sd || fieldName == "range"_sd ||
                         fieldName == "unit"_sd);
-            uassert(6789344,
-                    "$setWindowFields range unit is not supported in this checkpoint",
-                    fieldName != "unit"_sd);
+            if (fieldName == "unit"_sd) {
+                uassert(6789388,
+                        "$setWindowFields unit is only valid with range windows",
+                        out->windowType == WindowType::kRange);
+                uassert(6789389,
+                        "$setWindowFields range unit must be a string",
+                        option.type() == BSONType::String);
+                out->windowUnit = option.str();
+                out->windowUnitMillis = unitMillis(out->windowUnit);
+                if (out->lower.kind == BoundKind::kOffset) {
+                    out->lower.offset *= out->windowUnitMillis;
+                }
+                if (out->upper.kind == BoundKind::kOffset) {
+                    out->upper.offset *= out->windowUnitMillis;
+                }
+            }
         }
     }
 
@@ -1120,10 +1140,7 @@ private:
                 _sortDirections.size() == 1);
 
         auto currentKey = _buffer[partitionStart + relativeIndex].sortKeys[0];
-        uassert(6789347,
-                "$setWindowFields range windows require numeric sort keys",
-                currentKey.numeric());
-        const double current = currentKey.coerceToDouble();
+        const double current = rangeSortKeyValue(currentKey, !outSpec.windowUnit.empty());
         const double lower = rangeBoundary(outSpec.lower, current, true);
         const double upper = rangeBoundary(outSpec.upper, current, false);
         if (lower > upper) {
@@ -1134,10 +1151,7 @@ private:
         int last = -2;
         for (int i = 0; i < static_cast<int>(partitionEnd - partitionStart); ++i) {
             auto sortKey = _buffer[partitionStart + i].sortKeys[0];
-            uassert(6789348,
-                    "$setWindowFields range windows require numeric sort keys",
-                    sortKey.numeric());
-            const double value = sortKey.coerceToDouble();
+            const double value = rangeSortKeyValue(sortKey, !outSpec.windowUnit.empty());
             if (value >= lower && value <= upper) {
                 if (first < 0) {
                     first = i;
@@ -1146,6 +1160,19 @@ private:
             }
         }
         return {first < 0 ? 1 : first, last};
+    }
+
+    static double rangeSortKeyValue(const Value& value, bool dateMode) {
+        if (dateMode) {
+            uassert(6789347,
+                    "$setWindowFields range windows with unit require date sort keys",
+                    value.getType() == BSONType::Date);
+            return static_cast<double>(value.getDate().toMillisSinceEpoch());
+        }
+        uassert(6789348,
+                "$setWindowFields range windows require numeric sort keys",
+                value.numeric());
+        return value.coerceToDouble();
     }
 
     static double rangeBoundary(const WindowBound& bound, double current, bool lower) {
@@ -1223,6 +1250,29 @@ private:
             return Value(asLong);
         }
         return Value(value);
+    }
+
+    static double unitMillis(const std::string& unit) {
+        if (unit == "millisecond") {
+            return 1;
+        }
+        if (unit == "second") {
+            return 1000;
+        }
+        if (unit == "minute") {
+            return 60 * 1000;
+        }
+        if (unit == "hour") {
+            return 60 * 60 * 1000;
+        }
+        if (unit == "day") {
+            return 24 * 60 * 60 * 1000;
+        }
+        if (unit == "week") {
+            return 7 * 24 * 60 * 60 * 1000;
+        }
+        uasserted(6789390,
+                  "$setWindowFields range unit must be millisecond, second, minute, hour, day, or week");
     }
 
     static Value windowBoundValue(const WindowBound& bound) {

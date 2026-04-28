@@ -14,7 +14,9 @@ Operators that only make sense inside `$setWindowFields` — they read window-po
 `$locf` is implemented for last-observation carry-forward inside a partition. `$covariancePop`
 and `$covarianceSamp` are implemented for numeric two-expression inputs over the existing
 document and numeric-range windows. `$integral` and `$derivative` are implemented for numeric
-inputs over one numeric sort key without `unit`. Date/time-unit semantics remain deferred.
+inputs over one numeric sort key without `unit`. `$setWindowFields` date range windows support
+fixed-duration `unit` values, but date/time-unit semantics inside `$integral` and `$derivative`
+remain deferred.
 
 | Operator | Description |
 | -------- | ----------- |
@@ -97,8 +99,9 @@ pairs and computes numeric inputs through double arithmetic. Decimal128 result p
 upstream edge-case breadth remain follow-up work.
 
 Current `$integral`/`$derivative` semantic differences: this checkpoint requires exactly one
-numeric `sortBy` key, rejects `unit`, computes through double arithmetic, and does not yet support
-date/time axes.
+numeric `sortBy` key, rejects operator-level `unit`, computes through double arithmetic, and does
+not yet support date/time axes. This is separate from `$setWindowFields` range windows, which now
+support fixed-duration date `unit` values for window bounds.
 
 ## Notes from source analyses
 
