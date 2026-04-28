@@ -27,8 +27,8 @@ The planner must recognize that any predicate on an indexed field path can use t
 `{"$**": 1}` and subtree wildcard key patterns, accepts `wildcardProjection` inclusion/exclusion
 documents, instantiates a wildcard access method, and maintains recursive leaf-path index entries
 through insert/update/delete and validation. Query planning now selects wildcard indexes for
-covered paths, builds bounds over the internal `{path, value}` wildcard key shape, and keeps a
-`FETCH` filter above the scan for correctness.
+covered full, projected, and subtree paths, builds bounds over the internal `{path, value}`
+wildcard key shape, and keeps a `FETCH` filter above the scan for correctness.
 
 **Out of scope (Tier 3 — see [`compound-wildcard-indexes.md`](./compound-wildcard-indexes.md)):**
 - Compound wildcard indexes (one component is wildcard, others are concrete).
@@ -99,7 +99,6 @@ class WildcardAccessMethod final : public IndexAccessMethod {
 ### Remaining work after first planner slice
 
 - Broaden planner coverage beyond single-predicate equality/range/`$exists:true` cases.
-- Add focused explain tests for `wildcardProjection` include/exclude and subtree wildcard indexes.
 
 ## Notes from source analyses
 

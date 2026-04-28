@@ -62,6 +62,12 @@ assert.neq(null, spec, tojson(includeColl.getIndexes()));
 assert.eq({a: 1}, spec.wildcardProjection, tojson(spec));
 assert.commandWorked(includeColl.insert({_id: 1, a: {b: 1}, skipped: 2}));
 assert.commandWorked(includeColl.update({_id: 1}, {$set: {"a.c": 3, skippedAgain: 4}}));
+assert.eq([1], includeColl.find({"a.b": 1}, {_id: 1}).toArray().map(doc => doc._id));
+assert(planHasIndexName(winningPlan(includeColl, {"a.b": 1}), "projected"),
+       tojson(winningPlan(includeColl, {"a.b": 1})));
+assert.eq([1], includeColl.find({skipped: 2}, {_id: 1}).toArray().map(doc => doc._id));
+assert(!planHasIndexName(winningPlan(includeColl, {skipped: 2}), "projected"),
+       tojson(winningPlan(includeColl, {skipped: 2})));
 validation = includeColl.validate({full: true});
 assert.commandWorked(validation);
 
@@ -72,6 +78,12 @@ assert.neq(null, spec, tojson(excludeColl.getIndexes()));
 assert.eq({secret: 0}, spec.wildcardProjection, tojson(spec));
 assert.commandWorked(excludeColl.insert({_id: 1, public: 1, secret: {token: "hidden"}}));
 assert.commandWorked(excludeColl.update({_id: 1}, {$set: {public2: 2, "secret.rotated": true}}));
+assert.eq([1], excludeColl.find({public: 1}, {_id: 1}).toArray().map(doc => doc._id));
+assert(planHasIndexName(winningPlan(excludeColl, {public: 1}), "excluded"),
+       tojson(winningPlan(excludeColl, {public: 1})));
+assert.eq([1], excludeColl.find({"secret.token": "hidden"}, {_id: 1}).toArray().map(doc => doc._id));
+assert(!planHasIndexName(winningPlan(excludeColl, {"secret.token": "hidden"}), "excluded"),
+       tojson(winningPlan(excludeColl, {"secret.token": "hidden"})));
 validation = excludeColl.validate({full: true});
 assert.commandWorked(validation);
 
@@ -85,5 +97,11 @@ assert.commandWorked(subtreeColl.insert({
     ignored: {sku: "outside"},
 }));
 assert.commandWorked(subtreeColl.update({_id: 1}, {$set: {"products.0.qty": 4, outside: 1}}));
+assert.eq([1], subtreeColl.find({"products.qty": 4}, {_id: 1}).toArray().map(doc => doc._id));
+assert(planHasIndexName(winningPlan(subtreeColl, {"products.qty": 4}), "products_wildcard"),
+       tojson(winningPlan(subtreeColl, {"products.qty": 4})));
+assert.eq([1], subtreeColl.find({"ignored.sku": "outside"}, {_id: 1}).toArray().map(doc => doc._id));
+assert(!planHasIndexName(winningPlan(subtreeColl, {"ignored.sku": "outside"}), "products_wildcard"),
+       tojson(winningPlan(subtreeColl, {"ignored.sku": "outside"})));
 validation = subtreeColl.validate({full: true});
 assert.commandWorked(validation);
