@@ -682,6 +682,11 @@ Status IndexCatalogImpl::_isSpecOk(OperationContext* opCtx, const BSONObj& spec)
 
     const bool isSparse = spec["sparse"].trueValue();
 
+    BSONElement hiddenElement = spec.getField(IndexDescriptor::kHiddenFieldName);
+    if (!hiddenElement.eoo() && hiddenElement.type() != BSONType::Bool) {
+        return Status(ErrorCodes::CannotCreateIndex, "\"hidden\" for an index must be a bool");
+    }
+
     // Ensure if there is a filter, its valid.
     BSONElement filterElement = spec.getField("partialFilterExpression");
     if (filterElement) {

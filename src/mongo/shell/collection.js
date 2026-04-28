@@ -902,6 +902,20 @@ DBCollection.prototype.dropIndex = function(index) {
     return res;
 };
 
+DBCollection.prototype.hideIndex = function(index) {
+    assert(index, "need to specify index to hideIndex");
+    var indexSpec = (typeof(index) == "string") ? {name: index} : {keyPattern: index};
+    indexSpec.hidden = true;
+    return this._db.runCommand({collMod: this.getName(), index: indexSpec});
+};
+
+DBCollection.prototype.unhideIndex = function(index) {
+    assert(index, "need to specify index to unhideIndex");
+    var indexSpec = (typeof(index) == "string") ? {name: index} : {keyPattern: index};
+    indexSpec.hidden = false;
+    return this._db.runCommand({collMod: this.getName(), index: indexSpec});
+};
+
 DBCollection.prototype.copyTo = function(newName) {
     return this.getDB().eval(function(collName, newName) {
         var from = db[collName];

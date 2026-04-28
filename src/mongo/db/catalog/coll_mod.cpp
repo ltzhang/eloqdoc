@@ -70,6 +70,7 @@ MONGO_FAIL_POINT_DEFINE(hangBeforeDatabaseUpgrade);
 struct CollModRequest {
     const IndexDescriptor* idx = nullptr;
     BSONElement indexExpireAfterSeconds = {};
+    BSONElement indexHidden = {};
     BSONElement viewPipeLine = {};
     std::string viewOn = {};
     BSONElement collValidator = {};
@@ -126,13 +127,19 @@ StatusWith<CollModRequest> parseCollModRequest(OperationContext* opCtx,
                 keyPattern = keyPatternElem.embeddedObject();
             }
 
-            cmr.indexExpireAfterSeconds = indexObj["expireAfterSeconds"];
-            if (cmr.indexExpireAfterSeconds.eoo()) {
-                return Status(ErrorCodes::InvalidOptions, "no expireAfterSeconds field");
+            cmr.indexExpireAfterSeconds =
+                indexObj[IndexDescriptor::kExpireAfterSecondsFieldName];
+            cmr.indexHidden = indexObj[IndexDescriptor::kHiddenFieldName];
+            if (cmr.indexExpireAfterSeconds.eoo() && cmr.indexHidden.eoo()) {
+                return Status(ErrorCodes::InvalidOptions,
+                              "no expireAfterSeconds or hidden field");
             }
-            if (!cmr.indexExpireAfterSeconds.isNumber()) {
+            if (!cmr.indexExpireAfterSeconds.eoo() && !cmr.indexExpireAfterSeconds.isNumber()) {
                 return Status(ErrorCodes::InvalidOptions,
                               "expireAfterSeconds field must be a number");
+            }
+            if (!cmr.indexHidden.eoo() && cmr.indexHidden.type() != BSONType::Bool) {
+                return Status(ErrorCodes::InvalidOptions, "hidden field must be a bool");
             }
 
             if (!indexName.empty()) {
@@ -163,13 +170,17 @@ StatusWith<CollModRequest> parseCollModRequest(OperationContext* opCtx,
                 cmr.idx = indexes[0];
             }
 
-            BSONElement oldExpireSecs = cmr.idx->infoObj().getField("expireAfterSeconds");
-            if (oldExpireSecs.eoo()) {
-                return Status(ErrorCodes::InvalidOptions, "no expireAfterSeconds field to update");
-            }
-            if (!oldExpireSecs.isNumber()) {
-                return Status(ErrorCodes::InvalidOptions,
-                              "existing expireAfterSeconds field is not a number");
+            if (!cmr.indexExpireAfterSeconds.eoo()) {
+                BSONElement oldExpireSecs =
+                    cmr.idx->infoObj().getField(IndexDescriptor::kExpireAfterSecondsFieldName);
+                if (oldExpireSecs.eoo()) {
+                    return Status(ErrorCodes::InvalidOptions,
+                                  "no expireAfterSeconds field to update");
+                }
+                if (!oldExpireSecs.isNumber()) {
+                    return Status(ErrorCodes::InvalidOptions,
+                                  "existing expireAfterSeconds field is not a number");
+                }
             }
 
         } else if (fieldName == "validator" && !isView) {
@@ -405,6 +416,24 @@ Status _collModInternal(OperationContext* opCtx,
         ttlInfo = TTLCollModInfo{Seconds(newExpireSecs.safeNumberLong()),
                                  Seconds(oldExpireSecs.safeNumberLong()),
                                  cmr.idx->indexName()};
+    }
+
+    if (!cmr.indexHidden.eoo()) {
+        const bool newHidden = cmr.indexHidden.Bool();
+        const bool oldHidden = cmr.idx->hidden();
+
+        if (oldHidden != newHidden) {
+            result->append("hidden_old", oldHidden);
+            coll->getCatalogEntry()->updateHiddenSetting(opCtx, cmr.idx->indexName(), newHidden);
+
+            cmr.idx = coll->getIndexCatalog()->refreshEntry(opCtx, cmr.idx);
+            result->append("hidden_new", newHidden);
+            coll->infoCache()->clearQueryCache();
+            opCtx->recoveryUnit()->onRollback([opCtx, idx = cmr.idx, coll]() {
+                coll->getIndexCatalog()->refreshEntry(opCtx, idx);
+                coll->infoCache()->clearQueryCache();
+            });
+        }
     }
 
     // The Validator, ValidationAction and ValidationLevel are already parsed and must be OK.

@@ -76,6 +76,8 @@ public:
                           StringData idxName,
                           long long newExpireSeconds) final;
 
+    void updateHiddenSetting(OperationContext* opCtx, StringData idxName, bool hidden) final;
+
     void updateFlags(OperationContext* opCtx, int newValue) final;
 
     void updateIndexMetadata(OperationContext* opCtx, const IndexDescriptor* desc) final;

@@ -136,6 +136,9 @@ void fillOutPlannerParams(OperationContext* opCtx,
     IndexCatalog::IndexIterator ii = collection->getIndexCatalog()->getIndexIterator(opCtx, false);
     while (ii.more()) {
         const IndexDescriptor* desc = ii.next();
+        if (desc->hidden()) {
+            continue;
+        }
         IndexCatalogEntry* ice = ii.catalogEntry(desc);
         plannerParams->indices.push_back(IndexEntry(desc->keyPattern(),
                                                     desc->getAccessMethodName(),
@@ -1609,6 +1612,9 @@ StatusWith<unique_ptr<PlanExecutor, PlanExecutor::Deleter>> getExecutorDistinct(
     IndexCatalog::IndexIterator ii = collection->getIndexCatalog()->getIndexIterator(opCtx, false);
     while (ii.more()) {
         const IndexDescriptor* desc = ii.next();
+        if (desc->hidden()) {
+            continue;
+        }
         IndexCatalogEntry* ice = ii.catalogEntry(desc);
         if (desc->keyPattern().hasField(parsedDistinct->getKey())) {
             plannerParams.indices.push_back(IndexEntry(desc->keyPattern(),

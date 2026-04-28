@@ -184,6 +184,9 @@ void CollectionInfoCacheImpl::updatePlanCacheIndexEntries(OperationContext* opCt
         _collection->getIndexCatalog()->getIndexIterator(opCtx, includeUnfinishedIndexes);
     while (ii.more()) {
         const IndexDescriptor* desc = ii.next();
+        if (desc->hidden()) {
+            continue;
+        }
         const IndexCatalogEntry* ice = ii.catalogEntry(desc);
         indexEntries.emplace_back(desc->keyPattern(),
                                   desc->getAccessMethodName(),

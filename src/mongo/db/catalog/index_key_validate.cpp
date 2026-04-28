@@ -79,6 +79,7 @@ static std::set<StringData> allowedFieldNames = {
     IndexDescriptor::kDropDuplicatesFieldName,
     IndexDescriptor::kExpireAfterSecondsFieldName,
     IndexDescriptor::kGeoHaystackBucketSize,
+    IndexDescriptor::kHiddenFieldName,
     IndexDescriptor::kIndexNameFieldName,
     IndexDescriptor::kIndexVersionFieldName,
     IndexDescriptor::kKeyPatternFieldName,

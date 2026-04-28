@@ -71,6 +71,7 @@ public:
     static constexpr StringData kDropDuplicatesFieldName = "dropDups"_sd;
     static constexpr StringData kExpireAfterSecondsFieldName = "expireAfterSeconds"_sd;
     static constexpr StringData kGeoHaystackBucketSize = "bucketSize"_sd;
+    static constexpr StringData kHiddenFieldName = "hidden"_sd;
     static constexpr StringData kIndexNameFieldName = "name"_sd;
     static constexpr StringData kIndexVersionFieldName = "v"_sd;
     static constexpr StringData kKeyPatternFieldName = "key"_sd;
@@ -99,6 +100,7 @@ public:
           _sparse(infoObj[IndexDescriptor::kSparseFieldName].trueValue()),
           _unique(_isIdIndex || infoObj[kUniqueFieldName].trueValue()),
           _partial(!infoObj[kPartialFilterExprFieldName].eoo()),
+          _hidden(infoObj[kHiddenFieldName].trueValue()),
           _cachedEntry(NULL) {
         _indexNamespace = makeIndexNamespace(_parentNS, _indexName);
 
@@ -208,6 +210,10 @@ public:
         return _partial;
     }
 
+    bool hidden() const {
+        return _hidden;
+    }
+
     // Is this index multikey?
     bool isMultikey(OperationContext* opCtx) const;
 
@@ -285,6 +291,7 @@ private:
     bool _sparse;
     bool _unique;
     bool _partial;
+    bool _hidden;
     IndexVersion _version;
 
     // only used by IndexCatalogEntryContainer to do caching for perf

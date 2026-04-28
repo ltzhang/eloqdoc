@@ -149,6 +149,21 @@ public:
             b.append("expireAfterSeconds", newExpireSeconds);
             spec = b.obj();
         }
+
+        void updateHiddenSetting(bool hidden) {
+            BSONObjBuilder b;
+            for (BSONObjIterator bi(spec); bi.more();) {
+                BSONElement e = bi.next();
+                if (e.fieldNameStringData() == "hidden") {
+                    continue;
+                }
+                b.append(e);
+            }
+
+            b.append("hidden", hidden);
+            spec = b.obj();
+        }
+
         std::string name() const {
             return spec["name"].String();
         }
@@ -385,6 +400,8 @@ public:
     virtual void updateTTLSetting(OperationContext* opCtx,
                                   StringData idxName,
                                   long long newExpireSeconds) = 0;
+
+    virtual void updateHiddenSetting(OperationContext* opCtx, StringData idxName, bool hidden) {}
 
     virtual void updateIndexMetadata(OperationContext* opCtx, const IndexDescriptor* desc) {}
 

@@ -66,13 +66,21 @@ for (auto& ix : collection->getIndexCatalog()->getAllReadyIndexes()) {
 
 ## Acceptance criteria
 
-- `db.c.createIndex({a:1}, {hidden: true})` creates the index; `db.c.find({a:1}).explain()` does NOT use it.
-- `collMod` flips `hidden`; subsequent `find` plans reflect the new state.
-- The plan cache invalidates: a query that previously used a now-hidden index gets re-planned, not stale.
-- Writes to indexed fields still update the hidden index (verify via TTL behavior or an index validation tool).
-- `listIndexes` reports `hidden: true` for hidden indexes.
-- Shell helpers `hideIndex`/`unhideIndex` work.
+- [x] `db.c.createIndex({a:1}, {hidden: true})` creates the index; `db.c.find({a:1}).explain()` does NOT use it.
+- [x] `collMod` flips `hidden`; subsequent `find` plans reflect the new state.
+- [x] The plan cache invalidates: a query that previously used a now-hidden index gets re-planned, not stale.
+- [x] Writes to indexed fields still update the hidden index (verify via TTL behavior or an index validation tool).
+- [x] `listIndexes` reports `hidden: true` for hidden indexes.
+- [x] Shell helpers `hideIndex`/`unhideIndex` work.
 - **Test entry point:** `tests/jstests/eloq_basic/hidden_indexes.js`. Adapt `jstests/core/index_hidden_*.js`.
+
+## Implementation notes
+
+Initial support adds `IndexDescriptor::hidden()` backed by the persisted index spec, accepts `hidden` as a valid index option, and stores `collMod` hidden-state flips through the KV catalog metadata. Query planning filters hidden indexes out when building planner `IndexEntry` lists, including the distinct fast-path, while write maintenance continues to use the normal index catalog entries.
+
+`collMod` supports both `{index: {name, hidden}}` and `{index: {keyPattern, hidden}}`, refreshes the in-memory index descriptor after metadata changes, and clears the collection query cache so the next query replans with the new visibility. Shell helpers `db.collection.hideIndex(...)` and `db.collection.unhideIndex(...)` delegate to that `collMod` form.
+
+Current focused coverage verifies create-time hidden indexes, `listIndexes` visibility, planner exclusion, unhide/hide transitions, shell helpers, and write maintenance by inserting while hidden and then unhiding. A future hardening test should restart EloqDoc between create and `listIndexes` to explicitly validate Data Substrate metadata round-trip persistence.
 
 ## Notes from source analyses
 

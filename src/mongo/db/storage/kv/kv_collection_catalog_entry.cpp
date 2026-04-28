@@ -312,6 +312,16 @@ void KVCollectionCatalogEntry::updateTTLSetting(OperationContext* opCtx,
     _catalog->putMetaData(opCtx, ns().toString(), md);
 }
 
+void KVCollectionCatalogEntry::updateHiddenSetting(OperationContext* opCtx,
+                                                   StringData idxName,
+                                                   bool hidden) {
+    MetaData md = _getMetaData(opCtx);
+    int offset = md.findIndexOffset(idxName);
+    invariant(offset >= 0);
+    md.indexes[offset].updateHiddenSetting(hidden);
+    _catalog->putMetaData(opCtx, ns().toString(), md);
+}
+
 void KVCollectionCatalogEntry::updateIndexMetadata(OperationContext* opCtx,
                                                    const IndexDescriptor* desc) {
     // Update any metadata Ident has for this index
