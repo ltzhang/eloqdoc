@@ -37,6 +37,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/query/index_bounds.h"
 #include "mongo/db/record_id.h"
+#include "mongo/db/sorter/sorter.h"
 #include "mongo/stdx/unordered_map.h"
 
 namespace mongo {
@@ -46,7 +47,7 @@ class BtreeKeyGenerator;
 // Parameters that must be provided to a SortStage
 class SortStageParams {
 public:
-    SortStageParams() : collection(NULL), limit(0) {}
+    SortStageParams() : collection(NULL), limit(0), allowDiskUse(false) {}
 
     // Used for resolving RecordIds to BSON
     const Collection* collection;
@@ -56,6 +57,8 @@ public:
 
     // Equal to 0 for no limit.
     size_t limit;
+
+    bool allowDiskUse;
 };
 
 /**
@@ -113,6 +116,7 @@ private:
     // Have we sorted our data? If so, we can access _resultIterator. If not,
     // we're still populating _data.
     bool _sorted;
+    bool _allowDiskUse;
 
     // Collection of working set members to sort with their respective sort key.
     struct SortableDataItem {
@@ -136,6 +140,35 @@ private:
         bool operator()(const SortableDataItem& lhs, const SortableDataItem& rhs) const;
 
         BSONObj pattern;
+    };
+
+    class ExternalSortComparator {
+    public:
+        explicit ExternalSortComparator(BSONObj p);
+
+        class Value {
+        public:
+            explicit Value(WorkingSetID id = WorkingSet::INVALID_ID);
+
+            int compare(const Value& rhs) const;
+            WorkingSetID wsid() const;
+
+            struct SorterDeserializeSettings {};
+            void serializeForSorter(BufBuilder& buf) const;
+            static Value deserializeForSorter(BufReader& buf, const SorterDeserializeSettings&);
+            int memUsageForSorter() const;
+            Value getOwned() const;
+
+        private:
+            WorkingSetID _wsid;
+        };
+
+        using Data = std::pair<BSONObj, Value>;
+
+        int operator()(const Data& lhs, const Data& rhs) const;
+
+    private:
+        BSONObj _pattern;
     };
 
     /**
@@ -169,6 +202,10 @@ private:
 
     // Iterates through _data post-sort returning it.
     std::vector<SortableDataItem>::iterator _resultIterator;
+
+    using ExternalSorter = Sorter<BSONObj, ExternalSortComparator::Value>;
+    std::unique_ptr<ExternalSorter> _externalSorter;
+    std::unique_ptr<ExternalSorter::Iterator> _externalIterator;
 
     // We buffer a lot of data and we want to look it up by RecordId quickly upon invalidation.
     typedef stdx::unordered_map<RecordId, WorkingSetID, RecordId::Hasher> DataMap;

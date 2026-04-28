@@ -663,6 +663,8 @@ struct SortNode : public QuerySolutionNode {
 
     // Sum of both limit and skip count in the parsed query.
     size_t limit;
+
+    bool allowDiskUse = false;
 };
 
 struct LimitNode : public QuerySolutionNode {

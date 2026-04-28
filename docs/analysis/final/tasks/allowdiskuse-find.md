@@ -50,22 +50,29 @@ bool allowDiskUse = cmdObj["allowDiskUse"].trueValue();
 
 - [x] `find` accepts `allowDiskUse: true` as a boolean command field.
 - [x] Shell helper `db.c.find().sort(...).allowDiskUse()` sends the command field.
-- [ ] A `find` with sort exceeding 100 MB *fails* without `allowDiskUse`.
-- [ ] The same query *succeeds* with `allowDiskUse: true`.
-- [ ] After completion, temp files are cleaned up.
+- [x] A `find` with sort exceeding 100 MB *fails* without `allowDiskUse`.
+- [x] The same query *succeeds* with `allowDiskUse: true`.
+- [x] After completion, temp files are cleaned up.
 - [ ] Cursor pause/resume during a spilled sort still produces correct output.
 - **Test entry point:** `tests/jstests/eloq_basic/find_allow_disk_use.js`.
 
 ## Implementation notes
 
-Initial EloqDoc support is a command-compatibility slice. `QueryRequest` parses, validates,
-serializes, and preserves the boolean `allowDiskUse` field, and the legacy shell exposes
-`DBQuery.prototype.allowDiskUse()` for clients that use cursor helpers. This unblocks modern drivers
-and mongosh-style command shapes that include the field on small result sets.
+EloqDoc support now includes both the command-compatibility slice and executor spill behavior.
+`QueryRequest` parses, validates, serializes, and preserves the boolean `allowDiskUse` field, and
+the legacy shell exposes `DBQuery.prototype.allowDiskUse()` for clients that use cursor helpers.
 
-The find executor's blocking `SortStage` still buffers `WorkingSet` entries in memory and does not
-yet spill to the external sorter. Full spill behavior remains the next implementation slice and
-should refactor find sorting onto the same disk-backed sorter path used by aggregation.
+For blocking find sorts, `QueryPlannerAnalysis` carries the command flag into `SortNode`, and
+`stage_builder` passes it into `SortStageParams`. When enabled, `SortStage` uses the existing
+disk-backed sorter with `internalQueryExecMaxBlockingSortBytes` as the memory threshold and
+`dbpath/_tmp` as the spill directory. The sorter stores sort keys plus working-set ids, avoiding
+assumptions about storage-engine `RecordId` serialization. The stage keeps the existing
+`WorkingSetMember` return path by resolving spilled working-set ids back to their buffered members.
+
+Known limitation: the implementation externalizes sort keys and working-set ids, but still keeps
+the matching `WorkingSetMember`s in memory until they are returned. This matches the current
+executor shape and fixes client-visible `allowDiskUse` behavior for large blocking sort keys, but it
+is not a full top-K or fetch-on-output memory refactor.
 
 ## Notes from source analyses
 

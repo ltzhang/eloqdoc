@@ -543,6 +543,7 @@ QuerySolutionNode* QueryPlannerAnalysis::analyzeSort(const CanonicalQuery& query
 
     SortNode* sort = new SortNode();
     sort->pattern = sortObj;
+    sort->allowDiskUse = query.getQueryRequest().allowDiskUse();
     sort->children.push_back(solnRoot);
     solnRoot = sort;
     // When setting the limit on the sort, we need to consider both

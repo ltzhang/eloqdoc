@@ -912,6 +912,8 @@ void SortNode::appendToString(mongoutils::str::stream* ss, int indent) const {
     *ss << "pattern = " << pattern.toString() << '\n';
     addIndent(ss, indent + 1);
     *ss << "limit = " << limit << '\n';
+    addIndent(ss, indent + 1);
+    *ss << "allowDiskUse = " << allowDiskUse << '\n';
     addCommon(ss, indent);
     addIndent(ss, indent + 1);
     *ss << "Child:" << '\n';
@@ -925,6 +927,7 @@ QuerySolutionNode* SortNode::clone() const {
     copy->_sorts = this->_sorts;
     copy->pattern = this->pattern;
     copy->limit = this->limit;
+    copy->allowDiskUse = this->allowDiskUse;
 
     return copy;
 }

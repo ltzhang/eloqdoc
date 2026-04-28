@@ -41,7 +41,9 @@
 #include "mongo/db/query/find_common.h"
 #include "mongo/db/query/query_knobs.h"
 #include "mongo/db/query/query_planner.h"
+#include "mongo/db/storage/storage_options.h"
 #include "mongo/stdx/memory.h"
+#include "mongo/util/bufreader.h"
 #include "mongo/util/log.h"
 
 namespace mongo {
@@ -67,6 +69,50 @@ bool SortStage::WorkingSetComparator::operator()(const SortableDataItem& lhs,
     return lhs.recordId < rhs.recordId;
 }
 
+SortStage::ExternalSortComparator::ExternalSortComparator(BSONObj p) : _pattern(p) {}
+
+SortStage::ExternalSortComparator::Value::Value(WorkingSetID id) : _wsid(id) {}
+
+int SortStage::ExternalSortComparator::Value::compare(const Value& rhs) const {
+    if (_wsid == rhs._wsid) {
+        return 0;
+    }
+    return _wsid > rhs._wsid ? 1 : -1;
+}
+
+WorkingSetID SortStage::ExternalSortComparator::Value::wsid() const {
+    return _wsid;
+}
+
+void SortStage::ExternalSortComparator::Value::serializeForSorter(BufBuilder& buf) const {
+    invariant(_wsid != WorkingSet::INVALID_ID);
+    buf.appendNum(static_cast<long long>(_wsid));
+}
+
+SortStage::ExternalSortComparator::Value SortStage::ExternalSortComparator::Value::
+    deserializeForSorter(BufReader& buf, const SorterDeserializeSettings&) {
+    const auto id = buf.read<LittleEndian<int64_t>>();
+    invariant(id >= 0);
+    return Value(static_cast<WorkingSetID>(id));
+}
+
+int SortStage::ExternalSortComparator::Value::memUsageForSorter() const {
+    return sizeof(Value);
+}
+
+SortStage::ExternalSortComparator::Value SortStage::ExternalSortComparator::Value::getOwned()
+    const {
+    return *this;
+}
+
+int SortStage::ExternalSortComparator::operator()(const Data& lhs, const Data& rhs) const {
+    int result = lhs.first.woCompare(rhs.first, _pattern, false);
+    if (result) {
+        return result;
+    }
+    return lhs.second.compare(rhs.second);
+}
+
 SortStage::SortStage(OperationContext* opCtx,
                      const SortStageParams& params,
                      WorkingSet* ws,
@@ -77,6 +123,7 @@ SortStage::SortStage(OperationContext* opCtx,
       _pattern(params.pattern),
       _limit(params.limit),
       _sorted(false),
+      _allowDiskUse(params.allowDiskUse),
       _resultIterator(_data.end()),
       _memUsage(0) {
     _children.emplace_back(child);
@@ -90,6 +137,16 @@ SortStage::SortStage(OperationContext* opCtx,
         const WorkingSetComparator& cmp = *_sortKeyComparator;
         _dataSet.reset(new SortableDataItemSet(cmp));
     }
+
+    if (_allowDiskUse) {
+        SortOptions opts;
+        opts.limit = _limit;
+        opts.maxMemoryUsageBytes =
+            static_cast<size_t>(internalQueryExecMaxBlockingSortBytes.load());
+        opts.extSortAllowed = true;
+        opts.tempDir = storageGlobalParams.dbpath + "/_tmp";
+        _externalSorter.reset(ExternalSorter::make(opts, ExternalSortComparator(sortComparator)));
+    }
 }
 
 SortStage::~SortStage() {}
@@ -97,12 +154,16 @@ SortStage::~SortStage() {}
 bool SortStage::isEOF() {
     // We're done when our child has no more results, we've sorted the child's results, and
     // we've returned all sorted results.
+    if (_allowDiskUse) {
+        return child()->isEOF() && _sorted &&
+            (!_externalIterator || !_externalIterator->more());
+    }
     return child()->isEOF() && _sorted && (_data.end() == _resultIterator);
 }
 
 PlanStage::StageState SortStage::doWork(WorkingSetID* out) {
     const size_t maxBytes = static_cast<size_t>(internalQueryExecMaxBlockingSortBytes.load());
-    if (_memUsage > maxBytes) {
+    if (!_allowDiskUse && _memUsage > maxBytes) {
         mongoutils::str::stream ss;
         ss << "Sort operation used more than the maximum " << maxBytes
            << " bytes of RAM. Add an index, or specify a smaller limit.";
@@ -172,6 +233,20 @@ PlanStage::StageState SortStage::doWork(WorkingSetID* out) {
     }
 
     // Returning results.
+    if (_allowDiskUse) {
+        verify(_sorted);
+        verify(_externalIterator);
+        verify(_externalIterator->more());
+
+        const auto next = _externalIterator->next();
+        *out = next.second.wsid();
+        WorkingSetMember* member = _ws->get(*out);
+        if (member->hasRecordId()) {
+            _wsidByRecordId.erase(member->recordId);
+        }
+        return PlanStage::ADVANCED;
+    }
+
     verify(_resultIterator != _data.end());
     verify(_sorted);
     *out = _resultIterator->wsid;
@@ -254,6 +329,13 @@ void SortStage::addToBuffer(const SortableDataItem& item) {
     WorkingSetID wsidToFree = WorkingSet::INVALID_ID;
 
     WorkingSetMember* member = _ws->get(item.wsid);
+    if (_allowDiskUse) {
+        member->makeObjOwnedIfNeeded();
+        _externalSorter->add(item.sortKey, ExternalSortComparator::Value(item.wsid));
+        _memUsage = _externalSorter->memUsed();
+        return;
+    }
+
     if (_limit == 0) {
         // Ensure that the BSONObj underlying the WorkingSetMember is owned in case we yield.
         member->makeObjOwnedIfNeeded();
@@ -318,6 +400,13 @@ void SortStage::addToBuffer(const SortableDataItem& item) {
 }
 
 void SortStage::sortBuffer() {
+    if (_allowDiskUse) {
+        _externalIterator.reset(_externalSorter->done());
+        _externalSorter.reset();
+        _memUsage = 0;
+        return;
+    }
+
     if (_limit == 0) {
         const WorkingSetComparator& cmp = *_sortKeyComparator;
         std::sort(_data.begin(), _data.end(), cmp);
@@ -335,3 +424,9 @@ void SortStage::sortBuffer() {
 }
 
 }  // namespace mongo
+
+#include "mongo/db/sorter/sorter.cpp"
+MONGO_CREATE_SORTER(
+    mongo::BSONObj,
+    mongo::SortStage::ExternalSortComparator::Value,
+    mongo::SortStage::ExternalSortComparator);
