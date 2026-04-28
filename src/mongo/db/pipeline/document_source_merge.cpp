@@ -100,8 +100,12 @@ DocumentSourceMerge::WhenMatched parseWhenMatched(BSONElement elem) {
         return DocumentSourceMerge::WhenMatched::kMerge;
     }
 
+    if (elem.type() == BSONType::Array) {
+        return DocumentSourceMerge::WhenMatched::kPipeline;
+    }
+
     uassert(ErrorCodes::FailedToParse,
-            "$merge 'whenMatched' must be a string in this compatibility implementation",
+            "$merge 'whenMatched' must be a string or pipeline array",
             elem.type() == BSONType::String);
 
     const auto value = elem.valueStringData();
@@ -151,6 +155,7 @@ struct MergeSpec {
     std::vector<std::string> onFields;
     DocumentSourceMerge::WhenMatched whenMatched;
     DocumentSourceMerge::WhenNotMatched whenNotMatched;
+    BSONObj whenMatchedPipeline;
 };
 
 MergeSpec parseMergeSpec(const NamespaceString& sourceNss, const BSONElement& elem) {
@@ -158,7 +163,8 @@ MergeSpec parseMergeSpec(const NamespaceString& sourceNss, const BSONElement& el
         return {parseTargetNamespace(sourceNss, elem),
                 {"_id"},
                 DocumentSourceMerge::WhenMatched::kMerge,
-                DocumentSourceMerge::WhenNotMatched::kInsert};
+                DocumentSourceMerge::WhenNotMatched::kInsert,
+                BSONObj()};
     }
 
     uassert(ErrorCodes::FailedToParse,
@@ -177,10 +183,20 @@ MergeSpec parseMergeSpec(const NamespaceString& sourceNss, const BSONElement& el
                     fieldName == "whenMatched"_sd || fieldName == "whenNotMatched"_sd);
     }
 
+    auto whenMatched = parseWhenMatched(specObj["whenMatched"]);
+    BSONObj whenMatchedPipeline;
+    if (whenMatched == DocumentSourceMerge::WhenMatched::kPipeline) {
+        whenMatchedPipeline = specObj["whenMatched"].Obj().getOwned();
+        uassert(ErrorCodes::FailedToParse,
+                "$merge 'whenMatched' pipeline must not be empty",
+                !whenMatchedPipeline.isEmpty());
+    }
+
     return {parseTargetNamespace(sourceNss, intoElem),
             parseOnFields(specObj["on"]),
-            parseWhenMatched(specObj["whenMatched"]),
-            parseWhenNotMatched(specObj["whenNotMatched"])};
+            whenMatched,
+            parseWhenNotMatched(specObj["whenNotMatched"]),
+            whenMatchedPipeline};
 }
 
 }  // namespace
@@ -207,12 +223,14 @@ DocumentSourceMerge::DocumentSourceMerge(const NamespaceString& targetNss,
                                          std::vector<std::string> onFields,
                                          WhenMatched whenMatched,
                                          WhenNotMatched whenNotMatched,
+                                         BSONObj whenMatchedPipeline,
                                          const intrusive_ptr<ExpressionContext>& expCtx)
     : DocumentSource(expCtx),
       _targetNss(targetNss),
       _onFields(std::move(onFields)),
       _whenMatched(whenMatched),
-      _whenNotMatched(whenNotMatched) {}
+      _whenNotMatched(whenNotMatched),
+      _whenMatchedPipeline(whenMatchedPipeline.getOwned()) {}
 
 const char* DocumentSourceMerge::getSourceName() const {
     return "$merge";
@@ -233,6 +251,7 @@ intrusive_ptr<DocumentSource> DocumentSourceMerge::createFromBson(
                                    std::move(parsed.onFields),
                                    parsed.whenMatched,
                                    parsed.whenNotMatched,
+                                   parsed.whenMatchedPipeline,
                                    expCtx);
 }
 
@@ -273,6 +292,28 @@ void DocumentSourceMerge::assertLastWriteSucceeded(StringData operation) const {
             DBClientBase::getLastErrorString(err).empty());
 }
 
+void DocumentSourceMerge::applyPipelineUpdate(const BSONObj& query, const BSONObj& doc) {
+    BSONObjBuilder updateEntry;
+    updateEntry.append("q", query);
+    updateEntry.appendArray("u", _whenMatchedPipeline);
+    updateEntry.append("multi", false);
+    updateEntry.append("upsert", false);
+
+    BSONArrayBuilder updates;
+    updates.append(updateEntry.obj());
+
+    BSONObjBuilder cmd;
+    cmd.append("update", _targetNss.coll());
+    cmd.append("updates", updates.arr());
+    cmd.append("ordered", true);
+    cmd.append("let", BSON("new" << doc));
+
+    BSONObj info;
+    bool ok = pExpCtx->mongoProcessInterface->directClient()->runCommand(
+        _targetNss.db().toString(), cmd.obj(), info);
+    uassert(51101, str::stream() << "$merge pipeline update failed: " << info, ok);
+}
+
 void DocumentSourceMerge::applyMerge(const BSONObj& doc) {
     DBClientBase* conn = pExpCtx->mongoProcessInterface->directClient();
     const auto query = buildQuery(doc);
@@ -309,6 +350,9 @@ void DocumentSourceMerge::applyMerge(const BSONObj& doc) {
             assertLastWriteSucceeded("update");
             return;
         }
+        case WhenMatched::kPipeline:
+            applyPipelineUpdate(query, doc);
+            return;
     }
     MONGO_UNREACHABLE;
 }
@@ -346,6 +390,14 @@ Value DocumentSourceMerge::serialize(boost::optional<ExplainOptions::Verbosity> 
             onFields.emplace_back(field);
         }
         spec["on"] = _onFields.size() == 1 ? Value(_onFields.front()) : Value(onFields);
+    }
+
+    if (_whenMatched == WhenMatched::kPipeline) {
+        std::vector<Value> stages;
+        for (auto&& stage : _whenMatchedPipeline) {
+            stages.emplace_back(Value(stage.Obj()));
+        }
+        spec["whenMatched"] = Value(stages);
     }
 
     return Value(Document{{getSourceName(), spec.freeze()}});

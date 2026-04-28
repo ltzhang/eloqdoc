@@ -60,6 +60,27 @@ assert.commandFailedWithCode(db.runCommand({
     cursor: {},
 }), ErrorCodes.NoMatchingDocument);
 
+assert.commandWorked(target.update({_id: 2}, {$set: {qty: 10, seen: 1}}));
+assert.commandWorked(source.update({_id: 2}, {$set: {qty: 4, item: "banana-new"}}));
+source.aggregate([
+    {$match: {_id: 2}},
+    {
+        $merge: {
+            into: target.getName(),
+            whenMatched: [
+                {
+                    $set: {
+                        qty: {$add: ["$qty", "$$new.qty"]},
+                        item: "$$new.item",
+                        seen: {$add: ["$seen", 1]},
+                    },
+                },
+            ],
+        },
+    },
+]).toArray();
+assert.eq({_id: 2, item: "banana-new", qty: 14, seen: 2}, target.findOne({_id: 2}));
+
 assert.commandFailedWithCode(db.runCommand({
     aggregate: source.getName(),
     pipeline: [

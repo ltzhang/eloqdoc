@@ -44,7 +44,7 @@ public:
     static boost::intrusive_ptr<DocumentSource> createFromBson(
         BSONElement elem, const boost::intrusive_ptr<ExpressionContext>& expCtx);
 
-    enum class WhenMatched { kReplace, kKeepExisting, kMerge, kFail };
+    enum class WhenMatched { kReplace, kKeepExisting, kMerge, kFail, kPipeline };
     enum class WhenNotMatched { kInsert, kDiscard, kFail };
 
 private:
@@ -52,17 +52,20 @@ private:
                         std::vector<std::string> onFields,
                         WhenMatched whenMatched,
                         WhenNotMatched whenNotMatched,
+                        BSONObj whenMatchedPipeline,
                         const boost::intrusive_ptr<ExpressionContext>& expCtx);
 
     void applyMerge(const BSONObj& doc);
     BSONObj buildQuery(const BSONObj& doc) const;
     BSONObj buildSetUpdate(const BSONObj& doc) const;
+    void applyPipelineUpdate(const BSONObj& query, const BSONObj& doc);
     void assertLastWriteSucceeded(StringData operation) const;
 
     NamespaceString _targetNss;
     std::vector<std::string> _onFields;
     WhenMatched _whenMatched;
     WhenNotMatched _whenNotMatched;
+    BSONObj _whenMatchedPipeline;
     bool _done = false;
 };
 
