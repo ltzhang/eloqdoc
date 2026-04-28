@@ -28,6 +28,9 @@ db.metrics.aggregate([
 
 Documents must be sorted within each partition; `$fill` does not sort itself (caller responsibility).
 
+**Checkpoint status:** unpartitioned streaming fill is implemented for literal `value` replacement
+and `method: "locf"`. `linear`, partitioned fill, and sort-order validation remain deferred.
+
 ## Extension pattern
 
 Pattern B. The stage maintains per-partition state across documents; for `linear`, it must buffer documents until both the prior and next non-null observations are known.
@@ -63,13 +66,23 @@ REGISTER_DOCUMENT_SOURCE(fill, ...);
 
 ## Acceptance criteria
 
-- `locf` mode forward-fills null values per partition.
+- [x] `locf` mode forward-fills null values for unpartitioned input.
 - `linear` mode interpolates numerical fields between observations.
-- Literal-value mode replaces nulls with the supplied value.
+- [x] Literal-value mode replaces nulls with the supplied value.
 - Per-partition state resets between partitions.
 - Date interpolation works (treats Date as numeric milliseconds).
 - Out-of-order input within a partition produces an error.
 - **Test entry point:** `tests/jstests/eloq_basic/agg_fill.js`. Adapt `jstests/aggregation/sources/fill/`.
+
+## Implementation notes
+
+Initial support is a streaming stage in `document_source_fill.cpp`. It preserves each input
+document, replacing missing or null output fields according to either a literal `value` rule or the
+last non-null value seen for `method: "locf"`.
+
+Deferred semantic differences: MongoDB supports partitioned fill, linear interpolation, and stricter
+sort validation. EloqDoc currently rejects partitioned and linear forms with parse errors and trusts
+the caller-provided stream order for the unpartitioned LOCF/value checkpoint.
 
 ## Notes from source analyses
 
