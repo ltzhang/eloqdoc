@@ -104,6 +104,7 @@ const char kOplogReplayField[] = "oplogReplay";
 const char kNoCursorTimeoutField[] = "noCursorTimeout";
 const char kAwaitDataField[] = "awaitData";
 const char kPartialResultsField[] = "allowPartialResults";
+const char kAllowDiskUseField[] = "allowDiskUse";
 const char kTermField[] = "term";
 const char kOptionsField[] = "options";
 
@@ -153,6 +154,7 @@ void QueryRequest::resetEmpty() {
     _noCursorTimeout = false;
     _exhaust = false;
     _allowPartialResults = false;
+    _allowDiskUse = false;
     _replicationTerm.reset();
 }
 
@@ -423,6 +425,13 @@ StatusWith<QueryRequest::UPtr> QueryRequest::parseFromFindCommand(QueryRequest::
             }
 
             qr->_allowPartialResults = el.boolean();
+        } else if (fieldName == kAllowDiskUseField) {
+            Status status = checkFieldType(el, Bool);
+            if (!status.isOK()) {
+                return status;
+            }
+
+            qr->_allowDiskUse = el.boolean();
         } else if (fieldName == kOptionsField) {
             // 3.0.x versions of the shell may generate an explain of a find command with an
             // 'options' field. We accept this only if the 'options' field is empty so that
@@ -622,6 +631,10 @@ void QueryRequest::asFindCommand(BSONObjBuilder* cmdBuilder) const {
 
     if (_allowPartialResults) {
         cmdBuilder->append(kPartialResultsField, true);
+    }
+
+    if (_allowDiskUse) {
+        cmdBuilder->append(kAllowDiskUseField, true);
     }
 
     if (_replicationTerm) {
@@ -1182,6 +1195,9 @@ StatusWith<BSONObj> QueryRequest::asAggregationCommand() const {
     }
     if (!_comment.empty()) {
         aggregationBuilder.append("comment", _comment);
+    }
+    if (_allowDiskUse) {
+        aggregationBuilder.append(kAllowDiskUseField, true);
     }
     if (!_readConcern.isEmpty()) {
         aggregationBuilder.append("readConcern", _readConcern);

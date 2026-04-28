@@ -48,11 +48,24 @@ bool allowDiskUse = cmdObj["allowDiskUse"].trueValue();
 
 ## Acceptance criteria
 
-- A `find` with sort exceeding 100 MB *fails* without `allowDiskUse`.
-- The same query *succeeds* with `allowDiskUse: true`.
-- After completion, temp files are cleaned up.
-- Cursor pause/resume during a spilled sort still produces correct output.
+- [x] `find` accepts `allowDiskUse: true` as a boolean command field.
+- [x] Shell helper `db.c.find().sort(...).allowDiskUse()` sends the command field.
+- [ ] A `find` with sort exceeding 100 MB *fails* without `allowDiskUse`.
+- [ ] The same query *succeeds* with `allowDiskUse: true`.
+- [ ] After completion, temp files are cleaned up.
+- [ ] Cursor pause/resume during a spilled sort still produces correct output.
 - **Test entry point:** `tests/jstests/eloq_basic/find_allow_disk_use.js`.
+
+## Implementation notes
+
+Initial EloqDoc support is a command-compatibility slice. `QueryRequest` parses, validates,
+serializes, and preserves the boolean `allowDiskUse` field, and the legacy shell exposes
+`DBQuery.prototype.allowDiskUse()` for clients that use cursor helpers. This unblocks modern drivers
+and mongosh-style command shapes that include the field on small result sets.
+
+The find executor's blocking `SortStage` still buffers `WorkingSet` entries in memory and does not
+yet spill to the external sorter. Full spill behavior remains the next implementation slice and
+should refactor find sorting onto the same disk-backed sorter path used by aggregation.
 
 ## Notes from source analyses
 

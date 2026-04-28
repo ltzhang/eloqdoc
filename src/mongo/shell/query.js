@@ -42,6 +42,7 @@ DBQuery.prototype.help = function() {
     print("\t.max({...})");
     print("\t.maxScan(<n>)");
     print("\t.maxTimeMS(<n>)");
+    print("\t.allowDiskUse()");
     print("\t.comment(<comment>)");
     print("\t.tailable(<isAwaitData>)");
     print("\t.noCursorTimeout()");
@@ -228,6 +229,10 @@ DBQuery.prototype._convertToCommand = function(canAttachReadPref) {
 
     if ("collation" in this._query) {
         cmd["collation"] = this._query.collation;
+    }
+
+    if ("allowDiskUse" in this._query) {
+        cmd["allowDiskUse"] = this._query.allowDiskUse;
     }
 
     if ((this._options & DBQuery.Option.tailable) != 0) {
@@ -465,6 +470,10 @@ DBQuery.prototype.showRecordId = function() {
 
 DBQuery.prototype.maxTimeMS = function(maxTimeMS) {
     return this._addSpecial("$maxTimeMS", maxTimeMS);
+};
+
+DBQuery.prototype.allowDiskUse = function() {
+    return this._addSpecial("allowDiskUse", true);
 };
 
 DBQuery.prototype.readConcern = function(level) {

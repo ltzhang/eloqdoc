@@ -407,6 +407,14 @@ public:
         _allowPartialResults = allowPartialResults;
     }
 
+    bool allowDiskUse() const {
+        return _allowDiskUse;
+    }
+
+    void setAllowDiskUse(bool allowDiskUse) {
+        _allowDiskUse = allowDiskUse;
+    }
+
     boost::optional<long long> getReplicationTerm() const {
         return _replicationTerm;
     }
@@ -539,6 +547,7 @@ private:
     bool _noCursorTimeout = false;
     bool _exhaust = false;
     bool _allowPartialResults = false;
+    bool _allowDiskUse = false;
 
     boost::optional<long long> _replicationTerm;
 };

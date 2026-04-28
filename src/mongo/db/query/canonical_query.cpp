@@ -204,6 +204,7 @@ StatusWith<CanonicalQuery::UPtr> CanonicalQuery::canonicalize(OperationContext* 
     qr->setSort(baseQuery.getQueryRequest().getSort());
     qr->setCollation(baseQuery.getQueryRequest().getCollation());
     qr->setExplain(baseQuery.getQueryRequest().isExplain());
+    qr->setAllowDiskUse(baseQuery.getQueryRequest().allowDiskUse());
     auto qrStatus = qr->validate();
     if (!qrStatus.isOK()) {
         return qrStatus;
