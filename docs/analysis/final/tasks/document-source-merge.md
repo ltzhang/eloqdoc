@@ -95,7 +95,7 @@ For each pipeline output document `D`:
 Implemented an initial same-database sink stage:
 
 - Supports string and object `into` forms targeting the current database.
-- Supports top-level `on` fields, defaulting to `_id`.
+- Supports top-level and dotted `on` fields, defaulting to `_id`.
 - Supports string `whenMatched` modes: `merge`, `replace`, `keepExisting`, and `fail`.
 - Supports `whenMatched: <pipeline>` by dispatching an internal pipeline-form update against the
   matched target document. The incoming source document is exposed as `$$new`.
@@ -108,7 +108,7 @@ Implemented an initial same-database sink stage:
 Deferred:
 
 - Cross-database output currently fails fast with `IllegalOperation`. The direct-client write path hit a catalog invariant when writing another database from an aggregation locked on the source database, so this needs a catalog/locking design pass.
-- Dotted `on` fields, explicit authorization tests, and large streaming coverage remain open.
+- Explicit authorization tests and large streaming coverage remain open.
 
 ## Notes from source analyses
 

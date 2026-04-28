@@ -97,6 +97,15 @@ source.aggregate([
 ]).toArray();
 assert.eq({_id: 2, item: "banana-let", qty: 26, seen: 2}, target.findOne({_id: 2}));
 
+assert.commandWorked(source.insert({_id: 4, sku: {code: "dotted"}, qty: 2}));
+assert.commandWorked(target.insert({_id: 40, sku: {code: "dotted"}, qty: 1, existing: true}));
+source.aggregate([
+    {$match: {_id: 4}},
+    {$merge: {into: target.getName(), on: "sku.code", whenMatched: "merge"}},
+]).toArray();
+assert.eq({_id: 40, sku: {code: "dotted"}, qty: 2, existing: true},
+          target.findOne({"sku.code": "dotted"}));
+
 assert.commandFailedWithCode(db.runCommand({
     aggregate: source.getName(),
     pipeline: [

@@ -14,6 +14,7 @@
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/auth/resource_pattern.h"
+#include "mongo/db/bson/dotted_path_support.h"
 #include "mongo/db/pipeline/aggregation_request.h"
 #include "mongo/db/pipeline/document.h"
 #include "mongo/db/pipeline/expression_context.h"
@@ -24,6 +25,7 @@
 namespace mongo {
 
 using boost::intrusive_ptr;
+namespace dps = ::mongo::dotted_path_support;
 
 namespace {
 
@@ -281,11 +283,7 @@ intrusive_ptr<DocumentSource> DocumentSourceMerge::createFromBson(
 BSONObj DocumentSourceMerge::buildQuery(const BSONObj& doc) const {
     BSONObjBuilder query;
     for (auto&& fieldName : _onFields) {
-        uassert(ErrorCodes::FailedToParse,
-                str::stream() << "$merge 'on' field '" << fieldName
-                              << "' must be top-level in this compatibility implementation",
-                fieldName.find('.') == std::string::npos);
-        auto elem = doc.getField(fieldName);
+        auto elem = dps::extractElementAtPath(doc, fieldName);
         uassert(ErrorCodes::NoMatchingDocument,
                 str::stream() << "$merge could not find the 'on' field '" << fieldName
                               << "' in document " << doc,
