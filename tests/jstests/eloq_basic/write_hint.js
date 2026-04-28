@@ -9,6 +9,27 @@ assert.commandWorked(coll.insert([
 assert.commandWorked(coll.createIndex({active: 1, category: 1}, {name: "active_category"}));
 assert.commandWorked(coll.createIndex({stale: 1}, {name: "stale_idx"}));
 
+function planHasIndexName(plan, indexName) {
+    if (plan == null || typeof plan !== "object") {
+        return false;
+    }
+    if (plan.indexName === indexName) {
+        return true;
+    }
+    for (let key in plan) {
+        if (planHasIndexName(plan[key], indexName)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+let updateExplain = coll.explain("queryPlanner").update(
+    {active: true}, {$inc: {hits: 1}}, {multi: true, hint: "active_category"});
+assert.eq("UPDATE", updateExplain.queryPlanner.winningPlan.stage, tojson(updateExplain));
+assert(planHasIndexName(updateExplain.queryPlanner.winningPlan, "active_category"),
+       tojson(updateExplain));
+
 let res = assert.commandWorked(db.runCommand({
     update: coll.getName(),
     updates: [{
@@ -22,6 +43,12 @@ assert.eq(2, res.n, tojson(res));
 assert.eq(1, coll.findOne({_id: 1}).hits);
 assert.eq(1, coll.findOne({_id: 2}).hits);
 assert.eq(0, coll.findOne({_id: 3}).hits);
+
+let deleteExplain = coll.explain("queryPlanner").remove(
+    {stale: true}, {justOne: false, hint: {stale: 1}});
+assert.eq("DELETE", deleteExplain.queryPlanner.winningPlan.stage, tojson(deleteExplain));
+assert(planHasIndexName(deleteExplain.queryPlanner.winningPlan, "stale_idx"),
+       tojson(deleteExplain));
 
 res = assert.commandWorked(db.runCommand({
     delete: coll.getName(),

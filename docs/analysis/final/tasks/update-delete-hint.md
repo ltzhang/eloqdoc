@@ -46,7 +46,7 @@ The work is in `getExecutorUpdate` and `getExecutorDelete` plumbing, not in inve
 
 - [x] `update`/`delete` with valid `hint` (string or object) execute against the hinted index when applicable.
 - [x] Invalid hint (nonexistent index name, mismatched key pattern) returns `BadValue`.
-- [ ] `hint` honored when the predicate is non-trivial; explain output reflects it.
+- [x] `hint` honored when the predicate is non-trivial; explain output reflects it.
 - [ ] A hint that prevents a unique-index scan when needed for `_id` lookup must be rejected (matches upstream).
 - **Test entry point:** `tests/jstests/eloq_basic/write_hint.js`. Adapt `jstests/core/update_hint.js`, `jstests/core/delete_hint.js`.
 
@@ -57,9 +57,10 @@ Implemented in `6baabc77`:
 - Write command IDL accepts per-op `hint` on update and delete entries.
 - String hints are normalized to the existing query planner shape, `{$hint: <name>}`.
 - Update/delete request plumbing carries the hint through normal execution and explain setup.
-- Runtime coverage is in `tests/jstests/eloq_basic/write_hint.js`.
+- Runtime and explain-shape coverage is in `tests/jstests/eloq_basic/write_hint.js`.
 
-Deferred: stronger explain-shape assertions and the `_id`/unique-index edge case. The current test verifies execution, invalid hint rejection, and parse validation.
+Deferred: the `_id`/unique-index edge case. The current test verifies execution, hinted
+UPDATE/DELETE explain shapes, invalid hint rejection, and parse validation.
 
 ## Notes from source analyses
 
