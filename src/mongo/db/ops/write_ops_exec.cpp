@@ -688,6 +688,7 @@ static SingleWriteResult performSingleUpdateOp(OperationContext* opCtx,
     request.setQuery(op.getQ());
     request.setUpdates(op.getU());
     request.setCollation(write_ops::collationOf(op));
+    request.setHint(write_ops::hintOf(op));
     request.setStmtId(stmtId);
     request.setArrayFilters(write_ops::arrayFiltersOf(op));
     request.setMulti(op.getMulti());
@@ -885,6 +886,7 @@ static SingleWriteResult performSingleDeleteOp(OperationContext* opCtx,
     DeleteRequest request(ns);
     request.setQuery(op.getQ());
     request.setCollation(write_ops::collationOf(op));
+    request.setHint(write_ops::hintOf(op));
     request.setMulti(op.getMulti());
     // EloqDoc enables command level transaction. Set yield policy to INTERRUPT_ONLY.
     // auto readConcernArgs = repl::ReadConcernArgs::get(opCtx);

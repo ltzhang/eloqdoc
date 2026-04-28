@@ -62,6 +62,9 @@ public:
     void setCollation(const BSONObj& collation) {
         _collation = collation;
     }
+    void setHint(const BSONObj& hint) {
+        _hint = hint;
+    }
     void setMulti(bool multi = true) {
         _multi = multi;
     }
@@ -96,6 +99,9 @@ public:
     const BSONObj& getCollation() const {
         return _collation;
     }
+    const BSONObj& getHint() const {
+        return _hint;
+    }
     bool isMulti() const {
         return _multi;
     }
@@ -129,6 +135,7 @@ private:
     BSONObj _proj;
     BSONObj _sort;
     BSONObj _collation;
+    BSONObj _hint;
     // The statement id of this request.
     StmtId _stmtId = kUninitializedStmtId;
     bool _multi;

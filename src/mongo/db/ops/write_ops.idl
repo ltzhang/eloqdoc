@@ -31,6 +31,14 @@ types:
         serializer: "::mongo::write_ops::writeMultiDeleteProperty"
         deserializer: "::mongo::write_ops::readMultiDeleteProperty"
 
+    write_hint:
+        bson_serialization_type: any
+        description: "An index hint, accepted as either an index key pattern object or an index
+                      name string."
+        cpp_type: "mongo::BSONObj"
+        serializer: "::mongo::write_ops::writeWriteHint"
+        deserializer: "::mongo::write_ops::readWriteHint"
+
 structs:
 
     WriteCommandBase:
@@ -98,6 +106,10 @@ structs:
                 description: "Specifies the collation to use for the operation."
                 type: object
                 optional: true
+            hint:
+                description: "Specifies the index to use to support the query predicate."
+                type: write_hint
+                optional: true
 
     DeleteOpEntry:
         description: "Parser for the entries in the 'deletes' array of a delete command."
@@ -115,6 +127,10 @@ structs:
             collation:
                 description: "Specifies the collation to use for the operation."
                 type: object
+                optional: true
+            hint:
+                description: "Specifies the index to use to support the query predicate."
+                type: write_hint
                 optional: true
 
 commands:

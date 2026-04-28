@@ -318,6 +318,7 @@ TEST(CommandWriteOpsParsers, Update) {
     const BSONObj collation = BSON("locale"
                                    << "en_US");
     const BSONObj arrayFilter = BSON("i" << 0);
+    const BSONObj hint = BSON("x" << 1);
     for (bool upsert : {false, true}) {
         for (bool multi : {false, true}) {
             auto rawUpdate =
@@ -327,7 +328,9 @@ TEST(CommandWriteOpsParsers, Update) {
                          << "upsert"
                          << upsert
                          << "collation"
-                         << collation);
+                         << collation
+                         << "hint"
+                         << hint);
             auto cmd = BSON("update" << ns.coll() << "updates" << BSON_ARRAY(rawUpdate));
             for (bool seq : {false, true}) {
                 auto request = toOpMsg(ns.db(), cmd, seq);
@@ -342,6 +345,7 @@ TEST(CommandWriteOpsParsers, Update) {
                 ASSERT_EQ(write_ops::arrayFiltersOf(op.getUpdates()[0]).size(), 1u);
                 ASSERT_BSONOBJ_EQ(write_ops::arrayFiltersOf(op.getUpdates()[0]).front(),
                                   arrayFilter);
+                ASSERT_BSONOBJ_EQ(write_ops::hintOf(op.getUpdates()[0]), hint);
                 ASSERT_EQ(op.getUpdates()[0].getUpsert(), upsert);
                 ASSERT_EQ(op.getUpdates()[0].getMulti(), multi);
                 ASSERT_BSONOBJ_EQ(op.getUpdates()[0].toBSON(), rawUpdate);
@@ -355,9 +359,10 @@ TEST(CommandWriteOpsParsers, Remove) {
     const BSONObj query = BSON("x" << 1);
     const BSONObj collation = BSON("locale"
                                    << "en_US");
+    const BSONObj hint = BSON("x" << 1);
     for (bool multi : {false, true}) {
-        auto rawDelete =
-            BSON("q" << query << "limit" << (multi ? 0 : 1) << "collation" << collation);
+        auto rawDelete = BSON("q" << query << "limit" << (multi ? 0 : 1) << "collation"
+                                  << collation << "hint" << hint);
         auto cmd = BSON("delete" << ns.coll() << "deletes" << BSON_ARRAY(rawDelete));
         for (bool seq : {false, true}) {
             auto request = toOpMsg(ns.db(), cmd, seq);
@@ -368,6 +373,7 @@ TEST(CommandWriteOpsParsers, Remove) {
             ASSERT_EQ(op.getDeletes().size(), 1u);
             ASSERT_BSONOBJ_EQ(op.getDeletes()[0].getQ(), query);
             ASSERT_BSONOBJ_EQ(write_ops::collationOf(op.getDeletes()[0]), collation);
+            ASSERT_BSONOBJ_EQ(write_ops::hintOf(op.getDeletes()[0]), hint);
             ASSERT_EQ(op.getDeletes()[0].getMulti(), multi);
             ASSERT_BSONOBJ_EQ(op.getDeletes()[0].toBSON(), rawDelete);
         }

@@ -91,5 +91,12 @@ const std::vector<BSONObj>& arrayFiltersOf(const T& opEntry) {
     return opEntry.getArrayFilters().get_value_or(emptyBSONArray);
 }
 
+// TODO: Delete this getter once IDL supports defaults for object and array fields
+template <class T>
+const BSONObj& hintOf(const T& opEntry) {
+    static const BSONObj emptyBSON{};
+    return opEntry.getHint().get_value_or(emptyBSON);
+}
+
 }  // namespace write_ops
 }  // namespace mongo

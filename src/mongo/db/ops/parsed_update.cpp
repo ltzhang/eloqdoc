@@ -87,7 +87,8 @@ Status ParsedUpdate::parseRequest() {
 Status ParsedUpdate::parseQuery() {
     dassert(!_canonicalQuery.get());
 
-    if (!_driver.needMatchDetails() && CanonicalQuery::isSimpleIdQuery(_request->getQuery())) {
+    if (!_driver.needMatchDetails() && _request->getHint().isEmpty() &&
+        CanonicalQuery::isSimpleIdQuery(_request->getQuery())) {
         return Status::OK();
     }
 
@@ -106,6 +107,7 @@ Status ParsedUpdate::parseQueryToCQ() {
     qr->setFilter(_request->getQuery());
     qr->setSort(_request->getSort());
     qr->setCollation(_request->getCollation());
+    qr->setHint(_request->getHint());
     qr->setExplain(_request->isExplain());
 
     // Limit should only used for the findAndModify command when a sort is specified. If a sort

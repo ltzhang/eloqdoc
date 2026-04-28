@@ -371,6 +371,7 @@ private:
             updateRequest.setQuery(_batch.getUpdates()[0].getQ());
             updateRequest.setUpdates(_batch.getUpdates()[0].getU());
             updateRequest.setCollation(write_ops::collationOf(_batch.getUpdates()[0]));
+            updateRequest.setHint(write_ops::hintOf(_batch.getUpdates()[0]));
             updateRequest.setArrayFilters(write_ops::arrayFiltersOf(_batch.getUpdates()[0]));
             updateRequest.setMulti(_batch.getUpdates()[0].getMulti());
             updateRequest.setUpsert(_batch.getUpdates()[0].getUpsert());
@@ -446,6 +447,7 @@ private:
             DeleteRequest deleteRequest(_batch.getNamespace());
             deleteRequest.setQuery(_batch.getDeletes()[0].getQ());
             deleteRequest.setCollation(write_ops::collationOf(_batch.getDeletes()[0]));
+            deleteRequest.setHint(write_ops::hintOf(_batch.getDeletes()[0]));
             deleteRequest.setMulti(_batch.getDeletes()[0].getMulti());
             // EloqDoc enables command level transaction. Set yield policy to INTERRUPT_ONLY.
             // deleteRequest.setYieldPolicy(PlanExecutor::YIELD_AUTO);

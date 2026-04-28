@@ -46,5 +46,16 @@ bool readMultiDeleteProperty(const BSONElement& limitElement);
  */
 void writeMultiDeleteProperty(bool isMulti, StringData fieldName, BSONObjBuilder* builder);
 
+/**
+ * Parses a write hint. Hints may be index key pattern objects or index name strings. String
+ * hints are normalized to the QueryRequest form: {$hint: <name>}.
+ */
+BSONObj readWriteHint(const BSONElement& hintElement);
+
+/**
+ * Serializes a normalized write hint back to the public command shape.
+ */
+void writeWriteHint(const BSONObj& hint, StringData fieldName, BSONObjBuilder* builder);
+
 }  // namespace write_ops
 }  // namespace mongo

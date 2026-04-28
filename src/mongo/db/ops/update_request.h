@@ -104,6 +104,14 @@ public:
         return _collation;
     }
 
+    inline void setHint(const BSONObj& hint) {
+        _hint = hint;
+    }
+
+    inline const BSONObj& getHint() const {
+        return _hint;
+    }
+
     inline void setUpdates(const BSONObj& updates) {
         _updates = updates;
     }
@@ -217,6 +225,7 @@ public:
         builder << " projection: " << _proj;
         builder << " sort: " << _sort;
         builder << " collation: " << _collation;
+        builder << " hint: " << _hint;
         builder << " updates: " << _updates;
         builder << " stmtId: " << _stmtId;
 
@@ -254,6 +263,9 @@ private:
 
     // Contains the collation information.
     BSONObj _collation;
+
+    // Contains the index hint to use when planning the update predicate.
+    BSONObj _hint;
 
     // Contains the modifiers to apply to matched objects, or a replacement document.
     BSONObj _updates;

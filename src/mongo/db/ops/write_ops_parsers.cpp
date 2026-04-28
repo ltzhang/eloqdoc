@@ -108,6 +108,28 @@ void writeMultiDeleteProperty(bool isMulti, StringData fieldName, BSONObjBuilder
     builder->append(fieldName, isMulti ? 0 : 1);
 }
 
+BSONObj readWriteHint(const BSONElement& hintElement) {
+    if (hintElement.type() == BSONType::Object) {
+        return hintElement.Obj().getOwned();
+    }
+
+    if (hintElement.type() == BSONType::String) {
+        return hintElement.wrap("$hint").getOwned();
+    }
+
+    uasserted(ErrorCodes::FailedToParse, "hint must be either a string or nested object");
+}
+
+void writeWriteHint(const BSONObj& hint, StringData fieldName, BSONObjBuilder* builder) {
+    BSONElement firstElement = hint.firstElement();
+    if (str::equals("$hint", firstElement.fieldName()) && firstElement.type() == BSONType::String) {
+        builder->append(fieldName, firstElement.String());
+        return;
+    }
+
+    builder->append(fieldName, hint);
+}
+
 int32_t getStmtIdForWriteAt(const WriteCommandBase& writeCommandBase, size_t writePos) {
     const auto& stmtIds = writeCommandBase.getStmtIds();
 
