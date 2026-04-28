@@ -59,6 +59,9 @@ if (_parsedUpdateExpression->isPipeline()) {
 
 - **Update diffs.** Stock MongoDB serializes pipeline-form updates differently in the oplog. EloqDoc has no oplog, so this concern doesn't apply directly — but Data Substrate's redo log may have similar serialization needs. Confirm with the storage team.
 - **Atomicity.** A pipeline update on a single matched document must be atomic. The existing operator-form atomicity guarantees should carry over since the pipeline runs synchronously.
+- **Strict update semantics.** Use MongoDB's documented update-pipeline allowlist from the start: `$set`/`$addFields`, `$unset`/`$project`, and `$replaceWith`/`$replaceRoot`. Reject stages such as `$lookup`, `$group`, `$merge`, and `$out` in update context rather than silently accepting broader aggregation pipelines.
+- **Immutable fields.** Validate immutable `_id` behavior after the pipeline transforms the document. A pipeline update that changes `_id` must fail and leave the original document unchanged.
+- **Semantic-difference rule.** If EloqDoc cannot match a MongoDB pipeline-update edge case in Tier 2, document it here before committing the implementation.
 
 ## Acceptance criteria
 

@@ -42,6 +42,8 @@ const char kCmdName[] = "findAndModify";
 const char kQueryField[] = "query";
 const char kSortField[] = "sort";
 const char kCollationField[] = "collation";
+const char kLetField[] = "let";
+const char kRuntimeConstantsField[] = "runtimeConstants";
 const char kArrayFiltersField[] = "arrayFilters";
 const char kRemoveField[] = "remove";
 const char kUpdateField[] = "update";
@@ -99,6 +101,14 @@ BSONObj FindAndModifyRequest::toBSON() const {
         builder.append(kCollationField, _collation.get());
     }
 
+    if (_let) {
+        builder.append(kLetField, _let.get());
+    }
+
+    if (_runtimeConstants) {
+        builder.append(kRuntimeConstantsField, _runtimeConstants.get());
+    }
+
     if (_arrayFilters) {
         BSONArrayBuilder arrayBuilder(builder.subarrayStart(kArrayFiltersField));
         for (auto arrayFilter : _arrayFilters.get()) {
@@ -135,6 +145,32 @@ StatusWith<FindAndModifyRequest> FindAndModifyRequest::parseFromBSON(NamespaceSt
         }
         if (collationEltStatus.isOK()) {
             collation = collationElt.Obj();
+        }
+    }
+
+    BSONObj letVariables;
+    {
+        BSONElement letElt;
+        Status letEltStatus = bsonExtractTypedField(cmdObj, kLetField, BSONType::Object, &letElt);
+        if (!letEltStatus.isOK() && (letEltStatus != ErrorCodes::NoSuchKey)) {
+            return letEltStatus;
+        }
+        if (letEltStatus.isOK()) {
+            letVariables = letElt.Obj();
+        }
+    }
+
+    BSONObj runtimeConstants;
+    {
+        BSONElement runtimeConstantsElt;
+        Status runtimeConstantsEltStatus = bsonExtractTypedField(
+            cmdObj, kRuntimeConstantsField, BSONType::Object, &runtimeConstantsElt);
+        if (!runtimeConstantsEltStatus.isOK() &&
+            (runtimeConstantsEltStatus != ErrorCodes::NoSuchKey)) {
+            return runtimeConstantsEltStatus;
+        }
+        if (runtimeConstantsEltStatus.isOK()) {
+            runtimeConstants = runtimeConstantsElt.Obj();
         }
     }
 
@@ -194,6 +230,8 @@ StatusWith<FindAndModifyRequest> FindAndModifyRequest::parseFromBSON(NamespaceSt
     request.setFieldProjection(fields);
     request.setSort(sort);
     request.setCollation(collation);
+    request.setLet(letVariables);
+    request.setRuntimeConstants(runtimeConstants);
     request.setArrayFilters(std::move(arrayFilters));
 
     if (!isRemove) {
@@ -214,6 +252,14 @@ void FindAndModifyRequest::setSort(BSONObj sort) {
 
 void FindAndModifyRequest::setCollation(BSONObj collation) {
     _collation = collation.getOwned();
+}
+
+void FindAndModifyRequest::setLet(BSONObj letVariables) {
+    _let = letVariables.getOwned();
+}
+
+void FindAndModifyRequest::setRuntimeConstants(BSONObj runtimeConstants) {
+    _runtimeConstants = runtimeConstants.getOwned();
 }
 
 void FindAndModifyRequest::setArrayFilters(const std::vector<BSONObj>& arrayFilters) {
@@ -259,6 +305,14 @@ BSONObj FindAndModifyRequest::getSort() const {
 
 BSONObj FindAndModifyRequest::getCollation() const {
     return _collation.value_or(BSONObj());
+}
+
+BSONObj FindAndModifyRequest::getLet() const {
+    return _let.value_or(BSONObj());
+}
+
+BSONObj FindAndModifyRequest::getRuntimeConstants() const {
+    return _runtimeConstants.value_or(BSONObj());
 }
 
 const std::vector<BSONObj>& FindAndModifyRequest::getArrayFilters() const {

@@ -139,6 +139,8 @@ void makeUpdateRequest(const OperationContext* opCtx,
     requestOut->setUpdates(args.getUpdateObj());
     requestOut->setSort(args.getSort());
     requestOut->setCollation(args.getCollation());
+    requestOut->setLet(args.getLet());
+    requestOut->setRuntimeConstants(args.getRuntimeConstants());
     requestOut->setArrayFilters(args.getArrayFilters());
     requestOut->setUpsert(args.isUpsert());
     requestOut->setReturnDocs(args.shouldReturnNew() ? UpdateRequest::RETURN_NEW
@@ -164,6 +166,8 @@ void makeDeleteRequest(const OperationContext* opCtx,
     requestOut->setProj(args.getFields());
     requestOut->setSort(args.getSort());
     requestOut->setCollation(args.getCollation());
+    requestOut->setLet(args.getLet());
+    requestOut->setRuntimeConstants(args.getRuntimeConstants());
     requestOut->setMulti(false);
     requestOut->setReturnDeleted(true);  // Always return the old value.
     requestOut->setExplain(explain);

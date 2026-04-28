@@ -96,6 +96,8 @@ public:
     BSONObj getUpdateObj() const;
     BSONObj getSort() const;
     BSONObj getCollation() const;
+    BSONObj getLet() const;
+    BSONObj getRuntimeConstants() const;
     const std::vector<BSONObj>& getArrayFilters() const;
     bool shouldReturnNew() const;
     bool isUpsert() const;
@@ -138,6 +140,16 @@ public:
     void setCollation(BSONObj collation);
 
     /**
+     * Sets command-level variables available to expression parsing.
+     */
+    void setLet(BSONObj letVariables);
+
+    /**
+     * Sets driver-supplied runtime constants accepted for command compatibility.
+     */
+    void setRuntimeConstants(BSONObj runtimeConstants);
+
+    /**
      * Sets the array filters for the update, which determine which array elements should be
      * modified.
      */
@@ -165,6 +177,8 @@ private:
     boost::optional<BSONObj> _fieldProjection;
     boost::optional<BSONObj> _sort;
     boost::optional<BSONObj> _collation;
+    boost::optional<BSONObj> _let;
+    boost::optional<BSONObj> _runtimeConstants;
     boost::optional<std::vector<BSONObj>> _arrayFilters;
     boost::optional<bool> _shouldReturnNew;
     boost::optional<WriteConcernOptions> _writeConcern;

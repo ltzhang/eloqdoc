@@ -6,6 +6,38 @@
 
 ## Recommended phasing
 
+### Current execution guidance — BulkWrite prerequisite track
+
+After completing Tier 1, prioritize the `bulkWrite` dependency chain before the
+larger index and window-function work:
+
+1. [`update-delete-hint.md`](./tasks/update-delete-hint.md) — smallest
+   planner-facing prerequisite for `bulkWrite` per-op hints.
+2. [`let-runtime-constants.md`](./tasks/let-runtime-constants.md) — implement
+   command-level `let` consistently across `find`, `aggregate`, `update`,
+   `delete`, and `findAndModify`.
+3. [`pipeline-update-syntax.md`](./tasks/pipeline-update-syntax.md) — implement
+   strict pipeline-form updates with an explicit allowed-stage list and
+   immutable `_id` validation.
+4. [`bulkwrite-command.md`](./tasks/bulkwrite-command.md) — ship the 7.0
+   command base first, then add 8.0 extras (`let`, `errorsOnly`, and advanced
+   per-op fields) as follow-up work.
+
+Default implementation decisions for this track:
+
+- `bulkWrite` should dispatch through EloqDoc's existing CRUD execution paths.
+- Outside an explicit user transaction, each `bulkWrite` op should run with the
+  same per-op transaction behavior as the corresponding ordinary write command.
+  Do not make the whole command atomic as one Data Substrate transaction unless a
+  later explicit product decision asks for that semantic difference.
+- Hidden indexes remain an independent follow-up after the prerequisite chain;
+  do not block `bulkWrite` on hidden index work.
+- Well-documented semantic differences from MongoDB are acceptable in Tier 2.
+  Each such difference must state what MongoDB does, what EloqDoc does, and why
+  the deviation is acceptable for this compatibility tier.
+- Newer MongoDB source remains reference-only for observable semantics and tests;
+  implementations must remain clean-room and adapted to EloqDoc's 4.0.3 code.
+
 ### Phase 2.A — "Index improvements" (~6–8 weeks)
 The two index-related tasks are independent and high-leverage. Wildcard indexes are also a 4.2 catch-up that EloqDoc never received.
 

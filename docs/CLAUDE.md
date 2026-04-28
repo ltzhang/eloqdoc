@@ -66,7 +66,7 @@ python scripts/buildscripts/scons.py \
     --build-dir=#build \
     --prefix=$INSTALL_PREFIX \
     --disable-warnings-as-errors \
-    -j6 \
+    -j16 \
     install-core
 ```
 

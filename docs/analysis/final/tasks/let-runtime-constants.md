@@ -57,6 +57,8 @@ The variables system already exists in EloqDoc 4.0 (`$$ROOT`, `$$CURRENT`, `$let
 
 - **Variable visibility into the storage engine.** Most user `let` values are scalars/objects evaluated once at the start of the request. They never reach the storage engine — they're substituted into expressions. No concurrency concern.
 - **`runtimeConstants.localNow`.** Must be evaluated once per request and used consistently. EloqDoc's clock source for "now" must be stable across the request — confirm.
+- **Implementation scope decision.** Implement `let` consistently across all documented command entry points in one milestone: `find`, `aggregate`, `update`, `delete`, and `findAndModify`. Partial command coverage is confusing for drivers and should be avoided unless a narrower compatibility subset is explicitly documented.
+- **Semantic-difference rule.** If EloqDoc accepts `runtimeConstants` but does not expose every MongoDB internal runtime constant with identical behavior, document the difference here with the MongoDB behavior, the EloqDoc behavior, and the compatibility rationale.
 
 ## Acceptance criteria
 

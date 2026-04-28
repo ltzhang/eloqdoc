@@ -190,6 +190,22 @@ public:
         _hint = hint.getOwned();
     }
 
+    const BSONObj& getLet() const {
+        return _let;
+    }
+
+    void setLet(BSONObj letVariables) {
+        _let = letVariables.getOwned();
+    }
+
+    const BSONObj& getRuntimeConstants() const {
+        return _runtimeConstants;
+    }
+
+    void setRuntimeConstants(BSONObj runtimeConstants) {
+        _runtimeConstants = runtimeConstants.getOwned();
+    }
+
     const BSONObj& getReadConcern() const {
         return _readConcern;
     }
@@ -467,6 +483,10 @@ private:
     // the key pattern hinted.  If the hint was by index name, the value of '_hint' is
     // {$hint: <String>}, where <String> is the index name hinted.
     BSONObj _hint;
+    // Command-level variables available to expression parsing for this query.
+    BSONObj _let;
+    // Accepted for modern driver compatibility. EloqDoc does not expose these as user variables.
+    BSONObj _runtimeConstants;
     // The read concern is parsed elsewhere.
     BSONObj _readConcern;
     // The collation is parsed elsewhere.

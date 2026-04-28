@@ -57,6 +57,8 @@ public:
     static constexpr StringData kExplainName = "explain"_sd;
     static constexpr StringData kAllowDiskUseName = "allowDiskUse"_sd;
     static constexpr StringData kHintName = "hint"_sd;
+    static constexpr StringData kLetName = "let"_sd;
+    static constexpr StringData kRuntimeConstantsName = "runtimeConstants"_sd;
     static constexpr StringData kCommentName = "comment"_sd;
 
     static constexpr long long kDefaultBatchSize = 101;
@@ -166,6 +168,14 @@ public:
         return _hint;
     }
 
+    BSONObj getLet() const {
+        return _let;
+    }
+
+    BSONObj getRuntimeConstants() const {
+        return _runtimeConstants;
+    }
+
     const std::string& getComment() const {
         return _comment;
     }
@@ -204,6 +214,14 @@ public:
 
     void setHint(BSONObj hint) {
         _hint = hint.getOwned();
+    }
+
+    void setLet(BSONObj letVariables) {
+        _let = letVariables.getOwned();
+    }
+
+    void setRuntimeConstants(BSONObj runtimeConstants) {
+        _runtimeConstants = runtimeConstants.getOwned();
     }
 
     void setComment(const std::string& comment) {
@@ -261,6 +279,12 @@ private:
     // the key pattern hinted.  If the hint was by index name, the value of '_hint' is
     // {$hint: <String>}, where <String> is the index name hinted.
     BSONObj _hint;
+
+    // Command-level variables available while parsing and evaluating expressions.
+    BSONObj _let;
+
+    // Accepted for modern driver compatibility. EloqDoc does not expose these as user variables.
+    BSONObj _runtimeConstants;
 
     // The comment parameter attached to this aggregation, empty if not set.
     std::string _comment;

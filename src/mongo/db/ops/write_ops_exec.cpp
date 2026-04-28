@@ -664,6 +664,7 @@ WriteResult performInserts(OperationContext* opCtx,
 static SingleWriteResult performSingleUpdateOp(OperationContext* opCtx,
                                                const NamespaceString& ns,
                                                StmtId stmtId,
+                                               const write_ops::WriteCommandBase& commandBase,
                                                const write_ops::UpdateOpEntry& op) {
     auto session = OperationContextSession::get(opCtx);
     uassert(ErrorCodes::InvalidOptions,
@@ -689,6 +690,8 @@ static SingleWriteResult performSingleUpdateOp(OperationContext* opCtx,
     request.setUpdates(op.getU());
     request.setCollation(write_ops::collationOf(op));
     request.setHint(write_ops::hintOf(op));
+    request.setLet(write_ops::letOf(commandBase));
+    request.setRuntimeConstants(write_ops::runtimeConstantsOf(commandBase));
     request.setStmtId(stmtId);
     request.setArrayFilters(write_ops::arrayFiltersOf(op));
     request.setMulti(op.getMulti());
@@ -847,7 +850,8 @@ WriteResult performUpdates(OperationContext* opCtx, const write_ops::Update& who
         try {
             lastOpFixer.startingOp();
             out.results.emplace_back(
-                performSingleUpdateOp(opCtx, wholeOp.getNamespace(), stmtId, singleOp));
+                performSingleUpdateOp(
+                    opCtx, wholeOp.getNamespace(), stmtId, wholeOp.getWriteCommandBase(), singleOp));
             lastOpFixer.finishedOpSuccessfully();
         } catch (const DBException& ex) {
             const bool canContinue =
@@ -863,6 +867,7 @@ WriteResult performUpdates(OperationContext* opCtx, const write_ops::Update& who
 static SingleWriteResult performSingleDeleteOp(OperationContext* opCtx,
                                                const NamespaceString& ns,
                                                StmtId stmtId,
+                                               const write_ops::WriteCommandBase& commandBase,
                                                const write_ops::DeleteOpEntry& op) {
     auto session = OperationContextSession::get(opCtx);
     uassert(ErrorCodes::InvalidOptions,
@@ -887,6 +892,8 @@ static SingleWriteResult performSingleDeleteOp(OperationContext* opCtx,
     request.setQuery(op.getQ());
     request.setCollation(write_ops::collationOf(op));
     request.setHint(write_ops::hintOf(op));
+    request.setLet(write_ops::letOf(commandBase));
+    request.setRuntimeConstants(write_ops::runtimeConstantsOf(commandBase));
     request.setMulti(op.getMulti());
     // EloqDoc enables command level transaction. Set yield policy to INTERRUPT_ONLY.
     // auto readConcernArgs = repl::ReadConcernArgs::get(opCtx);
@@ -992,7 +999,8 @@ WriteResult performDeletes(OperationContext* opCtx, const write_ops::Delete& who
         try {
             lastOpFixer.startingOp();
             out.results.emplace_back(
-                performSingleDeleteOp(opCtx, wholeOp.getNamespace(), stmtId, singleOp));
+                performSingleDeleteOp(
+                    opCtx, wholeOp.getNamespace(), stmtId, wholeOp.getWriteCommandBase(), singleOp));
             lastOpFixer.finishedOpSuccessfully();
         } catch (const DBException& ex) {
             const bool canContinue =

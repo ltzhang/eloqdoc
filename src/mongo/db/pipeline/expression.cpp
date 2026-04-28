@@ -191,6 +191,22 @@ intrusive_ptr<Expression> Expression::parseOperand(
     }
 }
 
+void initializeCommandLetVariables(const boost::intrusive_ptr<ExpressionContext>& expCtx,
+                                   const BSONObj& letVariables) {
+    if (letVariables.isEmpty()) {
+        return;
+    }
+
+    const VariablesParseState outerVariables = expCtx->variablesParseState;
+    BSONForEach(varElem, letVariables) {
+        const StringData varName = varElem.fieldNameStringData();
+        Variables::uassertValidNameForUserWrite(varName);
+        const auto varId = expCtx->variablesParseState.defineVariable(varName);
+        auto expression = Expression::parseOperand(expCtx, varElem, outerVariables);
+        expCtx->variables.setConstantValue(varId, expression->evaluate(Document{}));
+    }
+}
+
 namespace {
 /**
  * UTF-8 multi-byte code points consist of one leading byte of the form 11xxxxxx, and potentially

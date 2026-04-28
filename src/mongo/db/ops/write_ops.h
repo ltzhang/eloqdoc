@@ -98,5 +98,17 @@ const BSONObj& hintOf(const T& opEntry) {
     return opEntry.getHint().get_value_or(emptyBSON);
 }
 
+// TODO: Delete this getter once IDL supports defaults for object and array fields
+inline const BSONObj& letOf(const WriteCommandBase& writeCommandBase) {
+    static const BSONObj emptyBSON{};
+    return writeCommandBase.getLet().get_value_or(emptyBSON);
+}
+
+// TODO: Delete this getter once IDL supports defaults for object and array fields
+inline const BSONObj& runtimeConstantsOf(const WriteCommandBase& writeCommandBase) {
+    static const BSONObj emptyBSON{};
+    return writeCommandBase.getRuntimeConstants().get_value_or(emptyBSON);
+}
+
 }  // namespace write_ops
 }  // namespace mongo

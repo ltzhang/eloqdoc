@@ -75,6 +75,15 @@ structs:
                               with 'stmtId'."
                 type: array<int>
                 optional: true
+            let:
+                description: "Command-level variables available to expression parsing."
+                type: object
+                optional: true
+            runtimeConstants:
+                description: "Driver-supplied runtime constants accepted for modern command
+                              compatibility."
+                type: object
+                optional: true
 
     UpdateOpEntry:
         description: "Parser for the entries in the 'updates' array of an update command."

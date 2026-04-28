@@ -38,6 +38,7 @@
 #include "mongo/db/matcher/expression_array.h"
 #include "mongo/db/namespace_string.h"
 #include "mongo/db/operation_context.h"
+#include "mongo/db/pipeline/expression.h"
 #include "mongo/db/query/collation/collator_factory_interface.h"
 #include "mongo/db/query/indexability.h"
 #include "mongo/db/query/query_planner_common.h"
@@ -165,6 +166,7 @@ StatusWith<CanonicalQuery::UPtr> CanonicalQuery::canonicalize(
         newExpCtx = expCtx;
         invariant(CollatorInterface::collatorsMatch(collator.get(), expCtx->getCollator()));
     }
+    initializeCommandLetVariables(newExpCtx, qr->getLet());
     StatusWithMatchExpression statusWithMatcher = MatchExpressionParser::parse(
         qr->getFilter(), newExpCtx, extensionsCallback, allowedFeatures);
     if (!statusWithMatcher.isOK()) {

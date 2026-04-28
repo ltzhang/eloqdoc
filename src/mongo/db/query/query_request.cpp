@@ -85,6 +85,8 @@ const char kFilterField[] = "filter";
 const char kProjectionField[] = "projection";
 const char kSortField[] = "sort";
 const char kHintField[] = "hint";
+const char kLetField[] = "let";
+const char kRuntimeConstantsField[] = "runtimeConstants";
 const char kCollationField[] = "collation";
 const char kSkipField[] = "skip";
 const char kLimitField[] = "limit";
@@ -126,6 +128,8 @@ void QueryRequest::resetEmpty() {
     _proj.reset();
     _sort.reset();
     _hint.reset();
+    _let.reset();
+    _runtimeConstants.reset();
     _readConcern.reset();
     _collation.reset();
     _unwrappedReadPref.reset();
@@ -242,6 +246,20 @@ StatusWith<QueryRequest::UPtr> QueryRequest::parseFromFindCommand(QueryRequest::
             }
 
             qr->_hint = hintObj;
+        } else if (fieldName == kLetField) {
+            Status status = checkFieldType(el, Object);
+            if (!status.isOK()) {
+                return status;
+            }
+
+            qr->_let = el.Obj().getOwned();
+        } else if (fieldName == kRuntimeConstantsField) {
+            Status status = checkFieldType(el, Object);
+            if (!status.isOK()) {
+                return status;
+            }
+
+            qr->_runtimeConstants = el.Obj().getOwned();
         } else if (fieldName == repl::ReadConcernArgs::kReadConcernFieldName) {
             // Read concern parsing is handled elsewhere, but we store a copy here.
             Status status = checkFieldType(el, Object);
@@ -513,6 +531,14 @@ void QueryRequest::asFindCommand(BSONObjBuilder* cmdBuilder) const {
 
     if (!_hint.isEmpty()) {
         cmdBuilder->append(kHintField, _hint);
+    }
+
+    if (!_let.isEmpty()) {
+        cmdBuilder->append(kLetField, _let);
+    }
+
+    if (!_runtimeConstants.isEmpty()) {
+        cmdBuilder->append(kRuntimeConstantsField, _runtimeConstants);
     }
 
     if (!_readConcern.isEmpty()) {
@@ -1147,6 +1173,12 @@ StatusWith<BSONObj> QueryRequest::asAggregationCommand() const {
     }
     if (!_hint.isEmpty()) {
         aggregationBuilder.append("hint", _hint);
+    }
+    if (!_let.isEmpty()) {
+        aggregationBuilder.append(kLetField, _let);
+    }
+    if (!_runtimeConstants.isEmpty()) {
+        aggregationBuilder.append(kRuntimeConstantsField, _runtimeConstants);
     }
     if (!_comment.empty()) {
         aggregationBuilder.append("comment", _comment);

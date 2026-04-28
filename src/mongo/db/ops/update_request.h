@@ -112,6 +112,22 @@ public:
         return _hint;
     }
 
+    inline void setLet(const BSONObj& letVariables) {
+        _let = letVariables;
+    }
+
+    inline const BSONObj& getLet() const {
+        return _let;
+    }
+
+    inline void setRuntimeConstants(const BSONObj& runtimeConstants) {
+        _runtimeConstants = runtimeConstants;
+    }
+
+    inline const BSONObj& getRuntimeConstants() const {
+        return _runtimeConstants;
+    }
+
     inline void setUpdates(const BSONObj& updates) {
         _updates = updates;
     }
@@ -226,6 +242,8 @@ public:
         builder << " sort: " << _sort;
         builder << " collation: " << _collation;
         builder << " hint: " << _hint;
+        builder << " let: " << _let;
+        builder << " runtimeConstants: " << _runtimeConstants;
         builder << " updates: " << _updates;
         builder << " stmtId: " << _stmtId;
 
@@ -266,6 +284,12 @@ private:
 
     // Contains the index hint to use when planning the update predicate.
     BSONObj _hint;
+
+    // Contains command-level variables available to expression parsing.
+    BSONObj _let;
+
+    // Accepted for modern driver compatibility. EloqDoc does not expose these as user variables.
+    BSONObj _runtimeConstants;
 
     // Contains the modifiers to apply to matched objects, or a replacement document.
     BSONObj _updates;

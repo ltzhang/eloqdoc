@@ -76,10 +76,11 @@ static CmdBulkWrite cmdBulkWrite;
 
 ## EloqDoc-specific considerations
 
-- **Cross-namespace transactions.** Stock MongoDB on a replica set runs `bulkWrite`'s ops as separate write transactions when not inside a multi-document transaction. EloqDoc's Data Substrate has its own transaction semantics — match: each op is its own transaction unless `bulkWrite` is inside an explicit transaction (see Data Substrate docs).
+- **Cross-namespace transactions.** Stock MongoDB on a replica set runs `bulkWrite`'s ops as separate write transactions when not inside a multi-document transaction. EloqDoc's Tier 2 implementation should match this shape: dispatch each op through the existing insert/update/delete command path and let that path use its normal per-op Data Substrate transaction behavior unless the request is already inside an explicit user transaction. Do not make the whole `bulkWrite` command atomic as one Data Substrate transaction in the initial implementation.
 - **No oplog ⇒ no oplog batching.** Stock MongoDB sometimes batches `bulkWrite` ops in a single oplog entry; not applicable here.
 - **Authorization.** The auth check is per-op, against each namespace. The simplest implementation does the check up-front for all namespaces touched; alternatively, check before each op. Stock MongoDB does up-front.
 - **Retryable writes.** `bulkWrite` ops support `stmtIds` for retryability. EloqDoc's retryable-writes story may or may not be aligned with stock; coordinate with whoever owns that.
+- **Document semantic differences.** If any retryable-write, transaction, write-concern, or cursor batching behavior intentionally differs from MongoDB, document the difference in this task file before committing the implementation.
 
 ## Acceptance criteria
 
@@ -100,4 +101,4 @@ static CmdBulkWrite cmdBulkWrite;
 
 All three analyses rate this Tier 2 as the highest-value backport. `analysis_cc/forward_compat_eval.md`: "Dispatch to existing CRUD per `nsInfo`; implement ordered/unordered, cursor reply, per-op errors, auth, retry stmt ids, write concern. ~4–6 weeks." `analysis_gpt5.5/feature-backport-evaluation.md`: same. `analysis_gpt5.4` calls out 8.0 enhancements (`let`, `errorsOnly`) as "small additive PRs after the 7.0 base lands."
 
-**Recommended sequencing:** ship 7.0 base first (2–3 weeks). Add 8.0 enhancements in a follow-up (1 week). Mongosh's client-level helper depends on `bulkWrite` being on the wire — until it is, `db.collection.bulkWrite()` falls back to the legacy batch-write commands and works fine.
+**Recommended sequencing:** ship the 7.0 base first (2–3 weeks): parser, ordered/unordered dispatch, per-op result accounting, summary counters, authorization, and cursor reply. Add 8.0 enhancements in follow-up commits/PRs: command-level `let`, `errorsOnly`, per-op hint plumbing, and pipeline-form updates once their prerequisite tasks have landed. Mongosh's client-level helper depends on `bulkWrite` being on the wire — until it is, `db.collection.bulkWrite()` falls back to the legacy batch-write commands and works fine.

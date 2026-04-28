@@ -56,7 +56,7 @@ for (auto& ix : collection->getIndexCatalog()->getAllReadyIndexes()) {
 ## Dependencies
 
 - **Blocks:** [`prepareunique-workflow.md`](./prepareunique-workflow.md) — that task adds another transition state to indexes; sharing the catalog-plumbing pattern with hidden indexes makes it cheaper.
-- **Blocked by:** none.
+- **Blocked by:** none. However, after Tier 1 completion this is intentionally sequenced after the `bulkWrite` prerequisite chain (`update-delete-hint`, `let-runtime-constants`, `pipeline-update-syntax`) unless index compatibility becomes the higher product priority.
 
 ## EloqDoc-specific considerations
 

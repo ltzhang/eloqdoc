@@ -252,6 +252,13 @@ private:
     boost::intrusive_ptr<ExpressionContext> _expCtx;
 };
 
+/**
+ * Binds command-level 'let' variables as constants on 'expCtx'. Values are parsed as aggregation
+ * expressions and evaluated once against an empty document.
+ */
+void initializeCommandLetVariables(const boost::intrusive_ptr<ExpressionContext>& expCtx,
+                                   const BSONObj& letVariables);
+
 // Inherit from ExpressionVariadic or ExpressionFixedArity instead of directly from this class.
 class ExpressionNary : public Expression {
 public:

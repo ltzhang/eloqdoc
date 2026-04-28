@@ -463,6 +463,7 @@ Status runAggregate(OperationContext* opCtx,
             std::make_shared<PipelineD::MongoDInterface>(opCtx),
             uassertStatusOK(resolveInvolvedNamespaces(opCtx, request)),
             uuid));
+        initializeCommandLetVariables(expCtx, request.getLet());
         expCtx->tempDir = storageGlobalParams.dbpath + "/_tmp";
         auto session = OperationContextSession::get(opCtx);
         expCtx->inMultiDocumentTransaction = session && session->inMultiDocumentTransaction();

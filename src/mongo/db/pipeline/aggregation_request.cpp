@@ -58,6 +58,8 @@ constexpr StringData AggregationRequest::kCollationName;
 constexpr StringData AggregationRequest::kExplainName;
 constexpr StringData AggregationRequest::kAllowDiskUseName;
 constexpr StringData AggregationRequest::kHintName;
+constexpr StringData AggregationRequest::kLetName;
+constexpr StringData AggregationRequest::kRuntimeConstantsName;
 constexpr StringData AggregationRequest::kCommentName;
 
 constexpr long long AggregationRequest::kDefaultBatchSize;
@@ -213,6 +215,20 @@ StatusWith<AggregationRequest> AggregationRequest::parseFromBSON(
                                       << typeName(elem.type())};
             }
             request.setAllowDiskUse(elem.Bool());
+        } else if (kLetName == fieldName) {
+            if (elem.type() != BSONType::Object) {
+                return {ErrorCodes::TypeMismatch,
+                        str::stream() << kLetName << " must be an object, not a "
+                                      << typeName(elem.type())};
+            }
+            request.setLet(elem.Obj());
+        } else if (kRuntimeConstantsName == fieldName) {
+            if (elem.type() != BSONType::Object) {
+                return {ErrorCodes::TypeMismatch,
+                        str::stream() << kRuntimeConstantsName << " must be an object, not a "
+                                      << typeName(elem.type())};
+            }
+            request.setRuntimeConstants(elem.Obj());
         } else if (bypassDocumentValidationCommandOption() == fieldName) {
             request.setBypassDocumentValidation(elem.trueValue());
         } else if (!isGenericArgument(fieldName)) {
@@ -303,6 +319,11 @@ Document AggregationRequest::serializeToCommandObj() const {
          _explainMode ? Value(Document()) : Value(Document{{kBatchSizeName, _batchSize}})},
         // Only serialize a hint if one was specified.
         {kHintName, _hint.isEmpty() ? Value() : Value(_hint)},
+        // Only serialize let variables if specified.
+        {kLetName, _let.isEmpty() ? Value() : Value(_let)},
+        // Only serialize runtime constants if specified.
+        {kRuntimeConstantsName,
+         _runtimeConstants.isEmpty() ? Value() : Value(_runtimeConstants)},
         // Only serialize a comment if one was specified.
         {kCommentName, _comment.empty() ? Value() : Value(_comment)},
         // Only serialize readConcern if specified.

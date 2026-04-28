@@ -65,6 +65,12 @@ public:
     void setHint(const BSONObj& hint) {
         _hint = hint;
     }
+    void setLet(const BSONObj& letVariables) {
+        _let = letVariables;
+    }
+    void setRuntimeConstants(const BSONObj& runtimeConstants) {
+        _runtimeConstants = runtimeConstants;
+    }
     void setMulti(bool multi = true) {
         _multi = multi;
     }
@@ -102,6 +108,12 @@ public:
     const BSONObj& getHint() const {
         return _hint;
     }
+    const BSONObj& getLet() const {
+        return _let;
+    }
+    const BSONObj& getRuntimeConstants() const {
+        return _runtimeConstants;
+    }
     bool isMulti() const {
         return _multi;
     }
@@ -136,6 +148,8 @@ private:
     BSONObj _sort;
     BSONObj _collation;
     BSONObj _hint;
+    BSONObj _let;
+    BSONObj _runtimeConstants;
     // The statement id of this request.
     StmtId _stmtId = kUninitializedStmtId;
     bool _multi;
