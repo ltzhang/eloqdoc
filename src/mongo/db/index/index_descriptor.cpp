@@ -95,6 +95,7 @@ constexpr StringData IndexDescriptor::kSparseFieldName;
 constexpr StringData IndexDescriptor::kStorageEngineFieldName;
 constexpr StringData IndexDescriptor::kTextVersionFieldName;
 constexpr StringData IndexDescriptor::kUniqueFieldName;
+constexpr StringData IndexDescriptor::kWildcardProjectionFieldName;
 constexpr StringData IndexDescriptor::kWeightsFieldName;
 
 bool IndexDescriptor::isIndexVersionSupported(IndexVersion indexVersion) {

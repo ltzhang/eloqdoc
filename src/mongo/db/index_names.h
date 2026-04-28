@@ -52,6 +52,7 @@ enum IndexType {
     INDEX_2DSPHERE,
     INDEX_TEXT,
     INDEX_HASHED,
+    INDEX_WILDCARD,
 };
 
 /**
@@ -65,6 +66,7 @@ public:
     static const std::string GEO_2DSPHERE;
     static const std::string TEXT;
     static const std::string HASHED;
+    static const std::string WILDCARD;
     static const std::string BTREE;
 
     /**

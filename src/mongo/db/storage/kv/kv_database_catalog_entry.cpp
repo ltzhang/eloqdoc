@@ -39,6 +39,7 @@
 #include "mongo/db/index/index_access_method.h"
 #include "mongo/db/index/index_descriptor.h"
 #include "mongo/db/index/s2_access_method.h"
+#include "mongo/db/index/wildcard_access_method.h"
 #include "mongo/db/index_names.h"
 #include "mongo/db/storage/kv/kv_collection_catalog_entry.h"
 #include "mongo/db/storage/kv/kv_engine.h"
@@ -77,6 +78,9 @@ IndexAccessMethod* KVDatabaseCatalogEntry::getIndex(OperationContext* opCtx,
 
     if (IndexNames::TEXT == type)
         return new FTSAccessMethod(index, sdi);
+
+    if (IndexNames::WILDCARD == type)
+        return new WildcardAccessMethod(index, sdi);
 
     if (IndexNames::GEO_HAYSTACK == type)
         return new HaystackAccessMethod(index, sdi);

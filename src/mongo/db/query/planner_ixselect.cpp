@@ -383,6 +383,8 @@ bool QueryPlannerIXSelect::compatible(const BSONElement& elt,
         return false;
     } else if (IndexNames::TEXT == indexedFieldType) {
         return (exprtype == MatchExpression::TEXT);
+    } else if (IndexNames::WILDCARD == indexedFieldType) {
+        return false;
     } else if (IndexNames::GEO_HAYSTACK == indexedFieldType) {
         return false;
     } else {

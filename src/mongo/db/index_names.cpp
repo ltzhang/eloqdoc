@@ -39,6 +39,7 @@ const string IndexNames::GEO_HAYSTACK = "geoHaystack";
 const string IndexNames::GEO_2DSPHERE = "2dsphere";
 const string IndexNames::TEXT = "text";
 const string IndexNames::HASHED = "hashed";
+const string IndexNames::WILDCARD = "wildcard";
 const string IndexNames::BTREE = "";
 
 // static
@@ -51,6 +52,16 @@ string IndexNames::findPluginName(const BSONObj& keyPattern) {
             continue;
         }
         return e.String();
+    }
+
+    BSONObjIterator wildcardIt(keyPattern);
+    while (wildcardIt.more()) {
+        BSONElement e = wildcardIt.next();
+        const string fieldName = e.fieldName();
+        if (fieldName == "$**" ||
+            (fieldName.size() > 4 && fieldName.compare(fieldName.size() - 4, 4, ".$**") == 0)) {
+            return IndexNames::WILDCARD;
+        }
     }
 
     return IndexNames::BTREE;
@@ -66,7 +77,7 @@ bool IndexNames::existedBefore24(const string& name) {
 bool IndexNames::isKnownName(const string& name) {
     return name == IndexNames::GEO_2D || name == IndexNames::GEO_2DSPHERE ||
         name == IndexNames::GEO_HAYSTACK || name == IndexNames::TEXT ||
-        name == IndexNames::HASHED || name == IndexNames::BTREE;
+        name == IndexNames::HASHED || name == IndexNames::WILDCARD || name == IndexNames::BTREE;
 }
 
 // static
@@ -81,6 +92,8 @@ IndexType IndexNames::nameToType(const string& accessMethod) {
         return INDEX_TEXT;
     } else if (IndexNames::HASHED == accessMethod) {
         return INDEX_HASHED;
+    } else if (IndexNames::WILDCARD == accessMethod) {
+        return INDEX_WILDCARD;
     } else {
         return INDEX_BTREE;
     }

@@ -22,6 +22,7 @@ env.Library(
             'btree_key_generator.cpp',
             'expression_keys_private.cpp',
             'sort_key_generator.cpp',
+            'wildcard_key_generator.cpp',
         ],
         LIBDEPS=[
             '$BUILD_DIR/mongo/base',
@@ -104,6 +105,7 @@ env.Library(
         "hash_access_method.cpp",
         "haystack_access_method.cpp",
         "s2_access_method.cpp",
+        "wildcard_access_method.cpp",
     ],
     LIBDEPS=[
         '$BUILD_DIR/mongo/base',

@@ -90,6 +90,7 @@ static std::set<StringData> allowedFieldNames = {
     IndexDescriptor::kStorageEngineFieldName,
     IndexDescriptor::kTextVersionFieldName,
     IndexDescriptor::kUniqueFieldName,
+    IndexDescriptor::kWildcardProjectionFieldName,
     IndexDescriptor::kWeightsFieldName,
     // Index creation under legacy writeMode can result in an index spec with an _id field.
     "_id"};
@@ -102,6 +103,10 @@ static const std::set<StringData> allowedIdIndexFieldNames = {
     IndexDescriptor::kNamespaceFieldName,
     // Index creation under legacy writeMode can result in an index spec with an _id field.
     "_id"};
+
+bool isWildcardFieldName(StringData fieldName) {
+    return fieldName == "$**"_sd || fieldName.endsWith(".$**"_sd);
+}
 }  // namespace
 
 Status validateKeyPattern(const BSONObj& key, IndexDescriptor::IndexVersion indexVersion) {
@@ -118,6 +123,10 @@ Status validateKeyPattern(const BSONObj& key, IndexDescriptor::IndexVersion inde
         if (!IndexNames::isKnownName(pluginName))
             return Status(
                 code, mongoutils::str::stream() << "Unknown index plugin '" << pluginName << '\'');
+    }
+
+    if (pluginName == IndexNames::WILDCARD && key.nFields() != 1) {
+        return Status(code, "Wildcard indexes must contain exactly one key pattern field.");
     }
 
     BSONObjIterator it(key);
@@ -174,10 +183,33 @@ Status validateKeyPattern(const BSONObj& key, IndexDescriptor::IndexVersion inde
             return Status(code, "Index keys cannot be an empty field.");
         }
 
-        // "$**" is acceptable for a text index.
+        // "$**" is acceptable for a text index and for wildcard indexes. Subtree wildcard
+        // indexes use the form "path.$**".
         if (mongoutils::str::equals(keyElement.fieldName(), "$**") &&
             keyElement.valuestrsafe() == IndexNames::TEXT)
             continue;
+
+        if (pluginName == IndexNames::WILDCARD &&
+            isWildcardFieldName(keyElement.fieldNameStringData())) {
+            if (!keyElement.isNumber() ||
+                (keyElement.number() != 1.0 && keyElement.number() != -1.0)) {
+                return Status(code, "Wildcard index key pattern value must be 1 or -1.");
+            }
+            if (!mongoutils::str::equals(keyElement.fieldName(), "$**")) {
+                for (size_t i = 0; i + 1 < numParts; ++i) {
+                    const StringData part = keyField.getPart(i);
+                    if (part.empty()) {
+                        return Status(code, "Index keys cannot contain an empty field.");
+                    }
+                    if (part[0] == '$') {
+                        return Status(code,
+                                      "Index key contains an illegal field name: "
+                                      "field name starts with '$'.");
+                    }
+                }
+            }
+            continue;
+        }
 
         if (mongoutils::str::equals(keyElement.fieldName(), "_fts") &&
             keyElement.valuestrsafe() != IndexNames::TEXT) {

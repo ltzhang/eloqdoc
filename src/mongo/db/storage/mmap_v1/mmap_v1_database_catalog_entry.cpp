@@ -44,6 +44,7 @@
 #include "mongo/db/index/haystack_access_method.h"
 #include "mongo/db/index/index_access_method.h"
 #include "mongo/db/index/s2_access_method.h"
+#include "mongo/db/index/wildcard_access_method.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/record_id.h"
 #include "mongo/db/server_parameters.h"
@@ -799,6 +800,9 @@ IndexAccessMethod* MMAPV1DatabaseCatalogEntry::getIndex(OperationContext* opCtx,
 
     if (IndexNames::TEXT == type)
         return new FTSAccessMethod(entry, btree.release());
+
+    if (IndexNames::WILDCARD == type)
+        return new WildcardAccessMethod(entry, btree.release());
 
     if (IndexNames::GEO_HAYSTACK == type)
         return new HaystackAccessMethod(entry, btree.release());

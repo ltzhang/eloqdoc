@@ -31,6 +31,7 @@
 #include "mongo/db/index/index_access_method.h"
 #include "mongo/db/index/index_descriptor.h"
 #include "mongo/db/index/s2_access_method.h"
+#include "mongo/db/index/wildcard_access_method.h"
 #include "mongo/db/index_names.h"
 #include "mongo/db/query/collation/collator_factory_interface.h"
 #include "mongo/db/service_context.h"
@@ -50,7 +51,8 @@ namespace Eloq {
 
 MongoMultiKeyPaths::MongoMultiKeyPaths(const mongo::IndexDescriptor* desc) {
     const std::string& type = desc->getAccessMethodName();
-    if (type == mongo::IndexNames::BTREE || type == mongo::IndexNames::GEO_2DSPHERE) {
+    if (type == mongo::IndexNames::BTREE || type == mongo::IndexNames::GEO_2DSPHERE ||
+        type == mongo::IndexNames::WILDCARD) {
         multikey_paths_.resize(desc->keyPattern().nFields());
     }
 }
@@ -198,6 +200,8 @@ std::unique_ptr<mongo::IndexAccessMethod> MongoKeySchema::CreateIndexAccessMetho
         return std::make_unique<mongo::S2AccessMethod>(index, sdi);
     } else if (type == mongo::IndexNames::TEXT) {
         return std::make_unique<mongo::FTSAccessMethod>(index, sdi);
+    } else if (type == mongo::IndexNames::WILDCARD) {
+        return std::make_unique<mongo::WildcardAccessMethod>(index, sdi);
     } else if (type == mongo::IndexNames::GEO_HAYSTACK) {
         return std::make_unique<mongo::HaystackAccessMethod>(index, sdi);
     } else if (type == mongo::IndexNames::GEO_2D) {

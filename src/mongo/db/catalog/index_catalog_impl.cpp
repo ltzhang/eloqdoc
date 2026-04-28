@@ -687,6 +687,17 @@ Status IndexCatalogImpl::_isSpecOk(OperationContext* opCtx, const BSONObj& spec)
         return Status(ErrorCodes::CannotCreateIndex, "\"hidden\" for an index must be a bool");
     }
 
+    BSONElement wildcardProjectionElement =
+        spec.getField(IndexDescriptor::kWildcardProjectionFieldName);
+    if (!wildcardProjectionElement.eoo()) {
+        if (IndexNames::findPluginName(key) != IndexNames::WILDCARD) {
+            return Status(ErrorCodes::CannotCreateIndex,
+                          "\"wildcardProjection\" is only valid for wildcard indexes");
+        }
+        return Status(ErrorCodes::CannotCreateIndex,
+                      "\"wildcardProjection\" is not supported by this wildcard index slice");
+    }
+
     // Ensure if there is a filter, its valid.
     BSONElement filterElement = spec.getField("partialFilterExpression");
     if (filterElement) {

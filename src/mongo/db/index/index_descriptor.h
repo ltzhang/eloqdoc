@@ -82,6 +82,7 @@ public:
     static constexpr StringData kStorageEngineFieldName = "storageEngine"_sd;
     static constexpr StringData kTextVersionFieldName = "textIndexVersion"_sd;
     static constexpr StringData kUniqueFieldName = "unique"_sd;
+    static constexpr StringData kWildcardProjectionFieldName = "wildcardProjection"_sd;
     static constexpr StringData kWeightsFieldName = "weights"_sd;
 
     /**
