@@ -33,23 +33,41 @@ namespace {
 class DocumentSourceDensify final : public DocumentSource {
 public:
     static constexpr StringData kStageName = "$densify"_sd;
+    enum class BoundsMode { kExplicit, kFull, kPartition };
 
     DocumentSourceDensify(const boost::intrusive_ptr<ExpressionContext>& expCtx,
                           FieldPath field,
                           double step,
                           double lower,
                           double upper,
+                          BoundsMode boundsMode,
                           std::vector<FieldPath> partitionByFields)
         : DocumentSource(expCtx),
           _field(std::move(field)),
           _step(step),
           _lower(lower),
           _upper(upper),
+          _boundsMode(boundsMode),
           _partitionByFields(std::move(partitionByFields)),
           _nextValue(lower) {}
 
     GetNextResult getNext() final {
         pExpCtx->checkForInterrupt();
+
+        if (_boundsMode != BoundsMode::kExplicit) {
+            if (!_bufferedInitialized) {
+                auto initResult = initializeBufferedOutput();
+                if (!initResult.isEOF()) {
+                    return initResult;
+                }
+            }
+            if (_pending.empty()) {
+                return GetNextResult::makeEOF();
+            }
+            auto doc = std::move(_pending.front());
+            _pending.pop_front();
+            return GetNextResult(std::move(doc));
+        }
 
         while (true) {
             if (!_pending.empty()) {
@@ -130,7 +148,17 @@ public:
     Value serialize(boost::optional<ExplainOptions::Verbosity> explain = boost::none) const final {
         MutableDocument range;
         range["step"] = numericValue(_step);
-        range["bounds"] = Value(std::vector<Value>{numericValue(_lower), numericValue(_upper)});
+        switch (_boundsMode) {
+            case BoundsMode::kExplicit:
+                range["bounds"] = Value(std::vector<Value>{numericValue(_lower), numericValue(_upper)});
+                break;
+            case BoundsMode::kFull:
+                range["bounds"] = Value("full"_sd);
+                break;
+            case BoundsMode::kPartition:
+                range["bounds"] = Value("partition"_sd);
+                break;
+        }
 
         MutableDocument spec;
         spec["field"] = Value(_field.fullPath());
@@ -191,27 +219,48 @@ public:
         uassert(6789110,
                 "$densify date units are not supported in this compatibility checkpoint",
                 range["unit"].eoo());
-        uassert(6789111,
-                "$densify currently supports only explicit numeric bounds",
-                boundsElem.type() == BSONType::Array);
-
-        std::vector<double> bounds;
-        for (auto&& bound : boundsElem.Obj()) {
-            uassert(6789112, "$densify bounds must be numeric", bound.isNumber());
-            bounds.push_back(bound.numberDouble());
+        BoundsMode boundsMode = BoundsMode::kExplicit;
+        std::vector<double> bounds{0, 0};
+        if (boundsElem.type() == BSONType::Array) {
+            bounds.clear();
+            for (auto&& bound : boundsElem.Obj()) {
+                uassert(6789112, "$densify bounds must be numeric", bound.isNumber());
+                bounds.push_back(bound.numberDouble());
+            }
+            uassert(6789113, "$densify requires exactly two bounds", bounds.size() == 2);
+            uassert(6789114, "$densify lower bound must be <= upper bound", bounds[0] <= bounds[1]);
+        } else {
+            uassert(6789111,
+                    "$densify bounds must be an explicit numeric array, 'full', or 'partition'",
+                    boundsElem.type() == BSONType::String);
+            auto boundsString = boundsElem.valueStringData();
+            if (boundsString == "full"_sd) {
+                boundsMode = BoundsMode::kFull;
+            } else if (boundsString == "partition"_sd) {
+                boundsMode = BoundsMode::kPartition;
+            } else {
+                uasserted(6789117,
+                          str::stream() << "unsupported $densify bounds mode '" << boundsString
+                                        << "'");
+            }
         }
-        uassert(6789113, "$densify requires exactly two bounds", bounds.size() == 2);
-        uassert(6789114, "$densify lower bound must be <= upper bound", bounds[0] <= bounds[1]);
 
         return new DocumentSourceDensify(expCtx,
                                          FieldPath(fieldElem.str()),
                                          step,
                                          bounds[0],
                                          bounds[1],
+                                         boundsMode,
                                          std::move(partitionByFields));
     }
 
 private:
+    struct BufferedDoc {
+        Document doc;
+        Value partitionKey;
+        double value;
+    };
+
     bool hasStashedDocument() const {
         return static_cast<bool>(_stashedDocument);
     }
@@ -228,6 +277,13 @@ private:
         addPartitionFields(doc);
         doc.setNestedField(_field, numericValue(value));
         _nextValue += _step;
+        return doc.freeze();
+    }
+
+    Document makeSyntheticDocument(double value, const Value& partitionKey) const {
+        MutableDocument doc;
+        addPartitionFields(doc, partitionKey);
+        doc.setNestedField(_field, numericValue(value));
         return doc.freeze();
     }
 
@@ -278,6 +334,95 @@ private:
         }
     }
 
+    void addPartitionFields(MutableDocument& doc, const Value& partitionKey) const {
+        if (_partitionByFields.empty()) {
+            return;
+        }
+
+        const auto& keyValues = partitionKey.getArray();
+        for (size_t i = 0; i < _partitionByFields.size(); ++i) {
+            doc.setNestedField(_partitionByFields[i], keyValues[i]);
+        }
+    }
+
+    GetNextResult initializeBufferedOutput() {
+        while (!_bufferedInputExhausted) {
+            auto next = pSource->getNext();
+            if (next.isPaused()) {
+                return next;
+            }
+            if (next.isEOF()) {
+                _bufferedInputExhausted = true;
+                break;
+            }
+
+            auto doc = next.releaseDocument();
+            _bufferedInput.push_back({doc, makePartitionKey(doc), extractNumericField(doc)});
+        }
+
+        if (_bufferedInput.empty()) {
+            _bufferedInitialized = true;
+            return GetNextResult::makeEOF();
+        }
+
+        double globalLower = _bufferedInput.front().value;
+        double globalUpper = _bufferedInput.front().value;
+        for (const auto& item : _bufferedInput) {
+            globalLower = std::min(globalLower, item.value);
+            globalUpper = std::max(globalUpper, item.value);
+        }
+
+        for (size_t start = 0; start < _bufferedInput.size();) {
+            size_t end = start + 1;
+            while (end < _bufferedInput.size() && samePartition(_bufferedInput[start].partitionKey,
+                                                                _bufferedInput[end].partitionKey)) {
+                ++end;
+            }
+
+            double lower = _boundsMode == BoundsMode::kFull ? globalLower : _bufferedInput[start].value;
+            double upper = _boundsMode == BoundsMode::kFull ? globalUpper : _bufferedInput[start].value;
+            for (size_t i = start; i < end; ++i) {
+                lower = std::min(lower, _bufferedInput[i].value);
+                upper = std::max(upper, _bufferedInput[i].value);
+                if (i > start) {
+                    uassert(6789318,
+                            "$densify requires input documents to be sorted ascending",
+                            _bufferedInput[i].value >= _bufferedInput[i - 1].value);
+                }
+            }
+
+            double nextValue = lower;
+            for (size_t i = start; i < end; ++i) {
+                const auto current = _bufferedInput[i].value;
+                while (nextValue <= upper && nextValue < current) {
+                    _pending.push_back(
+                        makeSyntheticDocument(nextValue, _bufferedInput[start].partitionKey));
+                    nextValue += _step;
+                }
+                if (nextValue <= upper && nearlyEqual(nextValue, current)) {
+                    nextValue += _step;
+                }
+                _pending.push_back(std::move(_bufferedInput[i].doc));
+            }
+            while (nextValue <= upper || nearlyEqual(nextValue, upper)) {
+                _pending.push_back(makeSyntheticDocument(nextValue, _bufferedInput[start].partitionKey));
+                nextValue += _step;
+            }
+
+            start = end;
+        }
+
+        _bufferedInitialized = true;
+        return GetNextResult::makeEOF();
+    }
+
+    bool samePartition(const Value& left, const Value& right) const {
+        if (_partitionByFields.empty()) {
+            return true;
+        }
+        return pExpCtx->getValueComparator().compare(left, right) == 0;
+    }
+
     static bool nearlyEqual(double left, double right) {
         return std::abs(left - right) < 1e-9;
     }
@@ -298,6 +443,7 @@ private:
     double _step;
     double _lower;
     double _upper;
+    BoundsMode _boundsMode;
     std::vector<FieldPath> _partitionByFields;
     double _nextValue;
     bool _inputExhausted = false;
@@ -308,6 +454,9 @@ private:
     std::deque<Document> _pending;
     boost::optional<Document> _stashedDocument;
     Value _stashedPartitionKey;
+    bool _bufferedInitialized = false;
+    bool _bufferedInputExhausted = false;
+    std::vector<BufferedDoc> _bufferedInput;
 };
 
 constexpr StringData DocumentSourceDensify::kStageName;

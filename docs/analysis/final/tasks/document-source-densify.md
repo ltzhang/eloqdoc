@@ -8,10 +8,10 @@
 
 Inserts synthetic documents to fill gaps in a sorted numeric or date sequence. Common use case: dashboards that need a row per minute even when the source data has gaps.
 
-**Checkpoint status:** explicit numeric bounds are implemented for unpartitioned and
+**Checkpoint status:** numeric bounds are implemented for unpartitioned and
 `partitionByFields` input:
-`{field, partitionByFields, range: {step, bounds: [min, max]}}`. Date units,
-`bounds: "full"`, and `bounds: "partition"` remain deferred.
+`{field, partitionByFields, range: {step, bounds: [min, max] | "full" | "partition"}}`.
+Date units remain deferred.
 
 ```js
 db.events.aggregate([
@@ -62,7 +62,7 @@ class DocumentSourceDensify final : public DocumentSource {
 
 - [x] Numeric densification with explicit bounds produces evenly-spaced synthetic documents in gaps.
 - Date densification with `unit` produces correct boundaries (DST handling matches `$dateAdd`).
-- `bounds: "full"`, `"partition"`, and explicit `[min, max]` all work.
+- [x] `bounds: "full"`, `"partition"`, and explicit `[min, max]` all work for numeric input.
 - [x] Empty input under `bounds: [min, max]` produces synthetic docs covering the entire range.
 - [x] Generated docs have only `partitionByFields` + `field`; other fields absent.
 - [x] `partitionByFields` with explicit numeric bounds densifies each sorted partition independently.
@@ -76,13 +76,16 @@ to be sorted ascending by the densified numeric field, preserves real input docu
 synthetic documents containing only the densified field. Explicit bounds allow the stage to emit a
 complete range even when the source collection is empty.
 
-`partitionByFields` is supported for explicit numeric bounds when the upstream input is sorted by
-partition fields and then by the densified field. Synthetic partition documents contain only the
-partition fields and the densified field.
+`partitionByFields` is supported for numeric bounds when the upstream input is sorted by partition
+fields and then by the densified field. Synthetic partition documents contain only the partition
+fields and the densified field.
 
-Deferred semantic differences: MongoDB supports date densification with units and `bounds: "full"`
-/ `"partition"`. EloqDoc currently rejects those forms with a parse error rather than accepting
-partial semantics.
+`bounds: "full"` and `bounds: "partition"` use a buffered numeric path to compute the required
+range before emitting documents. `full` uses the global min/max for every partition; `partition`
+uses each partition's own min/max.
+
+Deferred semantic differences: MongoDB supports date densification with units. EloqDoc currently
+rejects date-unit densification with a parse error rather than accepting partial semantics.
 
 ## Notes from source analyses
 

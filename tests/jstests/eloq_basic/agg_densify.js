@@ -50,6 +50,36 @@ assert.eq([
     {_id: 4, sensor: "b", x: 4},
 ], result);
 
+result = coll.aggregate([
+    {$sort: {sensor: 1, x: 1}},
+    {$densify: {field: "x", partitionByFields: ["sensor"], range: {step: 1, bounds: "partition"}}},
+]).toArray();
+
+assert.eq([
+    {_id: 1, sensor: "a", x: 1},
+    {sensor: "a", x: 2},
+    {_id: 2, sensor: "a", x: 3},
+    {_id: 3, sensor: "b", x: 2},
+    {sensor: "b", x: 3},
+    {_id: 4, sensor: "b", x: 4},
+], result);
+
+result = coll.aggregate([
+    {$sort: {sensor: 1, x: 1}},
+    {$densify: {field: "x", partitionByFields: ["sensor"], range: {step: 1, bounds: "full"}}},
+]).toArray();
+
+assert.eq([
+    {_id: 1, sensor: "a", x: 1},
+    {sensor: "a", x: 2},
+    {_id: 2, sensor: "a", x: 3},
+    {sensor: "a", x: 4},
+    {sensor: "b", x: 1},
+    {_id: 3, sensor: "b", x: 2},
+    {sensor: "b", x: 3},
+    {_id: 4, sensor: "b", x: 4},
+], result);
+
 assert.commandFailed(db.runCommand({
     aggregate: coll.getName(),
     pipeline: [
