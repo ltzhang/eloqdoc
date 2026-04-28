@@ -318,24 +318,8 @@ public:
                 auto aggRequest = uassertStatusOK(
                     AggregationRequest::parseFromBSON(nss, aggregationCommand.getValue()));
                 auto bucketNss = timeseries::makeBucketNamespace(nss);
-                auto bucketPipeline =
-                    timeseries::makeBucketPipeline(collectionOptions, aggRequest.getPipeline());
-                AggregationRequest bucketRequest(bucketNss, bucketPipeline);
-                bucketRequest.setBatchSize(aggRequest.getBatchSize());
-                bucketRequest.setCollation(aggRequest.getCollation());
-                bucketRequest.setHint(aggRequest.getHint());
-                bucketRequest.setLet(aggRequest.getLet());
-                bucketRequest.setRuntimeConstants(aggRequest.getRuntimeConstants());
-                bucketRequest.setComment(aggRequest.getComment());
-                bucketRequest.setExplain(aggRequest.getExplain());
-                bucketRequest.setAllowDiskUse(aggRequest.shouldAllowDiskUse());
-                bucketRequest.setFromMongos(aggRequest.isFromMongos());
-                bucketRequest.setNeedsMerge(aggRequest.needsMerge());
-                bucketRequest.setBypassDocumentValidation(
-                    aggRequest.shouldBypassDocumentValidation());
-                bucketRequest.setMaxTimeMS(aggRequest.getMaxTimeMS());
-                bucketRequest.setReadConcern(aggRequest.getReadConcern());
-                bucketRequest.setUnwrappedReadPref(aggRequest.getUnwrappedReadPref());
+                auto bucketRequest = timeseries::makeBucketAggregationRequest(
+                    bucketNss, collectionOptions, aggRequest);
                 auto bucketCmd = bucketRequest.serializeToCommandObj().toBson();
 
                 ctx.reset();

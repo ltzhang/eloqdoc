@@ -63,6 +63,54 @@ TEST(TimeSeriesQueryTranslator, KeepsUnpackFirstWhenNoBucketPredicateCanBeBuilt)
     ASSERT_BSONOBJ_EQ(fromjson("{$match: {v: 1}}"), pipeline[1]);
 }
 
+TEST(TimeSeriesQueryTranslator, BucketAggregationRequestPreservesOptions) {
+    AggregationRequest request(NamespaceString("db.metrics"), {fromjson("{$match: {v: 1}}")});
+    const auto collation = BSON("locale" << "simple");
+    const auto hint = BSON("v" << 1);
+    const auto letVariables = BSON("threshold" << 5);
+    const auto runtimeConstants = BSON("localNow" << Date_t::fromMillisSinceEpoch(1));
+    const auto readConcern = BSON("level" << "local");
+    const auto readPref = BSON("mode" << "primary");
+
+    request.setBatchSize(7);
+    request.setCollation(collation);
+    request.setHint(hint);
+    request.setLet(letVariables);
+    request.setRuntimeConstants(runtimeConstants);
+    request.setComment("ts-read");
+    request.setExplain(ExplainOptions::Verbosity::kQueryPlanner);
+    request.setAllowDiskUse(true);
+    request.setFromMongos(true);
+    request.setNeedsMerge(true);
+    request.setBypassDocumentValidation(true);
+    request.setMaxTimeMS(123);
+    request.setReadConcern(readConcern);
+    request.setUnwrappedReadPref(readPref);
+
+    const auto bucketRequest = makeBucketAggregationRequest(
+        NamespaceString("db.system.buckets.metrics"), makeOptions(), request);
+
+    ASSERT_EQUALS(NamespaceString("db.system.buckets.metrics"),
+                  bucketRequest.getNamespaceString());
+    ASSERT_EQUALS(7, bucketRequest.getBatchSize());
+    ASSERT_BSONOBJ_EQ(collation, bucketRequest.getCollation());
+    ASSERT_BSONOBJ_EQ(hint, bucketRequest.getHint());
+    ASSERT_BSONOBJ_EQ(letVariables, bucketRequest.getLet());
+    ASSERT_BSONOBJ_EQ(runtimeConstants, bucketRequest.getRuntimeConstants());
+    ASSERT_EQUALS(std::string("ts-read"), bucketRequest.getComment());
+    ASSERT_EQUALS(static_cast<int>(ExplainOptions::Verbosity::kQueryPlanner),
+                  static_cast<int>(*bucketRequest.getExplain()));
+    ASSERT_TRUE(bucketRequest.shouldAllowDiskUse());
+    ASSERT_TRUE(bucketRequest.isFromMongos());
+    ASSERT_TRUE(bucketRequest.needsMerge());
+    ASSERT_TRUE(bucketRequest.shouldBypassDocumentValidation());
+    ASSERT_EQUALS(123U, bucketRequest.getMaxTimeMS());
+    ASSERT_BSONOBJ_EQ(readConcern, bucketRequest.getReadConcern());
+    ASSERT_BSONOBJ_EQ(readPref, bucketRequest.getUnwrappedReadPref());
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"),
+                  bucketRequest.getPipeline()[0].firstElementFieldName());
+}
+
 }  // namespace
 }  // namespace timeseries
 }  // namespace mongo

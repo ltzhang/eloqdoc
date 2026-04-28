@@ -12,12 +12,17 @@
 
 #include "mongo/db/catalog/collection_options.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/namespace_string.h"
+#include "mongo/db/pipeline/aggregation_request.h"
 
 namespace mongo {
 namespace timeseries {
 
 std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
                                         const std::vector<BSONObj>& userPipeline);
+AggregationRequest makeBucketAggregationRequest(const NamespaceString& bucketNss,
+                                                const CollectionOptions& options,
+                                                const AggregationRequest& request);
 
 }  // namespace timeseries
 }  // namespace mongo

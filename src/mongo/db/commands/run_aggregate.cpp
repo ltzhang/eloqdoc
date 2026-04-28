@@ -410,23 +410,8 @@ Status runAggregate(OperationContext* opCtx,
             auto collectionOptions = collection->getCatalogEntry()->getCollectionOptions(opCtx);
             if (collectionOptions.timeseries) {
                 auto bucketNss = timeseries::makeBucketNamespace(nss);
-                auto bucketPipeline =
-                    timeseries::makeBucketPipeline(collectionOptions, request.getPipeline());
-                AggregationRequest bucketRequest(bucketNss, bucketPipeline);
-                bucketRequest.setBatchSize(request.getBatchSize());
-                bucketRequest.setCollation(request.getCollation());
-                bucketRequest.setHint(request.getHint());
-                bucketRequest.setLet(request.getLet());
-                bucketRequest.setRuntimeConstants(request.getRuntimeConstants());
-                bucketRequest.setComment(request.getComment());
-                bucketRequest.setExplain(request.getExplain());
-                bucketRequest.setAllowDiskUse(request.shouldAllowDiskUse());
-                bucketRequest.setFromMongos(request.isFromMongos());
-                bucketRequest.setNeedsMerge(request.needsMerge());
-                bucketRequest.setBypassDocumentValidation(request.shouldBypassDocumentValidation());
-                bucketRequest.setMaxTimeMS(request.getMaxTimeMS());
-                bucketRequest.setReadConcern(request.getReadConcern());
-                bucketRequest.setUnwrappedReadPref(request.getUnwrappedReadPref());
+                auto bucketRequest =
+                    timeseries::makeBucketAggregationRequest(bucketNss, collectionOptions, request);
                 auto bucketCmd = bucketRequest.serializeToCommandObj().toBson();
                 ctx.reset();
                 uassertStatusOK(timeseries::ensureBucketCollection(opCtx, nss));

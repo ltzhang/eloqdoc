@@ -182,5 +182,27 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
     return translated;
 }
 
+AggregationRequest makeBucketAggregationRequest(const NamespaceString& bucketNss,
+                                                const CollectionOptions& options,
+                                                const AggregationRequest& request) {
+    AggregationRequest bucketRequest(bucketNss,
+                                     makeBucketPipeline(options, request.getPipeline()));
+    bucketRequest.setBatchSize(request.getBatchSize());
+    bucketRequest.setCollation(request.getCollation());
+    bucketRequest.setHint(request.getHint());
+    bucketRequest.setLet(request.getLet());
+    bucketRequest.setRuntimeConstants(request.getRuntimeConstants());
+    bucketRequest.setComment(request.getComment());
+    bucketRequest.setExplain(request.getExplain());
+    bucketRequest.setAllowDiskUse(request.shouldAllowDiskUse());
+    bucketRequest.setFromMongos(request.isFromMongos());
+    bucketRequest.setNeedsMerge(request.needsMerge());
+    bucketRequest.setBypassDocumentValidation(request.shouldBypassDocumentValidation());
+    bucketRequest.setMaxTimeMS(request.getMaxTimeMS());
+    bucketRequest.setReadConcern(request.getReadConcern());
+    bucketRequest.setUnwrappedReadPref(request.getUnwrappedReadPref());
+    return bucketRequest;
+}
+
 }  // namespace timeseries
 }  // namespace mongo
