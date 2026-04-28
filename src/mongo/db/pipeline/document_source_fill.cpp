@@ -22,6 +22,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/pipeline/document.h"
 #include "mongo/db/pipeline/document_source.h"
+#include "mongo/db/pipeline/expression.h"
 #include "mongo/db/pipeline/field_path.h"
 #include "mongo/db/pipeline/lite_parsed_document_source.h"
 #include "mongo/db/pipeline/value.h"
@@ -55,11 +56,13 @@ public:
                        std::vector<Rule> rules,
                        BSONObj sortBy,
                        std::vector<FieldPath> partitionByFields,
+                       boost::intrusive_ptr<Expression> partitionByExpression,
                        std::vector<SortField> sortFields)
         : DocumentSource(expCtx),
           _rules(std::move(rules)),
           _sortBy(sortBy.getOwned()),
           _partitionByFields(std::move(partitionByFields)),
+          _partitionByExpression(std::move(partitionByExpression)),
           _sortFields(std::move(sortFields)) {}
 
     GetNextResult getNext() final {
@@ -126,6 +129,9 @@ public:
         }
 
         MutableDocument spec;
+        if (_partitionByExpression) {
+            spec["partitionBy"] = _partitionByExpression->serialize(false);
+        }
         if (!_partitionByFields.empty()) {
             std::vector<Value> fields;
             for (const auto& field : _partitionByFields) {
@@ -154,12 +160,17 @@ public:
         uassert(6789120, "$fill requires an object specification", elem.type() == BSONType::Object);
 
         BSONObj spec = elem.Obj();
-        uassert(6789121,
-                "$fill partitionBy is not supported in this compatibility checkpoint",
-                spec["partitionBy"].eoo());
+        boost::intrusive_ptr<Expression> partitionByExpression;
+        if (auto partitionByElem = spec["partitionBy"]) {
+            VariablesParseState vps = expCtx->variablesParseState;
+            partitionByExpression = Expression::parseOperand(expCtx, partitionByElem, vps);
+        }
 
         std::vector<FieldPath> partitionByFields;
         if (auto partitionElem = spec["partitionByFields"]) {
+            uassert(6789121,
+                    "$fill cannot specify both partitionBy and partitionByFields",
+                    !partitionByExpression);
             uassert(6789122,
                     "$fill partitionByFields must be an array of strings",
                     partitionElem.type() == BSONType::Array);
@@ -230,6 +241,7 @@ public:
                                       std::move(rules),
                                       sortBy,
                                       std::move(partitionByFields),
+                                      std::move(partitionByExpression),
                                       std::move(sortFields));
     }
 
@@ -244,7 +256,7 @@ private:
     }
 
     void resetLocfStateForNewPartition(const Document& input) {
-        if (_partitionByFields.empty()) {
+        if (!hasPartitioning()) {
             return;
         }
 
@@ -262,6 +274,10 @@ private:
     }
 
     Value makePartitionKey(const Document& input) const {
+        if (_partitionByExpression) {
+            return _partitionByExpression->evaluate(input);
+        }
+
         std::vector<Value> key;
         key.reserve(_partitionByFields.size());
         for (const auto& field : _partitionByFields) {
@@ -365,12 +381,12 @@ private:
         for (size_t i = 0; i <= docs->size(); ++i) {
             bool atEnd = i == docs->size();
             Value partitionKey;
-            if (!atEnd && !_partitionByFields.empty()) {
+            if (!atEnd && hasPartitioning()) {
                 partitionKey = makePartitionKey((*docs)[i]);
             }
 
             bool startsNewPartition = atEnd;
-            if (!atEnd && !_partitionByFields.empty()) {
+            if (!atEnd && hasPartitioning()) {
                 startsNewPartition = !havePartition ||
                     pExpCtx->getValueComparator().compare(partitionKey, previousPartitionKey) != 0;
             }
@@ -388,6 +404,10 @@ private:
                 havePartition = !atEnd;
             }
         }
+    }
+
+    bool hasPartitioning() const {
+        return _partitionByExpression || !_partitionByFields.empty();
     }
 
     void loadBufferedOutput() {
@@ -437,6 +457,7 @@ private:
     std::vector<Rule> _rules;
     BSONObj _sortBy;
     std::vector<FieldPath> _partitionByFields;
+    boost::intrusive_ptr<Expression> _partitionByExpression;
     std::vector<SortField> _sortFields;
     bool _havePartition = false;
     Value _currentPartitionKey;

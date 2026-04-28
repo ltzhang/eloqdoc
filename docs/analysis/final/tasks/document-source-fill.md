@@ -31,7 +31,8 @@ Documents must be sorted within each partition; `$fill` does not sort itself (ca
 **Checkpoint status:** streaming fill is implemented for literal `value` replacement and
 `method: "locf"`, including `partitionByFields` state reset and `sortBy` order validation.
 Numeric `method: "linear"` is implemented through a buffered compatibility path.
-`partitionBy` expression support and date interpolation remain deferred.
+`partitionBy` expressions are supported for partition state reset. Date interpolation remains
+deferred.
 
 ## Extension pattern
 
@@ -72,6 +73,7 @@ REGISTER_DOCUMENT_SOURCE(fill, ...);
 - [x] `linear` mode interpolates numerical fields between observations.
 - [x] Literal-value mode replaces nulls with the supplied value.
 - [x] Per-partition state resets between partitions.
+- [x] `partitionBy` expressions reset state between partitions.
 - Date interpolation works (treats Date as numeric milliseconds).
 - [x] Out-of-order input within a partition produces an error.
 - **Test entry point:** `tests/jstests/eloq_basic/agg_fill.js`. Adapt `jstests/aggregation/sources/fill/`.
@@ -82,15 +84,16 @@ Initial support is a streaming stage in `document_source_fill.cpp`. It preserves
 document, replacing missing or null output fields according to either a literal `value` rule or the
 last non-null value seen for `method: "locf"`. When `partitionByFields` is supplied, LOCF state
 resets as the partition key changes in the caller-sorted stream.
+When `partitionBy` is supplied, EloqDoc evaluates the expression against each input document and
+uses the resulting value as the partition key.
 When `sortBy` is supplied, EloqDoc validates that incoming documents are sorted by the declared
 sort keys within each partition and errors on out-of-order input.
 Numeric `linear` rules buffer the source stream, interpolate nullish values between surrounding
 numeric observations by the first numeric `sortBy` field, and leave leading/trailing nullish values
 unchanged.
 
-Deferred semantic differences: MongoDB supports arbitrary `partitionBy` expressions, date
-interpolation, bounded/spilling linear buffers, and broader sort semantics. EloqDoc currently rejects
-`partitionBy` expressions with a parse error and limits `linear` interpolation to numeric sort/value
+Deferred semantic differences: MongoDB supports date interpolation, bounded/spilling linear buffers,
+and broader sort semantics. EloqDoc currently limits `linear` interpolation to numeric sort/value
 fields.
 
 ## Notes from source analyses

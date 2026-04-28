@@ -59,6 +59,27 @@ assert.eq([
     {_id: 5, sensor: "b", ts: 3, temp: 20, status: "unknown"},
 ], result);
 
+result = coll.aggregate([
+    {$sort: {sensor: 1, ts: 1}},
+    {
+        $fill: {
+            partitionBy: "$sensor",
+            sortBy: {ts: 1},
+            output: {
+                temp: {method: "locf"},
+            },
+        }
+    },
+]).toArray();
+
+assert.eq([
+    {_id: 1, sensor: "a", ts: 1, temp: 10},
+    {_id: 2, sensor: "a", ts: 2, temp: 10},
+    {_id: 3, sensor: "b", ts: 1, temp: null},
+    {_id: 4, sensor: "b", ts: 2, temp: 20},
+    {_id: 5, sensor: "b", ts: 3, temp: 20},
+], result);
+
 coll.drop();
 assert.commandWorked(coll.insert([
     {_id: 1, sensor: "a", ts: 1, temp: 10},
