@@ -44,14 +44,21 @@ public:
         Value lastSeen;
     };
 
+    struct SortField {
+        FieldPath field;
+        int direction;
+    };
+
     DocumentSourceFill(const boost::intrusive_ptr<ExpressionContext>& expCtx,
                        std::vector<Rule> rules,
                        BSONObj sortBy,
-                       std::vector<FieldPath> partitionByFields)
+                       std::vector<FieldPath> partitionByFields,
+                       std::vector<SortField> sortFields)
         : DocumentSource(expCtx),
           _rules(std::move(rules)),
           _sortBy(sortBy.getOwned()),
-          _partitionByFields(std::move(partitionByFields)) {}
+          _partitionByFields(std::move(partitionByFields)),
+          _sortFields(std::move(sortFields)) {}
 
     GetNextResult getNext() final {
         pExpCtx->checkForInterrupt();
@@ -63,6 +70,7 @@ public:
 
         auto input = next.releaseDocument();
         resetLocfStateForNewPartition(input);
+        validateSortOrder(input);
 
         MutableDocument output(input);
         for (auto& rule : _rules) {
@@ -149,9 +157,18 @@ public:
         }
 
         BSONObj sortBy;
+        std::vector<SortField> sortFields;
         if (auto sortByElem = spec["sortBy"]) {
             uassert(6789123, "$fill sortBy must be an object", sortByElem.type() == BSONType::Object);
             sortBy = sortByElem.Obj().getOwned();
+            for (auto&& sortElem : sortBy) {
+                uassert(6789131,
+                        "$fill sortBy fields must have direction 1 or -1",
+                        sortElem.isNumber() &&
+                            (sortElem.numberInt() == 1 || sortElem.numberInt() == -1));
+                sortFields.push_back(
+                    {FieldPath(sortElem.fieldNameStringData()), sortElem.numberInt()});
+            }
         }
 
         BSONElement outputElem = spec["output"];
@@ -187,8 +204,11 @@ public:
         }
         uassert(6789129, "$fill requires at least one output field", !rules.empty());
 
-        return new DocumentSourceFill(
-            expCtx, std::move(rules), sortBy, std::move(partitionByFields));
+        return new DocumentSourceFill(expCtx,
+                                      std::move(rules),
+                                      sortBy,
+                                      std::move(partitionByFields),
+                                      std::move(sortFields));
     }
 
 private:
@@ -205,6 +225,8 @@ private:
             }
             _currentPartitionKey = key;
             _havePartition = true;
+            _haveLastSortKey = false;
+            _lastSortKey.clear();
         }
     }
 
@@ -218,11 +240,46 @@ private:
         return Value(std::move(key));
     }
 
+    std::vector<Value> makeSortKey(const Document& input) const {
+        std::vector<Value> key;
+        key.reserve(_sortFields.size());
+        for (const auto& sortField : _sortFields) {
+            key.push_back(input.getNestedField(sortField.field));
+        }
+        return key;
+    }
+
+    void validateSortOrder(const Document& input) {
+        if (_sortFields.empty()) {
+            return;
+        }
+
+        auto key = makeSortKey(input);
+        if (_haveLastSortKey) {
+            const auto& comparator = pExpCtx->getValueComparator();
+            for (size_t i = 0; i < key.size(); ++i) {
+                int cmp = comparator.compare(_lastSortKey[i], key[i]) * _sortFields[i].direction;
+                if (cmp < 0) {
+                    break;
+                }
+                uassert(6789132,
+                        "$fill requires input documents to be sorted by sortBy within each partition",
+                        cmp == 0);
+            }
+        }
+
+        _lastSortKey = std::move(key);
+        _haveLastSortKey = true;
+    }
+
     std::vector<Rule> _rules;
     BSONObj _sortBy;
     std::vector<FieldPath> _partitionByFields;
+    std::vector<SortField> _sortFields;
     bool _havePartition = false;
     Value _currentPartitionKey;
+    bool _haveLastSortKey = false;
+    std::vector<Value> _lastSortKey;
 };
 
 constexpr StringData DocumentSourceFill::kStageName;

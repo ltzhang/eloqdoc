@@ -29,8 +29,8 @@ db.metrics.aggregate([
 Documents must be sorted within each partition; `$fill` does not sort itself (caller responsibility).
 
 **Checkpoint status:** streaming fill is implemented for literal `value` replacement and
-`method: "locf"`, including `partitionByFields` state reset. `linear`, `partitionBy`
-expression support, and sort-order validation remain deferred.
+`method: "locf"`, including `partitionByFields` state reset and `sortBy` order validation.
+`linear` and `partitionBy` expression support remain deferred.
 
 ## Extension pattern
 
@@ -72,7 +72,7 @@ REGISTER_DOCUMENT_SOURCE(fill, ...);
 - [x] Literal-value mode replaces nulls with the supplied value.
 - [x] Per-partition state resets between partitions.
 - Date interpolation works (treats Date as numeric milliseconds).
-- Out-of-order input within a partition produces an error.
+- [x] Out-of-order input within a partition produces an error.
 - **Test entry point:** `tests/jstests/eloq_basic/agg_fill.js`. Adapt `jstests/aggregation/sources/fill/`.
 
 ## Implementation notes
@@ -81,11 +81,12 @@ Initial support is a streaming stage in `document_source_fill.cpp`. It preserves
 document, replacing missing or null output fields according to either a literal `value` rule or the
 last non-null value seen for `method: "locf"`. When `partitionByFields` is supplied, LOCF state
 resets as the partition key changes in the caller-sorted stream.
+When `sortBy` is supplied, EloqDoc validates that incoming documents are sorted by the declared
+sort keys within each partition and errors on out-of-order input.
 
 Deferred semantic differences: MongoDB supports arbitrary `partitionBy` expressions, linear
-interpolation, and stricter sort validation. EloqDoc currently rejects `partitionBy` expressions and
-linear forms with parse errors and trusts the caller-provided stream order for the LOCF/value
-checkpoint.
+interpolation, and broader sort semantics. EloqDoc currently rejects `partitionBy` expressions and
+linear forms with parse errors.
 
 ## Notes from source analyses
 

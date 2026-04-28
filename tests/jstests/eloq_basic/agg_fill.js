@@ -66,3 +66,12 @@ assert.commandFailed(db.runCommand({
     ],
     cursor: {},
 }));
+
+assert.commandFailed(db.runCommand({
+    aggregate: coll.getName(),
+    pipeline: [
+        {$documents: [{ts: 2, temp: 10}, {ts: 1, temp: null}]},
+        {$fill: {sortBy: {ts: 1}, output: {temp: {method: "locf"}}}},
+    ],
+    cursor: {},
+}));
