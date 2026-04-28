@@ -8,6 +8,10 @@
 
 Inserts synthetic documents to fill gaps in a sorted numeric or date sequence. Common use case: dashboards that need a row per minute even when the source data has gaps.
 
+**Checkpoint status:** explicit numeric bounds are implemented for unpartitioned input:
+`{field, range: {step, bounds: [min, max]}}`. Date units, `bounds: "full"`,
+`bounds: "partition"`, and `partitionByFields` remain deferred.
+
 ```js
 db.events.aggregate([
   { $densify: {
@@ -55,13 +59,24 @@ class DocumentSourceDensify final : public DocumentSource {
 
 ## Acceptance criteria
 
-- Numeric densification produces evenly-spaced synthetic documents in gaps.
+- [x] Numeric densification with explicit bounds produces evenly-spaced synthetic documents in gaps.
 - Date densification with `unit` produces correct boundaries (DST handling matches `$dateAdd`).
 - `bounds: "full"`, `"partition"`, and explicit `[min, max]` all work.
-- Empty input under `bounds: [min, max]` produces synthetic docs covering the entire range.
-- Generated docs have only `partitionByFields` + `field`; other fields absent.
-- Out-of-order input fails with a clear error.
+- [x] Empty input under `bounds: [min, max]` produces synthetic docs covering the entire range.
+- [x] Generated docs have only `partitionByFields` + `field`; other fields absent.
+- [x] Out-of-order input fails with a clear error.
 - **Test entry point:** `tests/jstests/eloq_basic/agg_densify.js`. Adapt `jstests/aggregation/sources/densify/`.
+
+## Implementation notes
+
+Initial support is a streaming stage in `document_source_densify.cpp`. It requires upstream input
+to be sorted ascending by the densified numeric field, preserves real input documents, and emits
+synthetic documents containing only the densified field. Explicit bounds allow the stage to emit a
+complete range even when the source collection is empty.
+
+Deferred semantic differences: MongoDB supports date densification with units, partitioned
+densification, and `bounds: "full"` / `"partition"`. EloqDoc currently rejects those forms with a
+parse error rather than accepting partial semantics.
 
 ## Notes from source analyses
 
