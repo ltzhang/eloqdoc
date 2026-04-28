@@ -23,11 +23,12 @@ The planner must recognize that any predicate on an indexed field path can use t
 - Subtree wildcards (`field.$**`).
 - Planner integration for predicates on individual fields.
 
-**Implementation status: first storage slice landed.** EloqDoc now accepts single-field
-`{"$**": 1}` and subtree wildcard key patterns, instantiates a wildcard access method, and
-maintains recursive leaf-path index entries through insert/update/delete and validation. This
-matches the recommended sequencing below: query planner integration is intentionally not wired yet,
-so ordinary predicates continue to use existing collection-scan planning.
+**Implementation status: storage slice landed.** EloqDoc now accepts single-field
+`{"$**": 1}` and subtree wildcard key patterns, accepts `wildcardProjection` inclusion/exclusion
+documents, instantiates a wildcard access method, and maintains recursive leaf-path index entries
+through insert/update/delete and validation. This matches the recommended sequencing below: query
+planner integration is intentionally not wired yet, so ordinary predicates continue to use existing
+collection-scan planning.
 
 **Out of scope (Tier 3 — see [`compound-wildcard-indexes.md`](./compound-wildcard-indexes.md)):**
 - Compound wildcard indexes (one component is wildcard, others are concrete).
@@ -98,10 +99,8 @@ class WildcardAccessMethod final : public IndexAccessMethod {
 ### Remaining work after first storage slice
 
 - Add planner/index-bounds support so predicates can use wildcard indexes as IXSCAN candidates.
-- Implement and test `wildcardProjection` inclusion/exclusion semantics. The first slice rejects
-  `wildcardProjection` instead of silently ignoring it.
-- Broaden jstest coverage for subtree wildcards, projection validation, multikey arrays, and
-  explain output once planner integration lands.
+- Broaden jstest coverage for subtree wildcards, multikey arrays, and explain output once planner
+  integration lands.
 
 ## Notes from source analyses
 

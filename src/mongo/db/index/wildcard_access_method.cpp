@@ -15,7 +15,10 @@ namespace mongo {
 WildcardAccessMethod::WildcardAccessMethod(IndexCatalogEntry* btreeState,
                                            SortedDataInterface* btree)
     : IndexAccessMethod(btreeState, btree),
-      _keyGenerator(new WildcardKeyGenerator(_descriptor->keyPattern())) {
+      _keyGenerator(new WildcardKeyGenerator(
+          _descriptor->keyPattern(),
+          _descriptor->infoObj()
+              .getObjectField(IndexDescriptor::kWildcardProjectionFieldName.toString()))) {
     uassert(6789100,
             "Currently only single-field wildcard indexes are supported.",
             _descriptor->getNumFields() == 1);

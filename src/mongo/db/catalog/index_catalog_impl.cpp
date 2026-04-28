@@ -694,8 +694,28 @@ Status IndexCatalogImpl::_isSpecOk(OperationContext* opCtx, const BSONObj& spec)
             return Status(ErrorCodes::CannotCreateIndex,
                           "\"wildcardProjection\" is only valid for wildcard indexes");
         }
-        return Status(ErrorCodes::CannotCreateIndex,
-                      "\"wildcardProjection\" is not supported by this wildcard index slice");
+        if (wildcardProjectionElement.type() != BSONType::Object) {
+            return Status(ErrorCodes::CannotCreateIndex,
+                          "\"wildcardProjection\" must be an object");
+        }
+
+        bool sawInclusion = false;
+        bool sawExclusion = false;
+        for (const BSONElement& projectionElem : wildcardProjectionElement.Obj()) {
+            if (!projectionElem.isNumber() && projectionElem.type() != BSONType::Bool) {
+                return Status(ErrorCodes::CannotCreateIndex,
+                              "\"wildcardProjection\" entries must be numeric or boolean");
+            }
+
+            const bool include = projectionElem.trueValue();
+            sawInclusion = sawInclusion || include;
+            sawExclusion = sawExclusion || !include;
+        }
+
+        if (sawInclusion && sawExclusion) {
+            return Status(ErrorCodes::CannotCreateIndex,
+                          "\"wildcardProjection\" cannot mix inclusion and exclusion fields");
+        }
     }
 
     // Ensure if there is a filter, its valid.

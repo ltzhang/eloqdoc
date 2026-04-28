@@ -22,9 +22,19 @@ std::string joinPath(const std::string& prefix, StringData fieldName) {
     }
     return prefix + "." + fieldName.toString();
 }
+
+bool pathIsOrHasPrefix(StringData path, StringData prefix) {
+    return path == prefix || (path.size() > prefix.size() && path.startsWith(prefix) &&
+                              path[prefix.size()] == '.');
+}
+
+bool pathCanContainProjection(StringData path, StringData projectionPath) {
+    return pathIsOrHasPrefix(path, projectionPath) || pathIsOrHasPrefix(projectionPath, path);
+}
 }  // namespace
 
-WildcardKeyGenerator::WildcardKeyGenerator(const BSONObj& keyPattern) {
+WildcardKeyGenerator::WildcardKeyGenerator(const BSONObj& keyPattern,
+                                           const BSONObj& wildcardProjection) {
     invariant(keyPattern.nFields() == 1);
 
     const BSONElement elem = keyPattern.firstElement();
@@ -34,6 +44,21 @@ WildcardKeyGenerator::WildcardKeyGenerator(const BSONObj& keyPattern) {
     } else {
         invariant(fieldName.endsWith(kWildcardSuffix));
         _rootPath = fieldName.substr(0, fieldName.size() - kWildcardSuffix.size()).toString();
+    }
+
+    if (!wildcardProjection.isEmpty()) {
+        _hasProjection = true;
+
+        bool sawInclusion = false;
+        bool sawExclusion = false;
+        for (const BSONElement& projectionElem : wildcardProjection) {
+            const bool include = projectionElem.trueValue();
+            sawInclusion = sawInclusion || include;
+            sawExclusion = sawExclusion || !include;
+            _projectionPaths.push_back(projectionElem.fieldName());
+        }
+
+        _includeProjection = sawInclusion && !sawExclusion;
     }
 }
 
@@ -63,6 +88,9 @@ void WildcardKeyGenerator::traverseObject(const BSONObj& obj,
     for (const BSONElement& elem : obj) {
         std::string childPath = joinPath(path, elem.fieldNameStringData());
         if (childPath == "_id") {
+            continue;
+        }
+        if (!shouldDescendIntoPath(childPath)) {
             continue;
         }
         traverseElement(elem, childPath, keys, multikeyPaths);
@@ -100,10 +128,60 @@ void WildcardKeyGenerator::traverseElement(const BSONElement& elem,
 void WildcardKeyGenerator::addKey(const std::string& path,
                                   const BSONElement& elem,
                                   BSONObjSet* keys) const {
+    if (!shouldIndexLeafPath(path)) {
+        return;
+    }
+
     BSONObjBuilder builder;
     builder.append("", path);
     builder.appendAs(elem, "");
     keys->insert(builder.obj());
+}
+
+bool WildcardKeyGenerator::shouldDescendIntoPath(const std::string& path) const {
+    if (!_hasProjection) {
+        return true;
+    }
+
+    StringData pathData(path);
+    if (_includeProjection) {
+        for (const auto& projectionPath : _projectionPaths) {
+            if (pathCanContainProjection(pathData, projectionPath)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    for (const auto& projectionPath : _projectionPaths) {
+        if (pathIsOrHasPrefix(pathData, projectionPath)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool WildcardKeyGenerator::shouldIndexLeafPath(const std::string& path) const {
+    if (!_hasProjection) {
+        return true;
+    }
+
+    StringData pathData(path);
+    if (_includeProjection) {
+        for (const auto& projectionPath : _projectionPaths) {
+            if (pathIsOrHasPrefix(pathData, projectionPath)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    for (const auto& projectionPath : _projectionPaths) {
+        if (pathIsOrHasPrefix(pathData, projectionPath)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 }  // namespace mongo

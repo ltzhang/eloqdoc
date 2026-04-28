@@ -9,6 +9,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "mongo/bson/bsonobj_comparator_interface.h"
 #include "mongo/db/index/multikey_paths.h"
@@ -22,7 +23,7 @@ namespace mongo {
  */
 class WildcardKeyGenerator {
 public:
-    explicit WildcardKeyGenerator(const BSONObj& keyPattern);
+    WildcardKeyGenerator(const BSONObj& keyPattern, const BSONObj& wildcardProjection);
 
     void getKeys(const BSONObj& obj, BSONObjSet* keys, MultikeyPaths* multikeyPaths) const;
 
@@ -36,8 +37,13 @@ private:
                          BSONObjSet* keys,
                          MultikeyPaths* multikeyPaths) const;
     void addKey(const std::string& path, const BSONElement& elem, BSONObjSet* keys) const;
+    bool shouldDescendIntoPath(const std::string& path) const;
+    bool shouldIndexLeafPath(const std::string& path) const;
 
     std::string _rootPath;
+    bool _hasProjection = false;
+    bool _includeProjection = false;
+    std::vector<std::string> _projectionPaths;
 };
 
 }  // namespace mongo
