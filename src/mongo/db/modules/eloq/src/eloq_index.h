@@ -121,6 +121,10 @@ private:
                                        const std::vector<BSONObj>& keys,
                                        const RecordId& currentRecordId);
 
+    Status _checkPreparedUniqueDuplicateKeys(OperationContext* opCtx,
+                                             const std::vector<BSONObj>& keys,
+                                             const RecordId& currentRecordId);
+
 protected:
     class BulkBuilder;
     class IdBulkBuilder;

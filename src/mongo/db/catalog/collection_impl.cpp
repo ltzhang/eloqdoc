@@ -732,7 +732,7 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
                 continue;
             }
 
-            if (!descriptor->unique()) {
+            if (!descriptor->unique() && !descriptor->prepareUnique()) {
                 continue;
             }
 

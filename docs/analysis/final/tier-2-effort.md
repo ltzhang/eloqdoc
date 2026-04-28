@@ -73,7 +73,7 @@ The two index-related tasks are independent and high-leverage. Wildcard indexes 
 | - | ---- | ------- | ------ | ---- |
 | 1 | Hidden indexes | catalog + planner | 2 w | [hidden-indexes.md](./tasks/hidden-indexes.md) |
 | 2 | Wildcard indexes (4.2 catch-up) | E (index) | 4–6 w | [wildcard-indexes.md](./tasks/wildcard-indexes.md) |
-| 3 | `prepareUnique` workflow | catalog + write path | 2–3 w | [prepareunique-workflow.md](./tasks/prepareunique-workflow.md) |
+| 3 | `prepareUnique` workflow | catalog + write path partial; conversion pending storage design | 2–3 w | [prepareunique-workflow.md](./tasks/prepareunique-workflow.md) |
 | 4 | `let` / `runtimeConstants` | command framework + executor | 1–2 w | [let-runtime-constants.md](./tasks/let-runtime-constants.md) |
 | 5 | `update.hint`, `delete.hint` | planner enforcement | 1 w | [update-delete-hint.md](./tasks/update-delete-hint.md) |
 | 6 | `find.allowDiskUse` | executor | 2–3 w | [allowdiskuse-find.md](./tasks/allowdiskuse-find.md) |

@@ -18,12 +18,14 @@ db.runCommand({collMod: "c", index: {keyPattern: {email: 1}, prepareUnique: true
 db.runCommand({collMod: "c", index: {keyPattern: {email: 1}, unique: true}})
 ```
 
-**Implementation status: first catalog slice landed.** EloqDoc now persists a
+**Implementation status: catalog plus write-path slice landed.** EloqDoc now persists a
 `prepareUnique` flag on index specs, exposes it through `listIndexes`, and supports setting or
-clearing it through `collMod` by index name or key pattern. The write-path duplicate enforcement
-and `collMod unique: true` conversion are intentionally left for the next slice because Eloq
-standard secondary keys include the record id, so duplicate probing needs a prefix/range check
-rather than the existing unique-index exact-key check.
+clearing it through `collMod` by index name or key pattern. New inserts and updates that would
+create a duplicate are rejected while the flag is set, using a prefix seek because Eloq standard
+secondary keys include the record id. The `collMod unique: true` conversion is intentionally left
+for a storage-side slice: Eloq derives physical table name/type from `desc->unique()`, so a simple
+catalog flip would make the refreshed descriptor point at the unique-index table while the existing
+prepared index remains stored as a standard secondary index.
 
 ## Extension pattern
 
@@ -67,7 +69,8 @@ if (descriptor->prepareUnique() || descriptor->unique()) {
 ## Acceptance criteria
 
 - [x] `collMod` with `prepareUnique: true` succeeds.
-- [ ] Subsequent inserts that would dup fail with `DuplicateKey`; existing dup-bearing reads still succeed.
+- [x] Subsequent inserts that would dup fail with `DuplicateKey`; existing dup-bearing reads still succeed.
+- [x] Subsequent updates that would dup fail with `DuplicateKey`.
 - [ ] `collMod` with `unique: true` and a clean collection succeeds and flips the flag.
 - [ ] `collMod` with `unique: true` on a collection with existing duplicates fails with `DuplicateKey` and does NOT flip.
 - [x] `listIndexes` reflects intermediate state.
@@ -82,10 +85,13 @@ place, and `collMod` refreshes the in-memory index descriptor after the metadata
 `prepareUnique: false` removes the field from the spec so `listIndexes` returns to the normal
 non-unique shape.
 
-The next implementation slice should add duplicate detection for prepared indexes on insert and
-update. Reusing the current unique-index exact-key check is not sufficient for Eloq standard
-secondary indexes because their stored key includes the record id; prepared uniqueness needs to
-scan or seek the key-prefix range and ignore the current record during updates.
+Prepared-index duplicate detection is wired through the insert and in-place update paths. Reusing
+the current unique-index exact-key check is not sufficient for Eloq standard secondary indexes
+because their stored key includes the record id; prepared uniqueness uses a key-prefix seek and
+ignores the current record during updates.
+
+The remaining conversion slice needs a storage design for logical uniqueness on a physically
+standard secondary index, or a safe in-place physical migration to the unique index table/type.
 
 ## Notes from source analyses
 

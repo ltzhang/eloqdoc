@@ -912,10 +912,34 @@ Status EloqIndex::_checkDuplicateKeysInternal(OperationContext* opCtx,
     return Status::OK();
 }
 
+Status EloqIndex::_checkPreparedUniqueDuplicateKeys(OperationContext* opCtx,
+                                                    const std::vector<BSONObj>& keys,
+                                                    const RecordId& currentRecordId) {
+    BSONObjSet batchKeys = SimpleBSONObjComparator::kInstance.makeBSONObjSet();
+    for (const BSONObj& key : keys) {
+        if (batchKeys.find(key) != batchKeys.end()) {
+            return {ErrorCodes::DuplicateKey, "DuplicateKey"};
+        }
+        batchKeys.insert(key.getOwned());
+
+        auto cursor = newCursor(opCtx, true);
+        auto entry = cursor->seek(key, true);
+        while (entry &&
+               SimpleBSONObjComparator::kInstance.evaluate(entry->key == key)) {
+            if (currentRecordId.isNull() || entry->loc != currentRecordId) {
+                return {ErrorCodes::DuplicateKey, "DuplicateKey"};
+            }
+            entry = cursor->next();
+        }
+    }
+
+    return Status::OK();
+}
+
 Status EloqIndex::batchCheckDuplicateKey(OperationContext* opCtx,
                                          const std::vector<const BSONObj*>& bsonObjPtrs) {
-    // Default implementation: only check for unique indexes
-    if (!unique()) {
+    // Default implementation: only check indexes with a uniqueness constraint.
+    if (!unique() && !_desc->prepareUnique()) {
         return Status::OK();
     }
 
@@ -943,6 +967,10 @@ Status EloqIndex::batchCheckDuplicateKey(OperationContext* opCtx,
         }
     }
 
+    if (_desc->prepareUnique() && !unique()) {
+        return _checkPreparedUniqueDuplicateKeys(opCtx, allKeys, RecordId());
+    }
+
     // Use the internal helper method with null RecordId (for insert operations)
     return _checkDuplicateKeysInternal(opCtx, allKeys, RecordId());
 }
@@ -950,9 +978,13 @@ Status EloqIndex::batchCheckDuplicateKey(OperationContext* opCtx,
 Status EloqIndex::checkDuplicateKeysForUpdate(OperationContext* opCtx,
                                               const std::vector<BSONObj>& addedKeys,
                                               const RecordId& currentRecordId) {
-    // Only check for unique indexes
-    if (!unique()) {
+    // Only check indexes with a uniqueness constraint.
+    if (!unique() && !_desc->prepareUnique()) {
         return Status::OK();
+    }
+
+    if (_desc->prepareUnique() && !unique()) {
+        return _checkPreparedUniqueDuplicateKeys(opCtx, addedKeys, currentRecordId);
     }
 
     // Reuse the internal helper method with currentRecordId (for update operations)

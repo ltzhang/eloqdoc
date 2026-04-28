@@ -1493,8 +1493,8 @@ Status IndexCatalogImpl::batchCheckDuplicateKey(OperationContext* opCtx,
         }
 
         IndexDescriptor* desc = entry->descriptor();
-        if (!desc->unique()) {
-            continue;  // Only check unique indexes
+        if (!desc->unique() && !desc->prepareUnique()) {
+            continue;  // Only check uniqueness-constrained indexes
         }
 
         IndexAccessMethod* accessMethod = entry->accessMethod();
