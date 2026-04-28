@@ -56,6 +56,8 @@
 #include "mongo/db/query/internal_plans.h"
 #include "mongo/db/repl/replication_coordinator.h"
 #include "mongo/db/server_parameters.h"
+#include "mongo/db/timeseries/timeseries_namespace.h"
+#include "mongo/db/timeseries/timeseries_options.h"
 #include "mongo/db/ttl_collection_cache.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/idle_thread_block.h"
@@ -119,6 +121,12 @@ public:
     }
 
 private:
+    struct TimeseriesTTLCollection {
+        NamespaceString logicalNss;
+        timeseries::TimeseriesOptions options;
+        long long expireAfterSeconds = 0;
+    };
+
     void doTTLPass() {
         const ServiceContext::UniqueOperationContext opCtxPtr = cc().makeOperationContext();
         OperationContext& opCtx = *opCtxPtr;
@@ -145,6 +153,7 @@ private:
         }
 
         std::vector<BSONObj> ttlIndexes;
+        std::vector<TimeseriesTTLCollection> timeseriesTTLCollections;
 
         ttlPasses.increment();
 
@@ -161,6 +170,12 @@ private:
             }
 
             CollectionCatalogEntry* collEntry = coll->getCatalogEntry();
+            auto collectionOptions = collEntry->getCollectionOptions(&opCtx);
+            if (collectionOptions.timeseries && collectionOptions.expireAfterSeconds) {
+                timeseriesTTLCollections.push_back(TimeseriesTTLCollection{
+                    collectionNSS, *collectionOptions.timeseries, *collectionOptions.expireAfterSeconds});
+            }
+
             std::vector<std::string> indexNames;
             collEntry->getAllIndexes(&opCtx, &indexNames);
             for (const std::string& name : indexNames) {
@@ -192,6 +207,86 @@ private:
                 continue;
             }
         }
+
+        for (const auto& collection : timeseriesTTLCollections) {
+            try {
+                long long before;
+                const int limits = 1000;
+                do {
+                    before = ttlDeletedDocuments;
+                    auto begin_time = Date_t::now();
+                    WriteUnitOfWork wuow(&opCtx);
+                    doTTLForTimeseriesCollection(&opCtx,
+                                                 collection.logicalNss,
+                                                 collection.options,
+                                                 collection.expireAfterSeconds,
+                                                 limits);
+                    wuow.commit();
+                    auto end_time = Date_t::now();
+                    LOG(1) << "TTL pass deleted " << (ttlDeletedDocuments - before)
+                           << " time-series buckets from " << collection.logicalNss.ns() << " in "
+                           << (end_time - begin_time).count() << " ms";
+                } while (ttlDeletedDocuments - before >= limits);
+            } catch (const DBException& dbex) {
+                error() << "Error processing time-series ttl collection "
+                        << collection.logicalNss.ns() << " -- " << dbex.toString();
+                continue;
+            }
+        }
+    }
+
+    void doTTLForTimeseriesCollection(OperationContext* opCtx,
+                                      const NamespaceString& logicalNss,
+                                      const timeseries::TimeseriesOptions& options,
+                                      long long expireAfterSeconds,
+                                      int limit) {
+        (void)limit;
+
+        const NamespaceString bucketNss = timeseries::makeBucketNamespace(logicalNss);
+        if (bucketNss.isDropPendingNamespace()) {
+            return;
+        }
+
+        LOG(1) << "time-series ttl ns: " << logicalNss << " bucket ns: " << bucketNss;
+
+        AutoGetCollection autoGetCollection(opCtx, bucketNss, MODE_IX);
+        Collection* collection = autoGetCollection.getCollection();
+        if (!collection) {
+            return;
+        }
+
+        if (!repl::ReplicationCoordinator::get(opCtx)->canAcceptWritesFor(opCtx, bucketNss)) {
+            return;
+        }
+
+        const Date_t expirationTime = Date_t::now() - Seconds(expireAfterSeconds);
+        BSONObjBuilder queryBuilder;
+        queryBuilder.append(str::stream() << "control.max." << options.timeField,
+                            BSON("$lt" << expirationTime));
+        BSONObj query = queryBuilder.obj();
+
+        auto qr = ObjectPool<QueryRequest>::newObject(bucketNss);
+        qr->setFilter(query);
+        auto canonicalQuery = CanonicalQuery::canonicalize(opCtx, std::move(qr));
+        invariant(canonicalQuery.getStatus());
+
+        DeleteStageParams params;
+        params.isMulti = true;
+        params.canonicalQuery = canonicalQuery.getValue().get();
+
+        auto exec = InternalPlanner::deleteWithCollectionScan(
+            opCtx, collection, params, PlanExecutor::INTERRUPT_ONLY);
+
+        Status result = exec->executePlan();
+        if (!result.isOK()) {
+            error() << "time-series ttl query execution for " << logicalNss
+                    << " failed with status: " << redact(result);
+            return;
+        }
+
+        const long long numDeleted = DeleteStage::getNumDeleted(*exec);
+        ttlDeletedDocuments.increment(numDeleted);
+        LOG(1) << "deleted time-series buckets: " << numDeleted;
     }
 
     /**

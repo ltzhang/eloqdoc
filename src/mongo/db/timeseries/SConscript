@@ -1,0 +1,58 @@
+# -*- mode: python; -*-
+
+Import("env")
+
+env = env.Clone()
+
+env.Library(
+    target='timeseries_options',
+    source=[
+        'timeseries_options.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/base',
+    ],
+)
+
+env.Library(
+    target='timeseries_namespace',
+    source=[
+        'timeseries_namespace.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/db/namespace_string',
+    ],
+)
+
+env.Library(
+    target='bucket_catalog',
+    source=[
+        'bucket_catalog.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/base',
+        '$BUILD_DIR/mongo/db/namespace_string',
+    ],
+)
+
+env.Library(
+    target='insert_router',
+    source=[
+        'insert_router.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/db/catalog/collection_options',
+        '$BUILD_DIR/mongo/db/repl/oplog',
+        'bucket_catalog',
+    ],
+)
+
+env.Library(
+    target='query_translator',
+    source=[
+        'query_translator.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/db/catalog/collection_options',
+    ],
+)

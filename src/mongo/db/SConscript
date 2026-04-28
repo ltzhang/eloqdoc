@@ -34,6 +34,7 @@ env.SConscript(
         'sorter',
         'stats',
         'storage',
+        'timeseries',
         'update',
         'views',
     ],
@@ -927,6 +928,7 @@ env.Library(
     LIBDEPS=[
         'db_raii',
         'query_exec',
+        'timeseries/timeseries_namespace',
         'ttl_collection_cache',
     ],
     LIBDEPS_PRIVATE=[

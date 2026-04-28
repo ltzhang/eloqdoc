@@ -44,6 +44,7 @@
 #include "mongo/db/operation_context.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/repl/replication_coordinator.h"
+#include "mongo/db/timeseries/timeseries_namespace.h"
 #include "mongo/logger/redaction.h"
 #include "mongo/util/log.h"
 
@@ -86,6 +87,9 @@ Status createCollection(OperationContext* opCtx,
             "specify size:<n> when capped is true",
             !options["capped"].trueValue() || options["size"].isNumber() ||
                 options.hasField("$nExtents"));
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series collections cannot be created under system.buckets",
+            !options["timeseries"] || !timeseries::isBucketNamespace(nss));
 
     return writeConflictRetry(opCtx, "create", nss.ns(), [&] {
         Lock::DBLock dbXLock(opCtx, nss.db(), MODE_X);
@@ -101,6 +105,11 @@ Status createCollection(OperationContext* opCtx,
         Status status = collectionOptions.parse(options, kind);
         if (!status.isOK()) {
             return status;
+        }
+
+        boost::optional<NamespaceString> bucketNss;
+        if (collectionOptions.timeseries) {
+            bucketNss = timeseries::makeBucketNamespace(nss);
         }
 
         if (collectionOptions.isView()) {
@@ -120,6 +129,16 @@ Status createCollection(OperationContext* opCtx,
 
         if (!status.isOK()) {
             return status;
+        }
+
+        if (bucketNss && !ctx.db()->getCollection(opCtx, *bucketNss, true)) {
+            CollectionOptions bucketOptions;
+            bucketOptions.autoIndexId = CollectionOptions::NO;
+            Collection* bucketCollection =
+                ctx.db()->createCollection(opCtx, bucketNss->ns(), bucketOptions, false, BSONObj());
+            uassert(ErrorCodes::OperationFailed,
+                    str::stream() << "failed to create bucket collection " << bucketNss->ns(),
+                    bucketCollection);
         }
 
         wunit.commit();

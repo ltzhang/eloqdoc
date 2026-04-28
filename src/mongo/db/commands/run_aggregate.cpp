@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/catalog/collection_catalog_entry.h"
 #include "mongo/db/catalog/database.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/db_raii.h"
@@ -62,6 +63,8 @@
 #include "mongo/db/service_context.h"
 #include "mongo/db/session_catalog.h"
 #include "mongo/db/storage/storage_options.h"
+#include "mongo/db/timeseries/query_translator.h"
+#include "mongo/db/timeseries/timeseries_namespace.h"
 #include "mongo/db/views/view.h"
 #include "mongo/db/views/view_catalog.h"
 #include "mongo/stdx/memory.h"
@@ -401,6 +404,33 @@ Status runAggregate(OperationContext* opCtx,
         // resolve the collator to either the user-specified collation or the collection default.
         if (!collatorToUse) {
             collatorToUse.emplace(resolveCollator(opCtx, request, collection));
+        }
+
+        if (collection) {
+            auto collectionOptions = collection->getCatalogEntry()->getCollectionOptions(opCtx);
+            if (collectionOptions.timeseries) {
+                auto bucketNss = timeseries::makeBucketNamespace(nss);
+                auto bucketPipeline =
+                    timeseries::makeBucketPipeline(collectionOptions, request.getPipeline());
+                AggregationRequest bucketRequest(bucketNss, bucketPipeline);
+                bucketRequest.setBatchSize(request.getBatchSize());
+                bucketRequest.setCollation(request.getCollation());
+                bucketRequest.setHint(request.getHint());
+                bucketRequest.setLet(request.getLet());
+                bucketRequest.setRuntimeConstants(request.getRuntimeConstants());
+                bucketRequest.setComment(request.getComment());
+                bucketRequest.setExplain(request.getExplain());
+                bucketRequest.setAllowDiskUse(request.shouldAllowDiskUse());
+                bucketRequest.setFromMongos(request.isFromMongos());
+                bucketRequest.setNeedsMerge(request.needsMerge());
+                bucketRequest.setBypassDocumentValidation(request.shouldBypassDocumentValidation());
+                bucketRequest.setMaxTimeMS(request.getMaxTimeMS());
+                bucketRequest.setReadConcern(request.getReadConcern());
+                bucketRequest.setUnwrappedReadPref(request.getUnwrappedReadPref());
+                auto bucketCmd = bucketRequest.serializeToCommandObj().toBson();
+                ctx.reset();
+                return runAggregate(opCtx, bucketNss, bucketRequest, bucketCmd, result);
+            }
         }
 
         // If this is a view, resolve it by finding the underlying collection and stitching view

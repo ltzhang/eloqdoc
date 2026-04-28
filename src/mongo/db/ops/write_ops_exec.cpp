@@ -36,6 +36,7 @@
 #include "mongo/db/audit.h"
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/catalog/collection.h"
+#include "mongo/db/catalog/collection_catalog_entry.h"
 #include "mongo/db/catalog/collection_options.h"
 #include "mongo/db/catalog/database_holder.h"
 #include "mongo/db/catalog/document_validation.h"
@@ -68,6 +69,8 @@
 #include "mongo/db/session_catalog.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/stats/top.h"
+#include "mongo/db/timeseries/insert_router.h"
+#include "mongo/db/timeseries/timeseries_namespace.h"
 #include "mongo/db/write_concern.h"
 #include "mongo/rpc/get_status_from_command_result.h"
 #include "mongo/s/cannot_implicitly_create_collection_info.h"
@@ -444,6 +447,36 @@ bool insertBatchAndHandleErrors(OperationContext* opCtx,
 
     try {
         acquireCollection();
+        auto collectionOptions =
+            collection->getCollection()->getCatalogEntry()->getCollectionOptions(opCtx);
+        if (collectionOptions.timeseries) {
+            std::vector<InsertStatement> bucketBatch;
+            uassertStatusOK(timeseries::routeInsert(
+                wholeOp.getNamespace(), collectionOptions, batch, &bucketBatch));
+
+            const auto bucketNss = timeseries::makeBucketNamespace(wholeOp.getNamespace());
+            boost::optional<AutoGetCollection> bucketCollection;
+            bucketCollection.emplace(opCtx, bucketNss, MODE_IX);
+            uassert(ErrorCodes::NamespaceNotFound,
+                    str::stream() << "missing time-series bucket collection " << bucketNss.ns(),
+                    bucketCollection->getCollection());
+
+            lastOpFixer->startingOp();
+            insertDocuments(opCtx,
+                            bucketCollection->getCollection(),
+                            bucketBatch.begin(),
+                            bucketBatch.end(),
+                            fromMigrate);
+            lastOpFixer->finishedOpSuccessfully();
+            globalOpCounters.gotInserts(bucketBatch.size());
+
+            SingleWriteResult result;
+            result.setN(1);
+            std::fill_n(std::back_inserter(out->results), batch.size(), std::move(result));
+            curOp.debug().additiveMetrics.incrementNinserted(batch.size());
+            return true;
+        }
+
         if (!collection->getCollection()->isCapped() && batch.size() > 1) {
             // First try doing it all together. If all goes well, this is all we need to do.
             // See Collection::_insertDocuments for why we do all capped inserts one-at-a-time.

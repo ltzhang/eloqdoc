@@ -90,6 +90,22 @@ This crosses many patterns: G (collection option), A (TTL command/background-tas
 - `$_internalUnpackBucket` stage transforms bucket documents to measurement documents.
 - **Test entry point:** `tests/jstests/eloq_basic/timeseries/`. Adapt `jstests/core/timeseries/`.
 
+## Tier 2 MVP implementation notes
+
+The current Tier 2 implementation deliberately keeps several compatibility and performance items
+out of scope for the first working slice:
+
+- `system.buckets.<collection>` is created as an ordinary collection. Clustered bucket storage is
+  deferred until clustered collection support is available in this tree.
+- Bucket packing is conservative. The first implementation favors correctness and simple routing
+  over reopening and appending to large existing buckets.
+- Logical `find` and `aggregate` operations translate to an aggregation over the bucket collection
+  with `$_internalUnpackBucket`; native find executor unpacking is a later optimization.
+- TTL is bucket-level only and deletes entire buckets whose `control.max.<timeField>` is expired
+  by the collection-level `expireAfterSeconds` option.
+- Explain output can expose `system.buckets.<collection>` until a later compatibility pass rewrites
+  explain results back to the logical time-series namespace.
+
 ## Notes from source analyses
 
 **Source agreement.** All three analyses split this 2/3 way: `cc` and `5.5` explicitly call out "basic ⟶ Tier 2; full parity ⟶ Tier 3". `5.4` rates "Tier 3" overall but acknowledges the basic path is feasible.

@@ -203,6 +203,21 @@ Status CollectionOptions::parse(const BSONObj& options, ParseKind kind) {
             }
             changeStreamPreAndPostImages = ChangeStreamPreAndPostImagesOptions{};
             changeStreamPreAndPostImages->enabled = enabledElem.Bool();
+        } else if (fieldName == "timeseries") {
+            timeseries::TimeseriesOptions parsed;
+            Status status = timeseries::parseTimeseriesOptions(e, &parsed);
+            if (!status.isOK()) {
+                return status;
+            }
+            timeseries = parsed;
+        } else if (fieldName == "expireAfterSeconds") {
+            if (!e.isNumber()) {
+                return {ErrorCodes::TypeMismatch, "'expireAfterSeconds' has to be numeric."};
+            }
+            if (e.numberLong() < 0) {
+                return {ErrorCodes::BadValue, "'expireAfterSeconds' must be non-negative."};
+            }
+            expireAfterSeconds = e.numberLong();
         } else if (fieldName == "storageEngine") {
             Status status = checkStorageEngineOptions(e);
             if (!status.isOK()) {
@@ -293,6 +308,11 @@ Status CollectionOptions::parse(const BSONObj& options, ParseKind kind) {
         return Status(ErrorCodes::BadValue, "'pipeline' cannot be specified without 'viewOn'");
     }
 
+    if (expireAfterSeconds && !timeseries) {
+        return {ErrorCodes::InvalidOptions,
+                "'expireAfterSeconds' is only supported with time-series collections."};
+    }
+
     return Status::OK();
 }
 
@@ -342,6 +362,14 @@ void CollectionOptions::appendBSON(BSONObjBuilder* builder) const {
             builder->subobjStart("changeStreamPreAndPostImages"));
         preAndPostImagesBuilder.appendBool("enabled", changeStreamPreAndPostImages->enabled);
         preAndPostImagesBuilder.doneFast();
+    }
+
+    if (timeseries) {
+        timeseries::appendTimeseriesOptions(builder, *timeseries);
+    }
+
+    if (expireAfterSeconds) {
+        builder->append("expireAfterSeconds", *expireAfterSeconds);
     }
 
     if (!storageEngine.isEmpty()) {
@@ -436,6 +464,22 @@ bool CollectionOptions::matchesStorageOptions(const CollectionOptions& other,
 
     if (changeStreamPreAndPostImages &&
         changeStreamPreAndPostImages->enabled != other.changeStreamPreAndPostImages->enabled) {
+        return false;
+    }
+
+    if (static_cast<bool>(timeseries) != static_cast<bool>(other.timeseries)) {
+        return false;
+    }
+
+    if (timeseries) {
+        if (timeseries->timeField != other.timeseries->timeField ||
+            timeseries->metaField != other.timeseries->metaField ||
+            timeseries->granularity != other.timeseries->granularity) {
+            return false;
+        }
+    }
+
+    if (expireAfterSeconds != other.expireAfterSeconds) {
         return false;
     }
 

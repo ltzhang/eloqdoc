@@ -34,6 +34,7 @@
 
 #include "mongo/base/status.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/timeseries/timeseries_options.h"
 #include "mongo/util/uuid.h"
 
 namespace mongo {
@@ -140,6 +141,8 @@ struct CollectionOptions {
 
     bool recordPreImages = false;
     boost::optional<ChangeStreamPreAndPostImagesOptions> changeStreamPreAndPostImages;
+    boost::optional<timeseries::TimeseriesOptions> timeseries;
+    boost::optional<long long> expireAfterSeconds;
 
     // Storage engine collection options. Always owned or empty.
     BSONObj storageEngine;

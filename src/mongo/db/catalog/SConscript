@@ -23,6 +23,7 @@ env.Library(
         '$BUILD_DIR/mongo/db/command_generic_argument',
         '$BUILD_DIR/mongo/db/query/collation/collator_interface',
         '$BUILD_DIR/mongo/db/server_parameters',
+        '$BUILD_DIR/mongo/db/timeseries/timeseries_options',
         '$BUILD_DIR/mongo/idl/idl_parser',
     ],
 )
@@ -312,6 +313,7 @@ env.Library(
         '$BUILD_DIR/mongo/db/background',
         '$BUILD_DIR/mongo/db/db_raii',
         '$BUILD_DIR/mongo/db/query_exec',
+        '$BUILD_DIR/mongo/db/timeseries/timeseries_namespace',
         '$BUILD_DIR/mongo/db/views/views',
         '$BUILD_DIR/mongo/db/write_ops',
         'collection_options',
