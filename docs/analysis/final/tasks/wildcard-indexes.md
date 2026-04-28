@@ -98,7 +98,16 @@ class WildcardAccessMethod final : public IndexAccessMethod {
 
 ### Remaining work after first planner slice
 
-- Broaden planner coverage beyond single-predicate equality/range/`$exists:true` cases.
+- Continue the planner incrementally rather than attempting full upstream parity in one pass.
+  The current conservative model should remain: wildcard IXSCAN over the internal `{path, value}`
+  key shape, with a `FETCH` above the scan so the normal matcher owns correctness.
+- Broaden planner coverage beyond single-predicate equality/range/`$exists:true` cases. Good next
+  slices are `$in`, simple regex, conjunctions on the same path, and OR plans.
+- Treat compound wildcard indexes, covered wildcard plans, full multikey-path parity, and plan-cache
+  shape parity as follow-up work unless a compatibility test proves they are needed sooner.
+- Watch for planner correctness around multi-predicate bound combination. The first planner slice
+  already fixed the main storage-maintenance issue by registering wildcard indexes as all-path
+  indexes for update reindexing; remaining risk is mostly in candidate selection and bound merging.
 
 ## Notes from source analyses
 
