@@ -12,6 +12,7 @@
 #include <cmath>
 #include <deque>
 #include <limits>
+#include <tuple>
 
 #include "mongo/db/jsobj.h"
 #include "mongo/db/pipeline/document.h"
@@ -77,8 +78,13 @@ public:
             }
             MutableDocument window;
             if (out.hasWindow) {
-                window["documents"] = Value(std::vector<Value>{windowBoundValue(out.lower),
-                                                               windowBoundValue(out.upper)});
+                auto bounds = Value(std::vector<Value>{windowBoundValue(out.lower),
+                                                       windowBoundValue(out.upper)});
+                if (out.windowType == WindowType::kDocuments) {
+                    window["documents"] = bounds;
+                } else {
+                    window["range"] = bounds;
+                }
                 outSpec["window"] = window.freezeToValue();
             }
             output[out.field.fullPath()] = outSpec.freezeToValue();
@@ -151,9 +157,10 @@ public:
 
 private:
     enum class BoundKind { kUnbounded, kCurrent, kOffset };
+    enum class WindowType { kDocuments, kRange };
     struct WindowBound {
         BoundKind kind = BoundKind::kCurrent;
-        int offset = 0;
+        double offset = 0;
     };
 
     struct OutputSpec {
@@ -163,6 +170,7 @@ private:
         boost::intrusive_ptr<Expression> shiftDefault;
         int shiftBy = 0;
         bool hasWindow = false;
+        WindowType windowType = WindowType::kDocuments;
         WindowBound lower;
         WindowBound upper;
     };
@@ -205,7 +213,15 @@ private:
         }
         uassert(6789328, "$setWindowFields output entry requires an operator", opElem);
 
-        OutputSpec out{FieldPath(outputField.fieldName()), opElem->fieldName(), nullptr, nullptr, 0, false, {}, {}};
+        OutputSpec out{FieldPath(outputField.fieldName()),
+                       opElem->fieldName(),
+                       nullptr,
+                       nullptr,
+                       0,
+                       false,
+                       WindowType::kDocuments,
+                       {},
+                       {}};
         uassert(6789329,
                 str::stream() << "unsupported $setWindowFields operator '" << out.opName << "'",
                 out.opName == "$sum" || out.opName == "$avg" || out.opName == "$count" ||
@@ -286,28 +302,37 @@ private:
                 windowElem.type() == BSONType::Object);
         auto windowObj = windowElem.Obj();
         auto documentsElem = windowObj["documents"];
+        auto rangeElem = windowObj["range"];
         uassert(6789332,
-                "this $setWindowFields checkpoint supports only documents windows",
-                documentsElem.type() == BSONType::Array);
+                "$setWindowFields window requires documents or range",
+                (documentsElem.type() == BSONType::Array) != (rangeElem.type() == BSONType::Array));
+        out->windowType = documentsElem.type() == BSONType::Array ? WindowType::kDocuments
+                                                                  : WindowType::kRange;
+        BSONElement boundsElem = out->windowType == WindowType::kDocuments ? documentsElem : rangeElem;
         std::vector<BSONElement> bounds;
-        for (auto&& bound : documentsElem.Obj()) {
+        for (auto&& bound : boundsElem.Obj()) {
             bounds.push_back(bound);
         }
         uassert(6789333,
-                "$setWindowFields documents window requires exactly two bounds",
+                "$setWindowFields window requires exactly two bounds",
                 bounds.size() == 2);
-        out->lower = parseBound(bounds[0]);
-        out->upper = parseBound(bounds[1]);
+        out->lower = parseBound(bounds[0], out->windowType);
+        out->upper = parseBound(bounds[1], out->windowType);
 
         for (auto&& option : windowObj) {
+            auto fieldName = option.fieldNameStringData();
             uassert(6789334,
-                    str::stream() << "unknown $setWindowFields window option '"
-                                  << option.fieldNameStringData() << "'",
-                    option.fieldNameStringData() == "documents"_sd);
+                    str::stream() << "unknown $setWindowFields window option '" << fieldName
+                                  << "'",
+                    fieldName == "documents"_sd || fieldName == "range"_sd ||
+                        fieldName == "unit"_sd);
+            uassert(6789344,
+                    "$setWindowFields range unit is not supported in this checkpoint",
+                    fieldName != "unit"_sd);
         }
     }
 
-    static WindowBound parseBound(BSONElement elem) {
+    static WindowBound parseBound(BSONElement elem, WindowType windowType) {
         if (elem.type() == BSONType::String) {
             auto value = elem.valueStringData();
             if (value == "unbounded"_sd) {
@@ -321,9 +346,15 @@ private:
                                     << "'");
         }
         uassert(6789336,
-                "$setWindowFields documents window bounds must be integers or strings",
+                "$setWindowFields window bounds must be numbers or strings",
                 elem.isNumber());
-        return {BoundKind::kOffset, elem.numberInt()};
+        if (windowType == WindowType::kDocuments) {
+            uassert(6789345,
+                    "$setWindowFields documents window numeric bounds must be integers",
+                    elem.numberInt() == elem.numberDouble());
+            return {BoundKind::kOffset, static_cast<double>(elem.numberInt())};
+        }
+        return {BoundKind::kOffset, elem.numberDouble()};
     }
 
     GetNextResult initialize() {
@@ -398,8 +429,14 @@ private:
             MutableDocument output(_buffer[i].doc);
             const auto relativeIndex = static_cast<int>(i - start);
             for (auto&& outSpec : _outputs) {
-                const int first = lowerIndex(outSpec.lower, relativeIndex, partitionSize);
-                const int last = upperIndex(outSpec.upper, relativeIndex, partitionSize);
+                int first;
+                int last;
+                if (outSpec.windowType == WindowType::kRange) {
+                    std::tie(first, last) = rangeIndexes(outSpec, start, end, relativeIndex);
+                } else {
+                    first = lowerIndex(outSpec.lower, relativeIndex, partitionSize);
+                    last = upperIndex(outSpec.upper, relativeIndex, partitionSize);
+                }
                 output.setNestedField(outSpec.field,
                                       evaluateOutput(outSpec, start, end, relativeIndex, first, last));
             }
@@ -474,7 +511,7 @@ private:
             case BoundKind::kCurrent:
                 return current;
             case BoundKind::kOffset:
-                return std::max(0, current + bound.offset);
+                return std::max(0, current + static_cast<int>(bound.offset));
         }
         MONGO_UNREACHABLE;
     }
@@ -486,7 +523,57 @@ private:
             case BoundKind::kCurrent:
                 return current;
             case BoundKind::kOffset:
-                return std::min(partitionSize - 1, current + bound.offset);
+                return std::min(partitionSize - 1, current + static_cast<int>(bound.offset));
+        }
+        MONGO_UNREACHABLE;
+    }
+
+    std::pair<int, int> rangeIndexes(const OutputSpec& outSpec,
+                                     size_t partitionStart,
+                                     size_t partitionEnd,
+                                     int relativeIndex) const {
+        uassert(6789346,
+                "$setWindowFields range windows require exactly one sortBy field",
+                _sortDirections.size() == 1);
+
+        auto currentKey = _buffer[partitionStart + relativeIndex].sortKeys[0];
+        uassert(6789347,
+                "$setWindowFields range windows require numeric sort keys",
+                currentKey.numeric());
+        const double current = currentKey.coerceToDouble();
+        const double lower = rangeBoundary(outSpec.lower, current, true);
+        const double upper = rangeBoundary(outSpec.upper, current, false);
+        if (lower > upper) {
+            return {1, 0};
+        }
+
+        int first = -1;
+        int last = -2;
+        for (int i = 0; i < static_cast<int>(partitionEnd - partitionStart); ++i) {
+            auto sortKey = _buffer[partitionStart + i].sortKeys[0];
+            uassert(6789348,
+                    "$setWindowFields range windows require numeric sort keys",
+                    sortKey.numeric());
+            const double value = sortKey.coerceToDouble();
+            if (value >= lower && value <= upper) {
+                if (first < 0) {
+                    first = i;
+                }
+                last = i;
+            }
+        }
+        return {first < 0 ? 1 : first, last};
+    }
+
+    static double rangeBoundary(const WindowBound& bound, double current, bool lower) {
+        switch (bound.kind) {
+            case BoundKind::kUnbounded:
+                return lower ? -std::numeric_limits<double>::infinity()
+                             : std::numeric_limits<double>::infinity();
+            case BoundKind::kCurrent:
+                return current;
+            case BoundKind::kOffset:
+                return current + bound.offset;
         }
         MONGO_UNREACHABLE;
     }
@@ -562,7 +649,7 @@ private:
             case BoundKind::kCurrent:
                 return Value("current"_sd);
             case BoundKind::kOffset:
-                return Value(bound.offset);
+                return numericValue(bound.offset);
         }
         MONGO_UNREACHABLE;
     }

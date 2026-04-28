@@ -8,11 +8,12 @@
 
 Window-function aggregation: compute aggregates over a sliding "window" of adjacent documents within a partition, without collapsing the partition into a single document.
 
-**Checkpoint status:** first buffered executor slice landed. EloqDoc supports `partitionBy`,
-`sortBy`, `documents` windows, and standard output operators `$sum`, `$avg`, `$count`, `$min`,
-`$max`, `$first`, and `$last`. It also supports position-based window operators
-`$documentNumber`, `$rank`, `$denseRank`, and `$shift`. Range windows, date units,
-spill/removable optimizations, and math-heavy window-only operators remain deferred.
+**Checkpoint status:** buffered executor slices landed. EloqDoc supports `partitionBy`,
+`sortBy`, `documents` windows, numeric `range` windows over a single numeric sort key,
+and standard output operators `$sum`, `$avg`, `$count`, `$min`, `$max`, `$first`, and
+`$last`. It also supports position-based window operators `$documentNumber`, `$rank`,
+`$denseRank`, and `$shift`. Date range units, spill/removable optimizations, and
+math-heavy window-only operators remain deferred.
 
 ```js
 db.sales.aggregate([
@@ -91,6 +92,7 @@ The window executor must support:
 ## Acceptance criteria
 
 - [x] Documents-window: `[-3, "current"]` produces correct moving aggregate over last 4 documents.
+- [x] Numeric range-window: `[-2, 0]` correctly slides over non-uniform numeric sort values.
 - Range-window: `[-7, 0], unit: "day"` correctly slides over time-based windows even with non-uniform document timestamps.
 - [x] Window-only operators (`$rank`, `$denseRank`, `$documentNumber`) produce correct values within each partition.
 - `$expMovingAvg` produces correct values with both `N` and `alpha` forms.
@@ -102,15 +104,16 @@ The window executor must support:
 
 ## Implementation notes
 
-The initial `document_source_set_window_fields.cpp` implementation buffers all input documents,
-stable-sorts them by `partitionBy` and `sortBy`, then recomputes each requested `documents` window
-per output row. This is correct for small/medium compatibility workloads and keeps the first slice
-simple, but it is intentionally not spill-capable and does not yet implement incremental removable
-accumulator state.
+The current `document_source_set_window_fields.cpp` implementation buffers all input documents,
+stable-sorts them by `partitionBy` and `sortBy`, then recomputes each requested `documents` or
+numeric `range` window per output row. This is correct for small/medium compatibility workloads
+and keeps the first slices simple, but it is intentionally not spill-capable and does not yet
+implement incremental removable accumulator state.
 
-Only document-position windows are accepted for standard accumulators. `range` windows, date units,
-implicit sort planning, large-partition memory bounds, and math-heavy window-only operators are
-follow-up slices.
+Numeric `range` windows require exactly one `sortBy` key and all values in that key must be
+numeric. `range` with `unit` remains unsupported, so date/time range windows are still a follow-up
+slice along with implicit sort planning, large-partition memory bounds, and math-heavy window-only
+operators.
 
 ## Notes from source analyses
 

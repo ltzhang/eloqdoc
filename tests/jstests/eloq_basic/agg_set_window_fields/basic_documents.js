@@ -61,7 +61,7 @@ assert.commandFailed(db.runCommand({
     pipeline: [{
         $setWindowFields: {
             sortBy: {day: 1},
-            output: {bad: {$sum: "$qty", window: {range: [-1, 0]}}},
+            output: {bad: {$sum: "$qty", window: {range: [-1, 0], unit: "day"}}},
         },
     }],
     cursor: {},
