@@ -8,6 +8,10 @@
 
 Operators that only make sense inside `$setWindowFields` — they read window-position metadata or compute stateful values that depend on window iteration order. Cannot be used as plain `$group` accumulators.
 
+**Checkpoint status:** the first position-based set is implemented inside the initial
+`$setWindowFields` buffered executor: `$documentNumber`, `$rank`, `$denseRank`, and `$shift`.
+`$expMovingAvg`, `$locf`, `$integral`, `$derivative`, and covariance operators remain deferred.
+
 | Operator | Description |
 | -------- | ----------- |
 | `$rank` | Rank within partition; ties get the same rank, gaps after ties (1, 2, 2, 4, …). |
@@ -62,11 +66,13 @@ One file per operator group (or one mega-file `window_functions.cpp`):
 
 ## Acceptance criteria
 
-- Each operator produces correct values against upstream test fixtures.
+- [x] `$rank`, `$denseRank`, `$documentNumber`, and `$shift` produce correct values against focused EloqDoc fixtures.
 - Operators that don't support `remove()` (rank, denseRank, documentNumber) trigger window-recomputation correctly when window slides.
 - Date-aware operators (`$integral`, `$derivative`) produce time-unit-correct values.
-- `$shift` with absent positions returns null (or default if specified).
-- **Test entry point:** `tests/jstests/eloq_basic/agg_window_operators.js`. Adapt `jstests/aggregation/sources/setWindowFields/` operator-specific tests.
+- [x] `$shift` with absent positions returns null (or default if specified).
+- **Test entry point:** `tests/jstests/eloq_basic/agg_set_window_fields/position_operators.js`
+  for the initial position-based slice. Adapt `jstests/aggregation/sources/setWindowFields/`
+  operator-specific tests as coverage grows.
 
 ## Notes from source analyses
 

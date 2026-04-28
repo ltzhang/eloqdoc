@@ -64,11 +64,23 @@ public:
         MutableDocument output;
         for (auto&& out : _outputs) {
             MutableDocument outSpec;
-            outSpec[out.opName] = out.argument ? out.argument->serialize(false) : Value(Document());
+            if (out.opName == "$shift") {
+                MutableDocument shiftSpec;
+                shiftSpec["output"] = out.argument->serialize(false);
+                shiftSpec["by"] = Value(out.shiftBy);
+                if (out.shiftDefault) {
+                    shiftSpec["default"] = out.shiftDefault->serialize(false);
+                }
+                outSpec[out.opName] = shiftSpec.freezeToValue();
+            } else {
+                outSpec[out.opName] = out.argument ? out.argument->serialize(false) : Value(Document());
+            }
             MutableDocument window;
-            window["documents"] = Value(std::vector<Value>{windowBoundValue(out.lower),
-                                                           windowBoundValue(out.upper)});
-            outSpec["window"] = window.freezeToValue();
+            if (out.hasWindow) {
+                window["documents"] = Value(std::vector<Value>{windowBoundValue(out.lower),
+                                                               windowBoundValue(out.upper)});
+                outSpec["window"] = window.freezeToValue();
+            }
             output[out.field.fullPath()] = outSpec.freezeToValue();
         }
         spec["output"] = output.freezeToValue();
@@ -148,6 +160,9 @@ private:
         FieldPath field;
         std::string opName;
         boost::intrusive_ptr<Expression> argument;
+        boost::intrusive_ptr<Expression> shiftDefault;
+        int shiftBy = 0;
+        bool hasWindow = false;
         WindowBound lower;
         WindowBound upper;
     };
@@ -190,32 +205,82 @@ private:
         }
         uassert(6789328, "$setWindowFields output entry requires an operator", opElem);
 
-        OutputSpec out{FieldPath(outputField.fieldName()), opElem->fieldName(), nullptr, {}, {}};
+        OutputSpec out{FieldPath(outputField.fieldName()), opElem->fieldName(), nullptr, nullptr, 0, false, {}, {}};
         uassert(6789329,
                 str::stream() << "unsupported $setWindowFields operator '" << out.opName << "'",
                 out.opName == "$sum" || out.opName == "$avg" || out.opName == "$count" ||
                     out.opName == "$min" || out.opName == "$max" || out.opName == "$first" ||
-                    out.opName == "$last");
+                    out.opName == "$last" || out.opName == "$documentNumber" ||
+                    out.opName == "$rank" || out.opName == "$denseRank" ||
+                    out.opName == "$shift");
 
         if (out.opName == "$count") {
             uassert(6789330,
                     "$setWindowFields $count argument must be an empty object",
                     opElem->type() == BSONType::Object && opElem->Obj().isEmpty());
+        } else if (out.opName == "$documentNumber" || out.opName == "$rank" ||
+                   out.opName == "$denseRank") {
+            uassert(6789337,
+                    str::stream() << out.opName << " argument must be an empty object",
+                    opElem->type() == BSONType::Object && opElem->Obj().isEmpty());
+        } else if (out.opName == "$shift") {
+            parseShiftSpec(expCtx, *opElem, &out);
         } else {
             VariablesParseState vps = expCtx->variablesParseState;
             out.argument = Expression::parseOperand(expCtx, *opElem, vps)->optimize();
         }
 
-        parseWindow(windowElem, &out);
+        if (out.opName == "$documentNumber" || out.opName == "$rank" ||
+            out.opName == "$denseRank" || out.opName == "$shift") {
+            uassert(6789338,
+                    str::stream() << out.opName << " does not accept a window option",
+                    !windowElem);
+        } else {
+            parseWindow(windowElem, &out);
+        }
         return out;
+    }
+
+    static void parseShiftSpec(const boost::intrusive_ptr<ExpressionContext>& expCtx,
+                               BSONElement opElem,
+                               OutputSpec* out) {
+        uassert(6789339,
+                "$setWindowFields $shift argument must be an object",
+                opElem.type() == BSONType::Object);
+        auto spec = opElem.Obj();
+        auto outputElem = spec["output"];
+        auto byElem = spec["by"];
+        uassert(6789340, "$setWindowFields $shift requires output", outputElem);
+        uassert(6789341,
+                "$setWindowFields $shift requires integer by",
+                byElem.isNumber() && byElem.numberInt() == byElem.numberDouble());
+        out->shiftBy = byElem.numberInt();
+        uassert(6789342, "$setWindowFields $shift by must not be 0", out->shiftBy != 0);
+
+        VariablesParseState vps = expCtx->variablesParseState;
+        out->argument = Expression::parseOperand(expCtx, outputElem, vps)->optimize();
+        if (auto defaultElem = spec["default"]) {
+            out->shiftDefault = Expression::parseOperand(expCtx, defaultElem, vps)->optimize();
+        }
+
+        for (auto&& option : spec) {
+            auto fieldName = option.fieldNameStringData();
+            uassert(6789343,
+                    str::stream() << "unknown $setWindowFields $shift option '" << fieldName
+                                  << "'",
+                    fieldName == "output"_sd || fieldName == "by"_sd ||
+                        fieldName == "default"_sd);
+        }
     }
 
     static void parseWindow(BSONElement windowElem, OutputSpec* out) {
         if (!windowElem) {
             out->lower = {BoundKind::kCurrent, 0};
             out->upper = {BoundKind::kCurrent, 0};
+            out->hasWindow = false;
             return;
         }
+        out->hasWindow = true;
         uassert(6789331,
                 "$setWindowFields window must be an object",
                 windowElem.type() == BSONType::Object);
@@ -336,10 +401,70 @@ private:
                 const int first = lowerIndex(outSpec.lower, relativeIndex, partitionSize);
                 const int last = upperIndex(outSpec.upper, relativeIndex, partitionSize);
                 output.setNestedField(outSpec.field,
-                                      evaluateWindow(outSpec, start, first, last));
+                                      evaluateOutput(outSpec, start, end, relativeIndex, first, last));
             }
             _pending.push_back(output.freeze());
         }
+    }
+
+    Value evaluateOutput(const OutputSpec& outSpec,
+                         size_t partitionStart,
+                         size_t partitionEnd,
+                         int relativeIndex,
+                         int first,
+                         int last) const {
+        if (outSpec.opName == "$documentNumber") {
+            return Value(relativeIndex + 1);
+        }
+        if (outSpec.opName == "$rank") {
+            return Value(rankFor(partitionStart, partitionEnd, relativeIndex));
+        }
+        if (outSpec.opName == "$denseRank") {
+            return Value(denseRankFor(partitionStart, partitionEnd, relativeIndex));
+        }
+        if (outSpec.opName == "$shift") {
+            const int target = relativeIndex + outSpec.shiftBy;
+            if (target < 0 || target >= static_cast<int>(partitionEnd - partitionStart)) {
+                if (outSpec.shiftDefault) {
+                    return outSpec.shiftDefault->evaluate(_buffer[partitionStart + relativeIndex].doc);
+                }
+                return Value(BSONNULL);
+            }
+            return outSpec.argument->evaluate(_buffer[partitionStart + target].doc);
+        }
+        return evaluateWindow(outSpec, partitionStart, first, last);
+    }
+
+    int rankFor(size_t partitionStart, size_t partitionEnd, int relativeIndex) const {
+        int rank = 1;
+        for (int i = 1; i <= relativeIndex; ++i) {
+            if (!sameSortKey(_buffer[partitionStart + i - 1], _buffer[partitionStart + i])) {
+                rank = i + 1;
+            }
+        }
+        return rank;
+    }
+
+    int denseRankFor(size_t partitionStart, size_t partitionEnd, int relativeIndex) const {
+        int rank = 1;
+        for (int i = 1; i <= relativeIndex; ++i) {
+            if (!sameSortKey(_buffer[partitionStart + i - 1], _buffer[partitionStart + i])) {
+                ++rank;
+            }
+        }
+        return rank;
+    }
+
+    bool sameSortKey(const BufferedDoc& left, const BufferedDoc& right) const {
+        if (left.sortKeys.size() != right.sortKeys.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < left.sortKeys.size(); ++i) {
+            if (pExpCtx->getValueComparator().compare(left.sortKeys[i], right.sortKeys[i]) != 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     static int lowerIndex(const WindowBound& bound, int current, int partitionSize) {
