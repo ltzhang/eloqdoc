@@ -62,12 +62,23 @@ The variables system already exists in EloqDoc 4.0 (`$$ROOT`, `$$CURRENT`, `$let
 
 ## Acceptance criteria
 
-- `db.c.find({$expr: {$eq: ["$x", "$$v"]}}, {let: {v: 42}})` returns matches.
-- `db.c.update({$expr: {$gt: ["$qty", "$$lim"]}}, [{$set: {hi: true}}], {let: {lim: 10}})` updates correctly.
-- `db.c.aggregate([{$match: {$expr: {$eq: ["$f", "$$x"]}}}], {let: {x: 1}})` returns matches.
-- Undefined `$$varName` (not in `let`) yields `Variable not found` error matching upstream wording.
-- `runtimeConstants` is accepted but doesn't surface to user-visible behavior (treated as internal).
+- [x] `db.c.find({$expr: {$eq: ["$x", "$$v"]}}, {let: {v: 42}})` returns matches.
+- [x] `db.c.update({$expr: {$gt: ["$qty", "$$lim"]}}, [{$set: {hi: true}}], {let: {lim: 10}})` updates correctly.
+- [x] `db.c.aggregate([{$match: {$expr: {$eq: ["$f", "$$x"]}}}], {let: {x: 1}})` returns matches.
+- [x] Undefined `$$varName` (not in `let`) yields `Variable not found` error matching upstream wording.
+- [x] `runtimeConstants` is accepted but doesn't surface to user-visible behavior (treated as internal).
 - **Test entry point:** `tests/jstests/eloq_basic/let_in_commands.js`. Adapt `jstests/core/let_*.js` (large suite).
+
+## Implementation status
+
+Implemented in `81b71b1e`:
+
+- Command-level `let` is accepted by find, aggregate, update, delete, and findAndModify.
+- User variables are bound into expression parsing/evaluation for `$expr` predicates and update pipelines.
+- `runtimeConstants` is accepted for modern driver compatibility and remains internal-only in this milestone.
+- Runtime coverage is in `tests/jstests/eloq_basic/let_in_commands.js`.
+
+Semantic difference: MongoDB exposes selected runtime constants such as `$$NOW` with stable request-time values. EloqDoc currently accepts the `runtimeConstants` envelope but does not expose those values as user-visible variables.
 
 ## Notes from source analyses
 
