@@ -8,8 +8,8 @@ assert.commandWorked(coll.insert([
 ]));
 assert.commandWorked(coll.createIndex({active: 1, category: 1}, {name: "active_category"}));
 
-function assertCategories(result) {
-    assert.eq(["a", "b"], result.values.sort(), tojson(result));
+function sorted(values) {
+    return values.sort();
 }
 
 let res = assert.commandWorked(db.runCommand({
@@ -18,7 +18,7 @@ let res = assert.commandWorked(db.runCommand({
     query: {active: true},
     hint: "active_category",
 }));
-assertCategories(res);
+assert.eq(["a", "b"], sorted(res.values), tojson(res));
 
 res = assert.commandWorked(db.runCommand({
     distinct: coll.getName(),
@@ -26,7 +26,7 @@ res = assert.commandWorked(db.runCommand({
     query: {active: true},
     hint: {active: 1, category: 1},
 }));
-assertCategories(res);
+assert.eq(["a", "b"], sorted(res.values), tojson(res));
 
 assert.commandFailedWithCode(db.runCommand({
     distinct: coll.getName(),
