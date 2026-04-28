@@ -38,6 +38,8 @@
 #include "mongo/db/field_ref.h"
 #include "mongo/db/matcher/expression_leaf.h"
 #include "mongo/db/matcher/extensions_callback_noop.h"
+#include "mongo/db/pipeline/document_source.h"
+#include "mongo/db/pipeline/pipeline.h"
 #include "mongo/db/query/query_request.h"
 #include "mongo/db/server_options.h"
 #include "mongo/db/update/log_builder.h"
@@ -60,6 +62,89 @@ using std::vector;
 using pathsupport::EqualityMatches;
 
 namespace {
+
+class DocumentSourceSingleDocument final : public DocumentSource {
+public:
+    DocumentSourceSingleDocument(Document input,
+                                 const boost::intrusive_ptr<ExpressionContext>& expCtx)
+        : DocumentSource(expCtx), _input(std::move(input)) {}
+
+    GetNextResult getNext() final {
+        if (!_input) {
+            return GetNextResult::makeEOF();
+        }
+
+        auto output = std::move(*_input);
+        _input = boost::none;
+        return GetNextResult(std::move(output));
+    }
+
+    const char* getSourceName() const final {
+        return "$_internalSingleDocument";
+    }
+
+    Value serialize(boost::optional<ExplainOptions::Verbosity> explain = boost::none) const final {
+        return Value(Document{{getSourceName(), Document()}});
+    }
+
+    StageConstraints constraints(Pipeline::SplitState pipeState) const final {
+        StageConstraints constraints(StreamType::kStreaming,
+                                     PositionRequirement::kFirst,
+                                     HostTypeRequirement::kNone,
+                                     DiskUseRequirement::kNoDiskUse,
+                                     FacetRequirement::kNotAllowed,
+                                     TransactionRequirement::kAllowed);
+        constraints.requiresInputDocSource = false;
+        return constraints;
+    }
+
+private:
+    boost::optional<Document> _input;
+};
+
+bool isAllowedUpdatePipelineStage(StringData stageName) {
+    return stageName == "$set"_sd || stageName == "$addFields"_sd || stageName == "$unset"_sd ||
+        stageName == "$project"_sd || stageName == "$replaceWith"_sd ||
+        stageName == "$replaceRoot"_sd;
+}
+
+std::vector<BSONObj> parseRawUpdatePipeline(BSONObj updatePipeline) {
+    std::vector<BSONObj> stages;
+    for (auto&& stageElem : updatePipeline) {
+        uassert(ErrorCodes::TypeMismatch,
+                str::stream() << "Update pipeline entries must be objects, got "
+                              << typeName(stageElem.type()),
+                stageElem.type() == BSONType::Object);
+
+        auto stage = stageElem.Obj().getOwned();
+        uassert(ErrorCodes::FailedToParse,
+                str::stream() << "Update pipeline stage must contain exactly one field: "
+                              << stage.toString(),
+                stage.nFields() == 1);
+        uassert(ErrorCodes::FailedToParse,
+                str::stream() << "Stage " << stage.firstElementFieldName()
+                              << " is not allowed in update pipelines",
+                isAllowedUpdatePipelineStage(stage.firstElementFieldName()));
+        stages.push_back(stage);
+    }
+
+    return stages;
+}
+
+void checkImmutablePathsUnchanged(const BSONObj& original,
+                                  const BSONObj& updated,
+                                  const FieldRefSet& immutablePaths) {
+    for (auto path = immutablePaths.begin(); path != immutablePaths.end(); ++path) {
+        const auto dottedField = (*path)->dottedField();
+        auto originalElement = dotted_path_support::extractElementAtPath(original, dottedField);
+        auto updatedElement = dotted_path_support::extractElementAtPath(updated, dottedField);
+        uassert(ErrorCodes::ImmutableField,
+                str::stream() << "After applying the update, the immutable field '"
+                              << dottedField
+                              << "' was found to have been altered",
+                originalElement.woCompare(updatedElement, false) == 0);
+    }
+}
 
 StatusWith<UpdateSemantics> updateSemanticsFromElement(BSONElement element) {
     if (element.type() != BSONType::NumberInt && element.type() != BSONType::NumberLong) {
@@ -150,7 +235,8 @@ Status UpdateDriver::parse(
     const BSONObj& updateExpr,
     const std::map<StringData, std::unique_ptr<ExpressionWithPlaceholder>>& arrayFilters,
     const bool multi) {
-    invariant(!_root && !_replacementMode, "Multiple calls to parse() on same UpdateDriver");
+    invariant(!_root && !_replacementMode && !_pipelineMode,
+              "Multiple calls to parse() on same UpdateDriver");
 
     // Check if the update expression is a full object replacement.
     if (isDocReplacement(updateExpr)) {
@@ -187,6 +273,25 @@ Status UpdateDriver::parse(
     auto root = stdx::make_unique<UpdateObjectNode>();
     _positional = parseUpdateExpression(updateExpr, root.get(), _expCtx, arrayFilters);
     _root = std::move(root);
+
+    return Status::OK();
+}
+
+Status UpdateDriver::parsePipeline(const BSONObj& updatePipeline) {
+    invariant(!_root && !_replacementMode && !_pipelineMode,
+              "Multiple calls to parse() on same UpdateDriver");
+
+    _pipelineMode = true;
+    _replacementMode = false;
+    _pipeline = parseRawUpdatePipeline(updatePipeline);
+    if (_pipeline.empty()) {
+        return {ErrorCodes::FailedToParse, "Update pipeline must contain at least one stage"};
+    }
+
+    auto parsedPipeline = Pipeline::parse(_pipeline, _expCtx);
+    if (!parsedPipeline.isOK()) {
+        return parsedPipeline.getStatus();
+    }
 
     return Status::OK();
 }
@@ -250,6 +355,30 @@ Status UpdateDriver::update(StringData matchedField,
                             BSONObj* logOpRec,
                             bool* docWasModified) {
     // TODO: assert that update() is called at most once in a !_multi case.
+
+    if (_pipelineMode) {
+        const auto originalObj = doc->getObject().getOwned();
+        auto parsedPipeline = uassertStatusOK(Pipeline::parse(_pipeline, _expCtx));
+        parsedPipeline->addInitialSource(
+            new DocumentSourceSingleDocument(Document(originalObj), _expCtx));
+
+        auto transformed = parsedPipeline->getNext();
+        uassert(ErrorCodes::FailedToParse,
+                "Update pipeline must produce exactly one document",
+                static_cast<bool>(transformed));
+        uassert(ErrorCodes::FailedToParse,
+                "Update pipeline must produce exactly one document",
+                !parsedPipeline->getNext());
+
+        auto transformedObj = transformed->toBson();
+        checkImmutablePathsUnchanged(originalObj, transformedObj, immutablePaths);
+        doc->reset(transformedObj, mutablebson::Document::kInPlaceDisabled);
+        if (docWasModified) {
+            *docWasModified = originalObj.woCompare(transformedObj) != 0;
+        }
+        _affectIndices = _indexedFields != nullptr;
+        return Status::OK();
+    }
 
     _affectIndices = (isDocReplacement() && (_indexedFields != NULL));
 

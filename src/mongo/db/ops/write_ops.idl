@@ -39,6 +39,13 @@ types:
         serializer: "::mongo::write_ops::writeWriteHint"
         deserializer: "::mongo::write_ops::readWriteHint"
 
+    update_modification:
+        bson_serialization_type: any
+        description: "Update modifications, accepted as either an object or a pipeline array."
+        cpp_type: "mongo::write_ops::UpdateModification"
+        serializer: "::mongo::write_ops::writeUpdateModification"
+        deserializer: "::mongo::write_ops::readUpdateModification"
+
 structs:
 
     WriteCommandBase:
@@ -95,7 +102,7 @@ structs:
                 type: object
             u:
                 description: "Set of modifications to apply."
-                type: object
+                type: update_modification
             arrayFilters:
                 description: "Specifies which array elements an update modifier should apply to."
                 type: array<object>

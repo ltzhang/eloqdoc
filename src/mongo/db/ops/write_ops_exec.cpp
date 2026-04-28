@@ -687,7 +687,7 @@ static SingleWriteResult performSingleUpdateOp(OperationContext* opCtx,
     UpdateRequest request(ns);
     request.setLifecycle(&updateLifecycle);
     request.setQuery(op.getQ());
-    request.setUpdates(op.getU());
+    request.setUpdateModification(op.getU());
     request.setCollation(write_ops::collationOf(op));
     request.setHint(write_ops::hintOf(op));
     request.setLet(write_ops::letOf(commandBase));

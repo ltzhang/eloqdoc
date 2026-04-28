@@ -82,7 +82,11 @@ BSONObj FindAndModifyRequest::toBSON() const {
     if (_isRemove) {
         builder.append(kRemoveField, true);
     } else {
-        builder.append(kUpdateField, _updateObj);
+        if (_isPipelineUpdate) {
+            builder.appendArray(kUpdateField, _updateObj);
+        } else {
+            builder.append(kUpdateField, _updateObj);
+        }
 
         if (_isUpsert) {
             builder.append(kUpsertField, _isUpsert.get());
@@ -132,7 +136,18 @@ StatusWith<FindAndModifyRequest> FindAndModifyRequest::parseFromBSON(NamespaceSt
                                                                      const BSONObj& cmdObj) {
     BSONObj query = cmdObj.getObjectField(kQueryField);
     BSONObj fields = cmdObj.getObjectField(kFieldProjectionField);
-    BSONObj updateObj = cmdObj.getObjectField(kUpdateField);
+    BSONObj updateObj;
+    bool isPipelineUpdate = false;
+    if (auto updateElt = cmdObj[kUpdateField]) {
+        if (updateElt.type() != BSONType::Object && updateElt.type() != BSONType::Array) {
+            return {ErrorCodes::TypeMismatch,
+                    str::stream() << kUpdateField
+                                  << " must be either an object or an array, not a "
+                                  << typeName(updateElt.type())};
+        }
+        updateObj = updateElt.Obj();
+        isPipelineUpdate = updateElt.type() == BSONType::Array;
+    }
     BSONObj sort = cmdObj.getObjectField(kSortField);
 
     BSONObj collation;
@@ -226,6 +241,7 @@ StatusWith<FindAndModifyRequest> FindAndModifyRequest::parseFromBSON(NamespaceSt
     }
 
     FindAndModifyRequest request(std::move(fullNs), query, updateObj);
+    request._isPipelineUpdate = isPipelineUpdate;
     request._isRemove = isRemove;
     request.setFieldProjection(fields);
     request.setSort(sort);
@@ -297,6 +313,10 @@ BSONObj FindAndModifyRequest::getFields() const {
 
 BSONObj FindAndModifyRequest::getUpdateObj() const {
     return _updateObj;
+}
+
+bool FindAndModifyRequest::isPipelineUpdate() const {
+    return _isPipelineUpdate;
 }
 
 BSONObj FindAndModifyRequest::getSort() const {

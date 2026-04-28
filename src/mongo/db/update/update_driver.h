@@ -60,6 +60,11 @@ public:
         const bool multi = false);
 
     /**
+     * Parses a pipeline-form update expression into '_pipeline'.
+     */
+    Status parsePipeline(const BSONObj& updatePipeline);
+
+    /**
      * Fills in document with any fields in the query which are valid.
      *
      * Valid fields include equality matches like "a":1, or "a.b":false
@@ -107,6 +112,12 @@ public:
     //
 
     bool isDocReplacement() const;
+    bool isPipelineUpdate() const {
+        return _pipelineMode;
+    }
+    const boost::intrusive_ptr<ExpressionContext>& getExpressionContext() const {
+        return _expCtx;
+    }
     static bool isDocReplacement(const BSONObj& updateExpr);
 
     bool modsAffectIndices() const;
@@ -153,8 +164,14 @@ private:
     // tree?
     bool _replacementMode = false;
 
+    // Is this a pipeline-form update?
+    bool _pipelineMode = false;
+
     // The root of the UpdateNode tree.
     std::unique_ptr<UpdateNode> _root;
+
+    // Raw pipeline stages for pipeline-form updates.
+    std::vector<BSONObj> _pipeline;
 
     // What are the list of fields in the collection over which the update is going to be
     // applied that participate in indices?

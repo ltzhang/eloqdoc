@@ -67,11 +67,23 @@ if (_parsedUpdateExpression->isPipeline()) {
 
 - `db.c.updateOne(filter, [{$set:{...}}])` works.
 - `findAndModify` with pipeline-form `update` works.
-- Pipeline can reference fields of the matched document (`$qty`, `$$NOW`, etc.).
+- Pipeline can reference fields of the matched document (`$qty`) and command-level `let`
+  variables (`$$varName`).
 - Stages outside the allowed list produce a clear parse error (`$lookup`, `$group`, etc.).
 - Mixing operator and pipeline form produces an error (`u` must be one or the other).
 - `let` variables ([`let-runtime-constants.md`](./let-runtime-constants.md)) accessible inside the pipeline as `$$varName`.
 - **Test entry point:** `tests/jstests/eloq_basic/pipeline_update.js`. Adapt `jstests/core/update_pipeline_*.js`.
+
+## Implementation notes
+
+- Pipeline-form updates now preserve the `u` array through command parsing and findAndModify
+  serialization.
+- EloqDoc runs an allowed aggregation-stage subset against each matched document and replaces the
+  document with the transformed result.
+- Immutable `_id` changes are rejected after transformation.
+- `runtimeConstants` remains accepted but internal-only per
+  [`let-runtime-constants.md`](./let-runtime-constants.md); EloqDoc does not expose `$$NOW` from
+  `runtimeConstants` in this milestone.
 
 ## Notes from source analyses
 

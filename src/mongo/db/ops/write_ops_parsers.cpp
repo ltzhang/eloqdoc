@@ -130,6 +130,26 @@ void writeWriteHint(const BSONObj& hint, StringData fieldName, BSONObjBuilder* b
     builder->append(fieldName, hint);
 }
 
+UpdateModification readUpdateModification(const BSONElement& updateElement) {
+    uassert(ErrorCodes::TypeMismatch,
+            str::stream() << "Update argument must be either an object or an array, got "
+                          << typeName(updateElement.type()),
+            updateElement.type() == BSONType::Object || updateElement.type() == BSONType::Array);
+
+    return {updateElement.Obj(), updateElement.type() == BSONType::Array};
+}
+
+void writeUpdateModification(const UpdateModification& update,
+                             StringData fieldName,
+                             BSONObjBuilder* builder) {
+    if (update.isPipeline()) {
+        builder->appendArray(fieldName, update.getUpdate());
+        return;
+    }
+
+    builder->append(fieldName, update.getUpdate());
+}
+
 int32_t getStmtIdForWriteAt(const WriteCommandBase& writeCommandBase, size_t writePos) {
     const auto& stmtIds = writeCommandBase.getStmtIds();
 
@@ -216,7 +236,7 @@ write_ops::Update UpdateOp::parseLegacy(const Message& msgRaw) {
         singleUpdate.setUpsert(flags & UpdateOption_Upsert);
         singleUpdate.setMulti(flags & UpdateOption_Multi);
         singleUpdate.setQ(msg.nextJsObj());
-        singleUpdate.setU(msg.nextJsObj());
+        singleUpdate.setU(write_ops::UpdateModification(msg.nextJsObj(), false));
 
         return updates;
     }());

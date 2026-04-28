@@ -136,7 +136,7 @@ void makeUpdateRequest(const OperationContext* opCtx,
                        UpdateRequest* requestOut) {
     requestOut->setQuery(args.getQuery());
     requestOut->setProj(args.getFields());
-    requestOut->setUpdates(args.getUpdateObj());
+    requestOut->setUpdates(args.getUpdateObj(), args.isPipelineUpdate());
     requestOut->setSort(args.getSort());
     requestOut->setCollation(args.getCollation());
     requestOut->setLet(args.getLet());

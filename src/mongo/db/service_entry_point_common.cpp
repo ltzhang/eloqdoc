@@ -1251,12 +1251,12 @@ void receivedUpdate(OperationContext* opCtx, const NamespaceString& nsString, co
                         ->checkAuthForUpdate(opCtx,
                                              nsString,
                                              singleUpdate.getQ(),
-                                             singleUpdate.getU(),
+                                             singleUpdate.getU().getUpdate(),
                                              singleUpdate.getUpsert());
     audit::logUpdateAuthzCheck(opCtx->getClient(),
                                nsString,
                                singleUpdate.getQ(),
-                               singleUpdate.getU(),
+                               singleUpdate.getU().getUpdate(),
                                singleUpdate.getUpsert(),
                                singleUpdate.getMulti(),
                                status.code());

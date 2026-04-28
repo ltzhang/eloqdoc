@@ -35,6 +35,34 @@
 namespace mongo {
 namespace write_ops {
 
+class UpdateModification {
+public:
+    UpdateModification() = default;
+    UpdateModification(BSONObj update) : UpdateModification(update, false) {}
+    UpdateModification(BSONObj update, bool isPipeline)
+        : _update(update.getOwned()), _isPipeline(isPipeline) {}
+
+    const BSONObj& getUpdate() const {
+        return _update;
+    }
+
+    bool isPipeline() const {
+        return _isPipeline;
+    }
+
+    operator const BSONObj&() const {
+        return _update;
+    }
+
+    int objsize() const {
+        return _update.objsize();
+    }
+
+private:
+    BSONObj _update;
+    bool _isPipeline = false;
+};
+
 /**
  * Parses the 'limit' property of a delete entry, which has inverted meaning from the 'multi'
  * property of an update.
@@ -56,6 +84,19 @@ BSONObj readWriteHint(const BSONElement& hintElement);
  * Serializes a normalized write hint back to the public command shape.
  */
 void writeWriteHint(const BSONObj& hint, StringData fieldName, BSONObjBuilder* builder);
+
+/**
+ * Parses update modifiers. Command updates accept either classic object updates or pipeline-form
+ * array updates.
+ */
+UpdateModification readUpdateModification(const BSONElement& updateElement);
+
+/**
+ * Serializes update modifiers preserving object vs. pipeline array form.
+ */
+void writeUpdateModification(const UpdateModification& update,
+                             StringData fieldName,
+                             BSONObjBuilder* builder);
 
 }  // namespace write_ops
 }  // namespace mongo

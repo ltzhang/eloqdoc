@@ -369,7 +369,7 @@ private:
             UpdateRequest updateRequest(_batch.getNamespace());
             updateRequest.setLifecycle(&updateLifecycle);
             updateRequest.setQuery(_batch.getUpdates()[0].getQ());
-            updateRequest.setUpdates(_batch.getUpdates()[0].getU());
+            updateRequest.setUpdateModification(_batch.getUpdates()[0].getU());
             updateRequest.setCollation(write_ops::collationOf(_batch.getUpdates()[0]));
             updateRequest.setHint(write_ops::hintOf(_batch.getUpdates()[0]));
             updateRequest.setLet(write_ops::letOf(_batch.getWriteCommandBase()));

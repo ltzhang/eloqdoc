@@ -32,6 +32,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/logical_session_id.h"
 #include "mongo/db/namespace_string.h"
+#include "mongo/db/ops/write_ops_parsers.h"
 #include "mongo/db/query/explain.h"
 #include "mongo/util/mongoutils/str.h"
 
@@ -128,12 +129,21 @@ public:
         return _runtimeConstants;
     }
 
-    inline void setUpdates(const BSONObj& updates) {
+    inline void setUpdates(const BSONObj& updates, bool isPipelineUpdate = false) {
         _updates = updates;
+        _isPipelineUpdate = isPipelineUpdate;
+    }
+
+    inline void setUpdateModification(const write_ops::UpdateModification& update) {
+        setUpdates(update.getUpdate(), update.isPipeline());
     }
 
     inline const BSONObj& getUpdates() const {
         return _updates;
+    }
+
+    inline bool isPipelineUpdate() const {
+        return _isPipelineUpdate;
     }
 
     inline void setArrayFilters(const std::vector<BSONObj>& arrayFilters) {
@@ -293,6 +303,9 @@ private:
 
     // Contains the modifiers to apply to matched objects, or a replacement document.
     BSONObj _updates;
+
+    // True when _updates stores a pipeline array object.
+    bool _isPipelineUpdate = false;
 
     // Filters to specify which array elements should be updated.
     std::vector<BSONObj> _arrayFilters;

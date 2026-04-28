@@ -94,6 +94,7 @@ public:
     BSONObj getQuery() const;
     BSONObj getFields() const;
     BSONObj getUpdateObj() const;
+    bool isPipelineUpdate() const;
     BSONObj getSort() const;
     BSONObj getCollation() const;
     BSONObj getLet() const;
@@ -172,6 +173,7 @@ private:
 
     // Required for updates
     const BSONObj _updateObj;
+    bool _isPipelineUpdate = false;
 
     boost::optional<bool> _isUpsert;
     boost::optional<BSONObj> _fieldProjection;

@@ -141,6 +141,7 @@ env.Library(
     LIBDEPS=[
         '$BUILD_DIR/mongo/base',
         '$BUILD_DIR/mongo/db/common',
+        '$BUILD_DIR/mongo/db/pipeline/pipeline',
         '$BUILD_DIR/mongo/db/server_options_core',
         '$BUILD_DIR/mongo/db/query/query_planner',
         'update',
@@ -157,4 +158,3 @@ env.CppUnitTest(
         'update_driver',
     ],
 )
-
