@@ -63,7 +63,7 @@ The hardest part is constructing the child Pipeline against the target namespace
 - [x] `$unionWith: "other_coll"` produces source + other collection's documents.
 - [x] `$unionWith: { coll: "x", pipeline: [{$match: {...}}] }` filters before union.
 - [x] Empty source pipeline / empty target pipeline both produce correct unions.
-- [ ] Authorization fails if user lacks read on the unioned namespace.
+- [x] Authorization fails if user lacks read on the unioned namespace.
 - [x] Nested `$unionWith` (one inside another) works.
 - [x] Schema validation off: documents from `other` may have any shape — output is heterogeneous. Caller is responsible for downstream `$project`.
 - **Test entry point:** `tests/jstests/eloq_basic/agg_union_with.js`. Adapt `jstests/aggregation/sources/unionWith/`.
@@ -77,7 +77,9 @@ Implemented a minimal single-node `$unionWith` stage using the existing aggregat
 - Lite parsing records the union namespace and nested pipeline namespaces for privilege discovery.
 - Runtime coverage is in `tests/jstests/eloq_basic/agg_union_with.js`.
 
-Deferred: an explicit auth jstest for missing read privilege on the unioned namespace. The stage declares the privilege through lite parsing, but the current checkpoint only verifies non-auth behavior.
+Authorization coverage is in `tests/jstests/eloq_basic/agg_union_with_auth.js`. It runs only when
+authorization is enabled, creates collection-scoped roles, and verifies a user with `find` on the
+source collection but not the unioned collection receives `Unauthorized`.
 
 ## Notes from source analyses
 
