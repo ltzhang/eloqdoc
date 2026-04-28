@@ -12,6 +12,28 @@ function sorted(values) {
     return values.sort();
 }
 
+function planHasIndexName(plan, indexName) {
+    if (plan == null || typeof plan !== "object") {
+        return false;
+    }
+    if (plan.indexName === indexName) {
+        return true;
+    }
+    for (let key in plan) {
+        if (planHasIndexName(plan[key], indexName)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+let explain = assert.commandWorked(db.runCommand({
+    explain: {distinct: coll.getName(), key: "category", query: {active: true}, hint: "active_category"},
+    verbosity: "queryPlanner",
+}));
+assert.eq("PROJECTION", explain.queryPlanner.winningPlan.stage, tojson(explain));
+assert(planHasIndexName(explain.queryPlanner.winningPlan, "active_category"), tojson(explain));
+
 let res = assert.commandWorked(db.runCommand({
     distinct: coll.getName(),
     key: "category",

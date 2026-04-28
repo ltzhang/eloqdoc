@@ -46,7 +46,7 @@ EloqDoc's planner integration with Data Substrate may already accept hints for `
 - [x] `db.c.distinct("f", {}, {hint: "myIdx"})` succeeds.
 - [x] `db.c.distinct("f", {}, {hint: {f: 1}})` succeeds.
 - [x] A non-existent index name returns `BadValue`.
-- [ ] Explain plan (if available for distinct) shows the hinted index used.
+- [x] Explain plan shows the hinted index used.
 - **Test entry point:** `tests/jstests/eloq_basic/distinct_hint.js`.
 
 ## Implementation status
@@ -57,9 +57,9 @@ Implemented before this checkpoint:
 - String hints are normalized to the planner's existing `{$hint: <name>}` shape.
 - Distinct execution reuses the canonical query planner path, so invalid hints return `BadValue`
   through the same planner validation used by `find`.
-- Runtime coverage is in `tests/jstests/eloq_basic/distinct_hint.js`.
+- Runtime and explain-shape coverage is in `tests/jstests/eloq_basic/distinct_hint.js`.
 
-Deferred: explain-shape assertions for the selected hinted index.
+No remaining work in this parser/planner slice.
 
 ## Notes from source analyses
 
