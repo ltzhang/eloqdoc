@@ -56,6 +56,23 @@ assert.eq([
     {day: 3, qty: 7, minQty: 4, maxQty: 8},
 ], result);
 
+result = coll.aggregate([
+    {
+        $setWindowFields: {
+            sortBy: {_id: 1},
+            output: {
+                emptySum: {$sum: "$qty", window: {documents: [1, -1]}},
+                emptyAvg: {$avg: "$qty", window: {documents: [1, -1]}},
+                emptyCount: {$count: {}, window: {documents: [1, -1]}},
+            },
+        },
+    },
+    {$match: {_id: 1}},
+    {$project: {_id: 0, emptySum: 1, emptyAvg: 1, emptyCount: 1}},
+]).toArray();
+
+assert.eq([{emptySum: null, emptyAvg: null, emptyCount: 0}], result);
+
 assert.commandFailed(db.runCommand({
     aggregate: coll.getName(),
     pipeline: [{

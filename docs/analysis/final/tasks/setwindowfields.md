@@ -99,7 +99,7 @@ The window executor must support:
 - [x] `$shift` produces correct lag/lead values.
 - [x] Removable accumulators ($sum, $avg, $count) maintain correct state under sliding-window updates.
 - [x] Non-removable accumulators ($min, $max) work correctly (may be slower).
-- Empty windows return null per accumulator's null-policy.
+- [x] Empty windows return null per accumulator's null-policy (`$count` returns `0`).
 - **Test entry point:** `tests/jstests/eloq_basic/agg_set_window_fields/`. Adapt `jstests/aggregation/sources/setWindowFields/` extensively.
 
 ## Implementation notes
