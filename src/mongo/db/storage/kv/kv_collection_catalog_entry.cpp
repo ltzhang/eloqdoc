@@ -377,6 +377,14 @@ void KVCollectionCatalogEntry::updateValidator(OperationContext* opCtx,
     _catalog->putMetaData(opCtx, ns().toString(), md);
 }
 
+void KVCollectionCatalogEntry::updateChangeStreamPreAndPostImages(
+    OperationContext* opCtx,
+    boost::optional<CollectionOptions::ChangeStreamPreAndPostImagesOptions> options) {
+    MetaData md = _getMetaData(opCtx);
+    md.options.changeStreamPreAndPostImages = options;
+    _catalog->putMetaData(opCtx, ns().toString(), md);
+}
+
 void KVCollectionCatalogEntry::setIsTemp(OperationContext* opCtx, bool isTemp) {
     MetaData md = _getMetaData(opCtx);
     md.options.temp = isTemp;

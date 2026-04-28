@@ -91,6 +91,10 @@ public:
                          StringData validationLevel,
                          StringData validationAction) final;
 
+    void updateChangeStreamPreAndPostImages(
+        OperationContext* opCtx,
+        boost::optional<CollectionOptions::ChangeStreamPreAndPostImagesOptions> options) final;
+
     void setIsTemp(OperationContext* opCtx, bool isTemp);
 
     void updateCappedSize(OperationContext*, long long int) final;

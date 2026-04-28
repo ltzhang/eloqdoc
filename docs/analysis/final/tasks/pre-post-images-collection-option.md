@@ -26,6 +26,12 @@ db.runCommand({ collMod: "c", changeStreamPreAndPostImages: { enabled: true } })
 - Wiring into change-stream output.
 - The pre-image side collection storage.
 
+**Implementation status: metadata-only slice landed.** EloqDoc now accepts and persists
+`changeStreamPreAndPostImages: {enabled: <bool>}` on `createCollection` and `collMod`, accepts
+legacy `recordPreImages: true` on `createCollection`, and exposes both through `listCollections`.
+It does not capture pre/post images or alter change-stream output; those semantics remain deferred
+to the Tier 3 change-stream work.
+
 ## Extension pattern
 
 Pattern G (collection option).
@@ -65,11 +71,18 @@ if (auto el = obj["changeStreamPreAndPostImages"]) {
 
 ## Acceptance criteria
 
-- `create` with `changeStreamPreAndPostImages: {enabled: true}` succeeds; `listCollections` reflects it.
-- `collMod` flips the value; `listCollections` reflects the new state.
-- `create` with the older `recordPreImages: true` is accepted (deprecated path) and surfaces in `listCollections`.
-- Validation: `enabled` must be boolean.
+- [x] `create` with `changeStreamPreAndPostImages: {enabled: true}` succeeds; `listCollections` reflects it.
+- [x] `collMod` flips the value; `listCollections` reflects the new state.
+- [x] `create` with the older `recordPreImages: true` is accepted (deprecated path) and surfaces in `listCollections`.
+- [x] Validation: `enabled` must be boolean.
 - **Test entry point:** `tests/jstests/eloq_basic/pre_post_images_options.js`.
+
+## Implementation notes
+
+The option is stored in `CollectionOptions`, so the normal create, storage, and listCollections
+paths preserve it without a separate output hook. `collMod` updates only the newer
+`changeStreamPreAndPostImages` field; the legacy `recordPreImages` path is accepted at creation
+time for client compatibility but has no image-capture semantics.
 
 ## Notes from source analyses
 

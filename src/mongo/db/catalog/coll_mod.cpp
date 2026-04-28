@@ -77,6 +77,7 @@ struct CollModRequest {
     BSONElement collValidator = {};
     std::string collValidationAction = {};
     std::string collValidationLevel = {};
+    BSONElement changeStreamPreAndPostImages = {};
     BSONElement usePowerOf2Sizes = {};
     BSONElement noPadding = {};
 };
@@ -225,6 +226,17 @@ StatusWith<CollModRequest> parseCollModRequest(OperationContext* opCtx,
                 return statusW.getStatus();
 
             cmr.collValidationAction = e.String();
+        } else if (fieldName == "changeStreamPreAndPostImages" && !isView) {
+            if (e.type() != mongo::Object) {
+                return Status(ErrorCodes::InvalidOptions,
+                              "'changeStreamPreAndPostImages' option must be an object");
+            }
+            BSONElement enabledElem = e.Obj()["enabled"];
+            if (enabledElem.type() != mongo::Bool) {
+                return Status(ErrorCodes::InvalidOptions,
+                              "'changeStreamPreAndPostImages.enabled' option must be a bool");
+            }
+            cmr.changeStreamPreAndPostImages = e;
         } else if (fieldName == "pipeline") {
             if (!isView) {
                 return Status(ErrorCodes::InvalidOptions,
@@ -467,6 +479,25 @@ Status _collModInternal(OperationContext* opCtx,
         invariant(coll->setValidationAction(opCtx, cmr.collValidationAction));
     if (!cmr.collValidationLevel.empty())
         invariant(coll->setValidationLevel(opCtx, cmr.collValidationLevel));
+
+    if (!cmr.changeStreamPreAndPostImages.eoo()) {
+        CollectionOptions::ChangeStreamPreAndPostImagesOptions options;
+        options.enabled = cmr.changeStreamPreAndPostImages.Obj()["enabled"].Bool();
+
+        const auto oldOptions =
+            coll->getCatalogEntry()->getCollectionOptions(opCtx).changeStreamPreAndPostImages;
+        if (!oldOptions || oldOptions->enabled != options.enabled) {
+            if (oldOptions) {
+                result->append("changeStreamPreAndPostImages_old",
+                               BSON("enabled" << oldOptions->enabled));
+            } else {
+                result->appendNull("changeStreamPreAndPostImages_old");
+            }
+            result->append("changeStreamPreAndPostImages_new",
+                           BSON("enabled" << options.enabled));
+            coll->getCatalogEntry()->updateChangeStreamPreAndPostImages(opCtx, options);
+        }
+    }
 
     // UsePowerof2Sizes
     if (!cmr.usePowerOf2Sizes.eoo())

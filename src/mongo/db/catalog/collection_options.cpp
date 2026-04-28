@@ -186,6 +186,23 @@ Status CollectionOptions::parse(const BSONObj& options, ParseKind kind) {
             flagsSet = true;
         } else if (fieldName == "temp") {
             temp = e.trueValue();
+        } else if (fieldName == "recordPreImages") {
+            if (e.type() != mongo::Bool) {
+                return Status(ErrorCodes::BadValue, "'recordPreImages' has to be a boolean.");
+            }
+            recordPreImages = e.Bool();
+        } else if (fieldName == "changeStreamPreAndPostImages") {
+            if (e.type() != mongo::Object) {
+                return Status(ErrorCodes::BadValue,
+                              "'changeStreamPreAndPostImages' has to be a document.");
+            }
+            BSONElement enabledElem = e.Obj()["enabled"];
+            if (enabledElem.type() != mongo::Bool) {
+                return Status(ErrorCodes::BadValue,
+                              "'changeStreamPreAndPostImages.enabled' has to be a boolean.");
+            }
+            changeStreamPreAndPostImages = ChangeStreamPreAndPostImagesOptions{};
+            changeStreamPreAndPostImages->enabled = enabledElem.Bool();
         } else if (fieldName == "storageEngine") {
             Status status = checkStorageEngineOptions(e);
             if (!status.isOK()) {
@@ -316,6 +333,17 @@ void CollectionOptions::appendBSON(BSONObjBuilder* builder) const {
     if (temp)
         builder->appendBool("temp", true);
 
+    if (recordPreImages) {
+        builder->appendBool("recordPreImages", true);
+    }
+
+    if (changeStreamPreAndPostImages) {
+        BSONObjBuilder preAndPostImagesBuilder(
+            builder->subobjStart("changeStreamPreAndPostImages"));
+        preAndPostImagesBuilder.appendBool("enabled", changeStreamPreAndPostImages->enabled);
+        preAndPostImagesBuilder.doneFast();
+    }
+
     if (!storageEngine.isEmpty()) {
         builder->append("storageEngine", storageEngine);
     }
@@ -394,6 +422,20 @@ bool CollectionOptions::matchesStorageOptions(const CollectionOptions& other,
     }
 
     if (temp != other.temp) {
+        return false;
+    }
+
+    if (recordPreImages != other.recordPreImages) {
+        return false;
+    }
+
+    if (static_cast<bool>(changeStreamPreAndPostImages) !=
+        static_cast<bool>(other.changeStreamPreAndPostImages)) {
+        return false;
+    }
+
+    if (changeStreamPreAndPostImages &&
+        changeStreamPreAndPostImages->enabled != other.changeStreamPreAndPostImages->enabled) {
         return false;
     }
 

@@ -441,6 +441,10 @@ public:
                                  StringData validationLevel,
                                  StringData validationAction) = 0;
 
+    virtual void updateChangeStreamPreAndPostImages(
+        OperationContext* opCtx,
+        boost::optional<CollectionOptions::ChangeStreamPreAndPostImagesOptions> options) {}
+
     /**
      * Updates the 'temp' setting for this collection.
      */

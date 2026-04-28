@@ -55,6 +55,10 @@ using CollectionUUID = UUID;
 using OptionalCollectionUUID = boost::optional<CollectionUUID>;
 
 struct CollectionOptions {
+    struct ChangeStreamPreAndPostImagesOptions {
+        bool enabled = false;
+    };
+
     /**
      * Returns true if the options indicate the namespace is a view.
      */
@@ -133,6 +137,9 @@ struct CollectionOptions {
     bool flagsSet = false;
 
     bool temp = false;
+
+    bool recordPreImages = false;
+    boost::optional<ChangeStreamPreAndPostImagesOptions> changeStreamPreAndPostImages;
 
     // Storage engine collection options. Always owned or empty.
     BSONObj storageEngine;
