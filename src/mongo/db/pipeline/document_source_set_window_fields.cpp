@@ -236,7 +236,8 @@ private:
                     out.opName == "$last" || out.opName == "$documentNumber" ||
                     out.opName == "$rank" || out.opName == "$denseRank" ||
                     out.opName == "$shift" || out.opName == "$expMovingAvg" ||
-                    out.opName == "$locf");
+                    out.opName == "$locf" || out.opName == "$covariancePop" ||
+                    out.opName == "$covarianceSamp");
 
         if (out.opName == "$count") {
             uassert(6789330,
@@ -252,6 +253,19 @@ private:
         } else if (out.opName == "$expMovingAvg") {
             parseExpMovingAvgSpec(expCtx, *opElem, &out);
         } else {
+            if (out.opName == "$covariancePop" || out.opName == "$covarianceSamp") {
+                uassert(6789355,
+                        str::stream() << out.opName << " argument must be an array",
+                        opElem->type() == BSONType::Array);
+                int argumentCount = 0;
+                for (auto&& argument : opElem->Obj()) {
+                    (void)argument;
+                    ++argumentCount;
+                }
+                uassert(6789356,
+                        str::stream() << out.opName << " requires exactly two arguments",
+                        argumentCount == 2);
+            }
             VariablesParseState vps = expCtx->variablesParseState;
             out.argument = Expression::parseOperand(expCtx, *opElem, vps)->optimize();
         }
@@ -526,6 +540,9 @@ private:
         if (outSpec.opName == "$locf") {
             return evaluateLocf(outSpec, partitionStart, relativeIndex);
         }
+        if (outSpec.opName == "$covariancePop" || outSpec.opName == "$covarianceSamp") {
+            return evaluateCovariance(outSpec, partitionStart, first, last);
+        }
         return evaluateWindow(outSpec, partitionStart, first, last);
     }
 
@@ -563,6 +580,42 @@ private:
             haveValue = true;
         }
         return haveValue ? last : Value(BSONNULL);
+    }
+
+    Value evaluateCovariance(const OutputSpec& outSpec,
+                             size_t partitionStart,
+                             int first,
+                             int last) const {
+        if (first > last) {
+            return Value(BSONNULL);
+        }
+
+        double sumX = 0;
+        double sumY = 0;
+        double sumXY = 0;
+        int count = 0;
+        for (int i = first; i <= last; ++i) {
+            auto pair = outSpec.argument->evaluate(_buffer[partitionStart + i].doc);
+            if (!pair.isArray() || pair.getArray().size() != 2) {
+                continue;
+            }
+            const auto& values = pair.getArray();
+            if (!values[0].numeric() || !values[1].numeric()) {
+                continue;
+            }
+            const double x = values[0].coerceToDouble();
+            const double y = values[1].coerceToDouble();
+            sumX += x;
+            sumY += y;
+            sumXY += x * y;
+            ++count;
+        }
+        if (count == 0 || (outSpec.opName == "$covarianceSamp" && count < 2)) {
+            return Value(BSONNULL);
+        }
+        const double covariance = sumXY - (sumX * sumY / count);
+        const double denominator = outSpec.opName == "$covarianceSamp" ? count - 1 : count;
+        return numericValue(covariance / denominator);
     }
 
     int rankFor(size_t partitionStart, size_t partitionEnd, int relativeIndex) const {
