@@ -28,8 +28,9 @@ db.metrics.aggregate([
 
 Documents must be sorted within each partition; `$fill` does not sort itself (caller responsibility).
 
-**Checkpoint status:** unpartitioned streaming fill is implemented for literal `value` replacement
-and `method: "locf"`. `linear`, partitioned fill, and sort-order validation remain deferred.
+**Checkpoint status:** streaming fill is implemented for literal `value` replacement and
+`method: "locf"`, including `partitionByFields` state reset. `linear`, `partitionBy`
+expression support, and sort-order validation remain deferred.
 
 ## Extension pattern
 
@@ -66,10 +67,10 @@ REGISTER_DOCUMENT_SOURCE(fill, ...);
 
 ## Acceptance criteria
 
-- [x] `locf` mode forward-fills null values for unpartitioned input.
+- [x] `locf` mode forward-fills null values per partition.
 - `linear` mode interpolates numerical fields between observations.
 - [x] Literal-value mode replaces nulls with the supplied value.
-- Per-partition state resets between partitions.
+- [x] Per-partition state resets between partitions.
 - Date interpolation works (treats Date as numeric milliseconds).
 - Out-of-order input within a partition produces an error.
 - **Test entry point:** `tests/jstests/eloq_basic/agg_fill.js`. Adapt `jstests/aggregation/sources/fill/`.
@@ -78,11 +79,13 @@ REGISTER_DOCUMENT_SOURCE(fill, ...);
 
 Initial support is a streaming stage in `document_source_fill.cpp`. It preserves each input
 document, replacing missing or null output fields according to either a literal `value` rule or the
-last non-null value seen for `method: "locf"`.
+last non-null value seen for `method: "locf"`. When `partitionByFields` is supplied, LOCF state
+resets as the partition key changes in the caller-sorted stream.
 
-Deferred semantic differences: MongoDB supports partitioned fill, linear interpolation, and stricter
-sort validation. EloqDoc currently rejects partitioned and linear forms with parse errors and trusts
-the caller-provided stream order for the unpartitioned LOCF/value checkpoint.
+Deferred semantic differences: MongoDB supports arbitrary `partitionBy` expressions, linear
+interpolation, and stricter sort validation. EloqDoc currently rejects `partitionBy` expressions and
+linear forms with parse errors and trusts the caller-provided stream order for the LOCF/value
+checkpoint.
 
 ## Notes from source analyses
 

@@ -46,8 +46,12 @@ public:
 
     DocumentSourceFill(const boost::intrusive_ptr<ExpressionContext>& expCtx,
                        std::vector<Rule> rules,
-                       BSONObj sortBy)
-        : DocumentSource(expCtx), _rules(std::move(rules)), _sortBy(sortBy.getOwned()) {}
+                       BSONObj sortBy,
+                       std::vector<FieldPath> partitionByFields)
+        : DocumentSource(expCtx),
+          _rules(std::move(rules)),
+          _sortBy(sortBy.getOwned()),
+          _partitionByFields(std::move(partitionByFields)) {}
 
     GetNextResult getNext() final {
         pExpCtx->checkForInterrupt();
@@ -58,6 +62,8 @@ public:
         }
 
         auto input = next.releaseDocument();
+        resetLocfStateForNewPartition(input);
+
         MutableDocument output(input);
         for (auto& rule : _rules) {
             auto current = input.getNestedField(rule.field);
@@ -97,6 +103,13 @@ public:
         }
 
         MutableDocument spec;
+        if (!_partitionByFields.empty()) {
+            std::vector<Value> fields;
+            for (const auto& field : _partitionByFields) {
+                fields.push_back(Value(field.fullPath()));
+            }
+            spec["partitionByFields"] = Value(std::move(fields));
+        }
         if (!_sortBy.isEmpty()) {
             spec["sortBy"] = Value(_sortBy);
         }
@@ -121,9 +134,19 @@ public:
         uassert(6789121,
                 "$fill partitionBy is not supported in this compatibility checkpoint",
                 spec["partitionBy"].eoo());
-        uassert(6789122,
-                "$fill partitionByFields is not supported in this compatibility checkpoint",
-                spec["partitionByFields"].eoo());
+
+        std::vector<FieldPath> partitionByFields;
+        if (auto partitionElem = spec["partitionByFields"]) {
+            uassert(6789122,
+                    "$fill partitionByFields must be an array of strings",
+                    partitionElem.type() == BSONType::Array);
+            for (auto&& fieldElem : partitionElem.Obj()) {
+                uassert(6789130,
+                        "$fill partitionByFields entries must be strings",
+                        fieldElem.type() == BSONType::String);
+                partitionByFields.emplace_back(fieldElem.str());
+            }
+        }
 
         BSONObj sortBy;
         if (auto sortByElem = spec["sortBy"]) {
@@ -147,7 +170,8 @@ public:
                     "$fill output fields require exactly one of 'method' or 'value'",
                     methodElem.eoo() != valueElem.eoo());
 
-            Rule rule{FieldPath(fieldSpecElem.fieldNameStringData()), RuleType::kLiteral, Value(), Value()};
+            Rule rule{
+                FieldPath(fieldSpecElem.fieldNameStringData()), RuleType::kLiteral, Value(), Value()};
             if (!methodElem.eoo()) {
                 uassert(6789127,
                         "$fill method must be a string",
@@ -163,12 +187,42 @@ public:
         }
         uassert(6789129, "$fill requires at least one output field", !rules.empty());
 
-        return new DocumentSourceFill(expCtx, std::move(rules), sortBy);
+        return new DocumentSourceFill(
+            expCtx, std::move(rules), sortBy, std::move(partitionByFields));
     }
 
 private:
+    void resetLocfStateForNewPartition(const Document& input) {
+        if (_partitionByFields.empty()) {
+            return;
+        }
+
+        auto key = makePartitionKey(input);
+        if (!_havePartition ||
+            pExpCtx->getValueComparator().compare(key, _currentPartitionKey) != 0) {
+            for (auto& rule : _rules) {
+                rule.lastSeen = Value();
+            }
+            _currentPartitionKey = key;
+            _havePartition = true;
+        }
+    }
+
+    Value makePartitionKey(const Document& input) const {
+        std::vector<Value> key;
+        key.reserve(_partitionByFields.size());
+        for (const auto& field : _partitionByFields) {
+            auto value = input.getNestedField(field);
+            key.push_back(value.missing() ? Value(BSONNULL) : value);
+        }
+        return Value(std::move(key));
+    }
+
     std::vector<Rule> _rules;
     BSONObj _sortBy;
+    std::vector<FieldPath> _partitionByFields;
+    bool _havePartition = false;
+    Value _currentPartitionKey;
 };
 
 constexpr StringData DocumentSourceFill::kStageName;
