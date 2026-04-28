@@ -7,6 +7,25 @@ includeColl.drop();
 excludeColl.drop();
 subtreeColl.drop();
 
+function planHasIndexName(plan, indexName) {
+    if (!plan || typeof plan !== "object") {
+        return false;
+    }
+    if (plan.indexName === indexName) {
+        return true;
+    }
+    for (let key in plan) {
+        if (planHasIndexName(plan[key], indexName)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function winningPlan(collection, query) {
+    return collection.find(query).explain("queryPlanner").queryPlanner.winningPlan;
+}
+
 assert.commandWorked(coll.createIndex({"$**": 1}, {name: "all_paths"}));
 let spec = coll.getIndexes().filter(index => index.name === "all_paths")[0];
 assert.neq(null, spec, tojson(coll.getIndexes()));
@@ -17,8 +36,18 @@ assert.commandFailed(
     coll.createIndex({"$**": 1}, {name: "bad_projection", wildcardProjection: "a"}));
 
 assert.commandWorked(coll.insert({_id: 1, a: 5, nested: {b: "x"}, arr: [1, 2]}));
+assert.commandWorked(coll.insert({_id: 2, a: 8, nested: {b: "y"}}));
 assert.commandWorked(coll.update({_id: 1}, {$set: {"nested.c": 9, z: true}}));
 assert.eq(1, coll.find({z: true}).itcount());
+assert.eq([1], coll.find({"nested.b": "x"}, {_id: 1}).sort({_id: 1}).toArray().map(doc => doc._id));
+assert(planHasIndexName(winningPlan(coll, {"nested.b": "x"}), "all_paths"),
+       tojson(winningPlan(coll, {"nested.b": "x"})));
+assert.eq([2], coll.find({a: {$gt: 6}}, {_id: 1}).sort({_id: 1}).toArray().map(doc => doc._id));
+assert(planHasIndexName(winningPlan(coll, {a: {$gt: 6}}), "all_paths"),
+       tojson(winningPlan(coll, {a: {$gt: 6}})));
+assert.eq([1], coll.find({z: {$exists: true}}, {_id: 1}).sort({_id: 1}).toArray().map(doc => doc._id));
+assert(planHasIndexName(winningPlan(coll, {z: {$exists: true}}), "all_paths"),
+       tojson(winningPlan(coll, {z: {$exists: true}})));
 
 assert.commandWorked(coll.remove({_id: 1}));
 assert.eq(0, coll.find({a: 5}).itcount());

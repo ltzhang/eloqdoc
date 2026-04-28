@@ -88,7 +88,9 @@ void CollectionInfoCacheImpl::computeIndexKeys(OperationContext* opCtx) {
     while (i.more()) {
         IndexDescriptor* descriptor = i.next();
 
-        if (descriptor->getAccessMethodName() != IndexNames::TEXT) {
+        if (descriptor->getAccessMethodName() == IndexNames::WILDCARD) {
+            _indexedPaths.allPathsIndexed();
+        } else if (descriptor->getAccessMethodName() != IndexNames::TEXT) {
             BSONObj key = descriptor->keyPattern();
             const BSONObj& infoObj = descriptor->infoObj();
             if (infoObj.hasField("expireAfterSeconds")) {

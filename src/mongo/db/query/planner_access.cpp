@@ -58,6 +58,29 @@ using namespace mongo;
 
 namespace dps = ::mongo::dotted_path_support;
 
+void buildWildcardPathBounds(StringData path, OrderedIntervalList* oil) {
+    oil->name = "$_path";
+    oil->intervals.push_back(IndexBoundsBuilder::makePointInterval(path.toString()));
+}
+
+void buildWildcardValueBounds(const MatchExpression* expr,
+                              const IndexEntry& index,
+                              OrderedIntervalList* oil) {
+    BSONObj valueKey = BSON("" << 1);
+    IndexBoundsBuilder::BoundsTightness valueTightness;
+    IndexBoundsBuilder::translate(
+        expr, valueKey.firstElement(), index, oil, &valueTightness);
+
+    // Keep the first planner slice to one contiguous wildcard scan. If a predicate would need
+    // multiple value intervals, scan all values for the indexed path and let FETCH apply the
+    // original predicate.
+    if (oil->intervals.size() != 1) {
+        oil->intervals.clear();
+        IndexBoundsBuilder::allValuesForField(valueKey.firstElement(), oil);
+    }
+    oil->name = "$_value";
+}
+
 /**
  * Text node functors.
  */
@@ -242,6 +265,21 @@ QuerySolutionNode* QueryPlannerAccess::makeLeafNode(
 
         return ret;
     } else {
+        if (index.type == INDEX_WILDCARD) {
+            IndexScanNode* isn = new IndexScanNode(index);
+            isn->index.keyPattern = BSON("$_path" << 1 << "$_value" << 1);
+            isn->bounds.fields.resize(2);
+            isn->maxScan = query.getQueryRequest().getMaxScan();
+            isn->addKeyMetadata = query.getQueryRequest().returnKey();
+            isn->queryCollator = query.getCollator();
+
+            buildWildcardPathBounds(expr->path(), &isn->bounds.fields[0]);
+            buildWildcardValueBounds(expr, index, &isn->bounds.fields[1]);
+
+            *tightnessOut = IndexBoundsBuilder::INEXACT_FETCH;
+            return isn;
+        }
+
         // Note that indexKeyPattern.firstElement().fieldName() may not equal expr->path()
         // because expr might be inside an array operator that provides a path prefix.
         IndexScanNode* isn = new IndexScanNode(index);
@@ -615,7 +653,11 @@ void QueryPlannerAccess::finishLeafNode(QuerySolutionNode* node, const IndexEntr
 
     // All fields are filled out with bounds, nothing to do.
     if (firstEmptyField == bounds->fields.size()) {
-        IndexBoundsBuilder::alignBounds(bounds, index.keyPattern);
+        BSONObj keyPattern = index.keyPattern;
+        if (index.type == INDEX_WILDCARD && type == STAGE_IXSCAN) {
+            keyPattern = static_cast<IndexScanNode*>(node)->index.keyPattern;
+        }
+        IndexBoundsBuilder::alignBounds(bounds, keyPattern);
         return;
     }
 

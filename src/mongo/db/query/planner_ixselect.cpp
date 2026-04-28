@@ -34,6 +34,7 @@
 
 #include "mongo/base/simple_string_data_comparator.h"
 #include "mongo/db/geo/hash.h"
+#include "mongo/db/index/index_descriptor.h"
 #include "mongo/db/index/s2_common.h"
 #include "mongo/db/index_names.h"
 #include "mongo/db/matcher/expression_algo.h"
@@ -50,6 +51,60 @@
 namespace mongo {
 
 namespace {
+
+constexpr StringData kWildcardSuffix = ".$**"_sd;
+
+bool pathIsOrHasPrefix(StringData path, StringData prefix) {
+    return path == prefix || (path.size() > prefix.size() && path.startsWith(prefix) &&
+                              path[prefix.size()] == '.');
+}
+
+bool wildcardIndexCoversPath(const IndexEntry& index, StringData queryPath) {
+    if (index.type != INDEX_WILDCARD || queryPath == "_id"_sd) {
+        return false;
+    }
+
+    const BSONElement keyElement = index.keyPattern.firstElement();
+    const StringData wildcardPath = keyElement.fieldNameStringData();
+    if (wildcardPath != "$**"_sd) {
+        invariant(wildcardPath.endsWith(kWildcardSuffix));
+        const StringData rootPath =
+            wildcardPath.substr(0, wildcardPath.size() - kWildcardSuffix.size());
+        if (!pathIsOrHasPrefix(queryPath, rootPath)) {
+            return false;
+        }
+    }
+
+    const BSONObj projection =
+        index.infoObj.getObjectField(IndexDescriptor::kWildcardProjectionFieldName.toString());
+    if (projection.isEmpty()) {
+        return true;
+    }
+
+    bool includeProjection = false;
+    for (const BSONElement& elem : projection) {
+        if (elem.trueValue()) {
+            includeProjection = true;
+            break;
+        }
+    }
+
+    if (includeProjection) {
+        for (const BSONElement& elem : projection) {
+            if (pathIsOrHasPrefix(queryPath, elem.fieldNameStringData())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    for (const BSONElement& elem : projection) {
+        if (pathIsOrHasPrefix(queryPath, elem.fieldNameStringData())) {
+            return false;
+        }
+    }
+    return true;
+}
 
 /**
  * Checks whether the given index is compatible with each child of the given $elemMatch expression.
@@ -176,6 +231,16 @@ void QueryPlannerIXSelect::findRelevantIndices(const stdx::unordered_set<string>
                                                const vector<IndexEntry>& allIndices,
                                                vector<IndexEntry>* out) {
     for (size_t i = 0; i < allIndices.size(); ++i) {
+        if (allIndices[i].type == INDEX_WILDCARD) {
+            for (const auto& field : fields) {
+                if (wildcardIndexCoversPath(allIndices[i], field)) {
+                    out->push_back(allIndices[i]);
+                    break;
+                }
+            }
+            continue;
+        }
+
         BSONObjIterator it(allIndices[i].keyPattern);
         verify(it.more());
         BSONElement elt = it.next();
@@ -383,8 +448,8 @@ bool QueryPlannerIXSelect::compatible(const BSONElement& elt,
         return false;
     } else if (IndexNames::TEXT == indexedFieldType) {
         return (exprtype == MatchExpression::TEXT);
-    } else if (IndexNames::WILDCARD == indexedFieldType) {
-        return false;
+    } else if (index.type == INDEX_WILDCARD) {
+        return wildcardIndexCoversPath(index, node->path());
     } else if (IndexNames::GEO_HAYSTACK == indexedFieldType) {
         return false;
     } else {
@@ -424,6 +489,12 @@ void QueryPlannerIXSelect::rateIndices(MatchExpression* node,
         for (size_t i = 0; i < indices.size(); ++i) {
             BSONObjIterator it(indices[i].keyPattern);
             BSONElement elt = it.next();
+            if (indices[i].type == INDEX_WILDCARD && wildcardIndexCoversPath(indices[i], fullPath) &&
+                compatible(elt, indices[i], node, collator)) {
+                rt->first.push_back(i);
+                continue;
+            }
+
             if (elt.fieldName() == fullPath && compatible(elt, indices[i], node, collator)) {
                 if (node->matchType() != MatchExpression::ELEM_MATCH_VALUE ||
                     elemMatchValueCompatible(elt, indices[i], node, collator)) {
