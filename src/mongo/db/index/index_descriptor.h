@@ -78,6 +78,7 @@ public:
     static constexpr StringData kLanguageOverrideFieldName = "language_override"_sd;
     static constexpr StringData kNamespaceFieldName = "ns"_sd;
     static constexpr StringData kPartialFilterExprFieldName = "partialFilterExpression"_sd;
+    static constexpr StringData kPrepareUniqueFieldName = "prepareUnique"_sd;
     static constexpr StringData kSparseFieldName = "sparse"_sd;
     static constexpr StringData kStorageEngineFieldName = "storageEngine"_sd;
     static constexpr StringData kTextVersionFieldName = "textIndexVersion"_sd;
@@ -102,6 +103,7 @@ public:
           _unique(_isIdIndex || infoObj[kUniqueFieldName].trueValue()),
           _partial(!infoObj[kPartialFilterExprFieldName].eoo()),
           _hidden(infoObj[kHiddenFieldName].trueValue()),
+          _prepareUnique(infoObj[kPrepareUniqueFieldName].trueValue()),
           _cachedEntry(NULL) {
         _indexNamespace = makeIndexNamespace(_parentNS, _indexName);
 
@@ -215,6 +217,10 @@ public:
         return _hidden;
     }
 
+    bool prepareUnique() const {
+        return _prepareUnique;
+    }
+
     // Is this index multikey?
     bool isMultikey(OperationContext* opCtx) const;
 
@@ -293,6 +299,7 @@ private:
     bool _unique;
     bool _partial;
     bool _hidden;
+    bool _prepareUnique;
     IndexVersion _version;
 
     // only used by IndexCatalogEntryContainer to do caching for perf

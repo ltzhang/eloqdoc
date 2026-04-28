@@ -71,6 +71,7 @@ struct CollModRequest {
     const IndexDescriptor* idx = nullptr;
     BSONElement indexExpireAfterSeconds = {};
     BSONElement indexHidden = {};
+    BSONElement indexPrepareUnique = {};
     BSONElement viewPipeLine = {};
     std::string viewOn = {};
     BSONElement collValidator = {};
@@ -130,9 +131,11 @@ StatusWith<CollModRequest> parseCollModRequest(OperationContext* opCtx,
             cmr.indexExpireAfterSeconds =
                 indexObj[IndexDescriptor::kExpireAfterSecondsFieldName];
             cmr.indexHidden = indexObj[IndexDescriptor::kHiddenFieldName];
-            if (cmr.indexExpireAfterSeconds.eoo() && cmr.indexHidden.eoo()) {
+            cmr.indexPrepareUnique = indexObj[IndexDescriptor::kPrepareUniqueFieldName];
+            if (cmr.indexExpireAfterSeconds.eoo() && cmr.indexHidden.eoo() &&
+                cmr.indexPrepareUnique.eoo()) {
                 return Status(ErrorCodes::InvalidOptions,
-                              "no expireAfterSeconds or hidden field");
+                              "no expireAfterSeconds, hidden, or prepareUnique field");
             }
             if (!cmr.indexExpireAfterSeconds.eoo() && !cmr.indexExpireAfterSeconds.isNumber()) {
                 return Status(ErrorCodes::InvalidOptions,
@@ -140,6 +143,10 @@ StatusWith<CollModRequest> parseCollModRequest(OperationContext* opCtx,
             }
             if (!cmr.indexHidden.eoo() && cmr.indexHidden.type() != BSONType::Bool) {
                 return Status(ErrorCodes::InvalidOptions, "hidden field must be a bool");
+            }
+            if (!cmr.indexPrepareUnique.eoo() &&
+                cmr.indexPrepareUnique.type() != BSONType::Bool) {
+                return Status(ErrorCodes::InvalidOptions, "prepareUnique field must be a bool");
             }
 
             if (!indexName.empty()) {
@@ -432,6 +439,23 @@ Status _collModInternal(OperationContext* opCtx,
             opCtx->recoveryUnit()->onRollback([opCtx, idx = cmr.idx, coll]() {
                 coll->getIndexCatalog()->refreshEntry(opCtx, idx);
                 coll->infoCache()->clearQueryCache();
+            });
+        }
+    }
+
+    if (!cmr.indexPrepareUnique.eoo()) {
+        const bool newPrepareUnique = cmr.indexPrepareUnique.Bool();
+        const bool oldPrepareUnique = cmr.idx->prepareUnique();
+
+        if (oldPrepareUnique != newPrepareUnique) {
+            result->append("prepareUnique_old", oldPrepareUnique);
+            coll->getCatalogEntry()->updatePrepareUniqueSetting(
+                opCtx, cmr.idx->indexName(), newPrepareUnique);
+
+            cmr.idx = coll->getIndexCatalog()->refreshEntry(opCtx, cmr.idx);
+            result->append("prepareUnique_new", newPrepareUnique);
+            opCtx->recoveryUnit()->onRollback([opCtx, idx = cmr.idx, coll]() {
+                coll->getIndexCatalog()->refreshEntry(opCtx, idx);
             });
         }
     }

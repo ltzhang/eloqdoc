@@ -86,6 +86,7 @@ static std::set<StringData> allowedFieldNames = {
     IndexDescriptor::kLanguageOverrideFieldName,
     IndexDescriptor::kNamespaceFieldName,
     IndexDescriptor::kPartialFilterExprFieldName,
+    IndexDescriptor::kPrepareUniqueFieldName,
     IndexDescriptor::kSparseFieldName,
     IndexDescriptor::kStorageEngineFieldName,
     IndexDescriptor::kTextVersionFieldName,

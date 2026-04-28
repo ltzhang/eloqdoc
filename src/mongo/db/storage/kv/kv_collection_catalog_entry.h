@@ -78,6 +78,10 @@ public:
 
     void updateHiddenSetting(OperationContext* opCtx, StringData idxName, bool hidden) final;
 
+    void updatePrepareUniqueSetting(OperationContext* opCtx,
+                                    StringData idxName,
+                                    bool prepareUnique) final;
+
     void updateFlags(OperationContext* opCtx, int newValue) final;
 
     void updateIndexMetadata(OperationContext* opCtx, const IndexDescriptor* desc) final;

@@ -18,6 +18,13 @@ db.runCommand({collMod: "c", index: {keyPattern: {email: 1}, prepareUnique: true
 db.runCommand({collMod: "c", index: {keyPattern: {email: 1}, unique: true}})
 ```
 
+**Implementation status: first catalog slice landed.** EloqDoc now persists a
+`prepareUnique` flag on index specs, exposes it through `listIndexes`, and supports setting or
+clearing it through `collMod` by index name or key pattern. The write-path duplicate enforcement
+and `collMod unique: true` conversion are intentionally left for the next slice because Eloq
+standard secondary keys include the record id, so duplicate probing needs a prefix/range check
+rather than the existing unique-index exact-key check.
+
 ## Extension pattern
 
 Catalog state machine + write-path interception.
@@ -59,12 +66,26 @@ if (descriptor->prepareUnique() || descriptor->unique()) {
 
 ## Acceptance criteria
 
-- `collMod` with `prepareUnique: true` succeeds; subsequent inserts that would dup fail with `DuplicateKey`; existing dup-bearing reads still succeed.
-- `collMod` with `unique: true` and a clean collection succeeds and flips the flag.
-- `collMod` with `unique: true` on a collection with existing duplicates fails with `DuplicateKey` and does NOT flip.
-- `listIndexes` reflects intermediate state.
+- [x] `collMod` with `prepareUnique: true` succeeds.
+- [ ] Subsequent inserts that would dup fail with `DuplicateKey`; existing dup-bearing reads still succeed.
+- [ ] `collMod` with `unique: true` and a clean collection succeeds and flips the flag.
+- [ ] `collMod` with `unique: true` on a collection with existing duplicates fails with `DuplicateKey` and does NOT flip.
+- [x] `listIndexes` reflects intermediate state.
 - After `unique: true` succeeds, reverting to non-unique requires a new `collMod` (`unique: false` if supported, else dropIndex/recreate).
 - **Test entry point:** `tests/jstests/eloq_basic/prepare_unique.js`. Adapt `jstests/core/index_collmod_unique_*.js`.
+
+## Implementation notes
+
+Initial support mirrors the hidden-index catalog plumbing: `IndexDescriptor` reads
+`prepareUnique` from the persisted spec, the KV collection catalog can update that BSON field in
+place, and `collMod` refreshes the in-memory index descriptor after the metadata write. Setting
+`prepareUnique: false` removes the field from the spec so `listIndexes` returns to the normal
+non-unique shape.
+
+The next implementation slice should add duplicate detection for prepared indexes on insert and
+update. Reusing the current unique-index exact-key check is not sufficient for Eloq standard
+secondary indexes because their stored key includes the record id; prepared uniqueness needs to
+scan or seek the key-prefix range and ignore the current record during updates.
 
 ## Notes from source analyses
 

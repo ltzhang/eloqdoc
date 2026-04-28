@@ -91,6 +91,7 @@ constexpr StringData IndexDescriptor::kKeyPatternFieldName;
 constexpr StringData IndexDescriptor::kLanguageOverrideFieldName;
 constexpr StringData IndexDescriptor::kNamespaceFieldName;
 constexpr StringData IndexDescriptor::kPartialFilterExprFieldName;
+constexpr StringData IndexDescriptor::kPrepareUniqueFieldName;
 constexpr StringData IndexDescriptor::kSparseFieldName;
 constexpr StringData IndexDescriptor::kStorageEngineFieldName;
 constexpr StringData IndexDescriptor::kTextVersionFieldName;

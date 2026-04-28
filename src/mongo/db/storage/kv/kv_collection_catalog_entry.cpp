@@ -322,6 +322,16 @@ void KVCollectionCatalogEntry::updateHiddenSetting(OperationContext* opCtx,
     _catalog->putMetaData(opCtx, ns().toString(), md);
 }
 
+void KVCollectionCatalogEntry::updatePrepareUniqueSetting(OperationContext* opCtx,
+                                                          StringData idxName,
+                                                          bool prepareUnique) {
+    MetaData md = _getMetaData(opCtx);
+    int offset = md.findIndexOffset(idxName);
+    invariant(offset >= 0);
+    md.indexes[offset].updatePrepareUniqueSetting(prepareUnique);
+    _catalog->putMetaData(opCtx, ns().toString(), md);
+}
+
 void KVCollectionCatalogEntry::updateIndexMetadata(OperationContext* opCtx,
                                                    const IndexDescriptor* desc) {
     // Update any metadata Ident has for this index

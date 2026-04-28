@@ -164,6 +164,22 @@ public:
             spec = b.obj();
         }
 
+        void updatePrepareUniqueSetting(bool prepareUnique) {
+            BSONObjBuilder b;
+            for (BSONObjIterator bi(spec); bi.more();) {
+                BSONElement e = bi.next();
+                if (e.fieldNameStringData() == "prepareUnique") {
+                    continue;
+                }
+                b.append(e);
+            }
+
+            if (prepareUnique) {
+                b.append("prepareUnique", true);
+            }
+            spec = b.obj();
+        }
+
         std::string name() const {
             return spec["name"].String();
         }
@@ -402,6 +418,10 @@ public:
                                   long long newExpireSeconds) = 0;
 
     virtual void updateHiddenSetting(OperationContext* opCtx, StringData idxName, bool hidden) {}
+
+    virtual void updatePrepareUniqueSetting(OperationContext* opCtx,
+                                            StringData idxName,
+                                            bool prepareUnique) {}
 
     virtual void updateIndexMetadata(OperationContext* opCtx, const IndexDescriptor* desc) {}
 
