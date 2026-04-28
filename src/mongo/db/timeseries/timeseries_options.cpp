@@ -54,6 +54,11 @@ Status parseTimeseriesOptions(const BSONElement& elem, TimeseriesOptions* out) {
         return {ErrorCodes::InvalidOptions, "'timeseries.timeField' is required."};
     }
 
+    if (!parsed.metaField.empty() && parsed.metaField == parsed.timeField) {
+        return {ErrorCodes::InvalidOptions,
+                "'timeseries.metaField' must be different from 'timeseries.timeField'."};
+    }
+
     if (parsed.granularity != "seconds" && parsed.granularity != "minutes" &&
         parsed.granularity != "hours") {
         return {ErrorCodes::InvalidOptions,

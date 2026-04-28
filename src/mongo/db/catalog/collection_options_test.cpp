@@ -57,6 +57,30 @@ TEST(CollectionOptions, SimpleRoundTrip) {
     checkRoundTrip(options);
 }
 
+TEST(CollectionOptions, TimeSeriesOptionsRoundTrip) {
+    CollectionOptions options;
+    ASSERT_OK(options.parse(fromjson("{timeseries: {timeField: 't', metaField: 'tags', "
+                                     "granularity: 'minutes'}, expireAfterSeconds: 3600}")));
+
+    ASSERT_TRUE(options.timeseries);
+    ASSERT_EQUALS(std::string("t"), options.timeseries->timeField);
+    ASSERT_EQUALS(std::string("tags"), options.timeseries->metaField);
+    ASSERT_EQUALS(std::string("minutes"), options.timeseries->granularity);
+    ASSERT_TRUE(options.expireAfterSeconds);
+    ASSERT_EQUALS(3600LL, *options.expireAfterSeconds);
+    checkRoundTrip(options);
+}
+
+TEST(CollectionOptions, RejectsInvalidTimeSeriesOptions) {
+    ASSERT_NOT_OK(CollectionOptions().parse(fromjson("{timeseries: {metaField: 'tags'}}")));
+    ASSERT_NOT_OK(CollectionOptions().parse(fromjson("{timeseries: {timeField: 5}}")));
+    ASSERT_NOT_OK(
+        CollectionOptions().parse(fromjson("{timeseries: {timeField: 't', metaField: 't'}}")));
+    ASSERT_NOT_OK(CollectionOptions().parse(fromjson("{timeseries: {timeField: 't'}, "
+                                                    "expireAfterSeconds: -1}")));
+    ASSERT_NOT_OK(CollectionOptions().parse(fromjson("{expireAfterSeconds: 3600}")));
+}
+
 TEST(CollectionOptions, Validate) {
     CollectionOptions options;
     ASSERT_OK(options.validateForStorage());
