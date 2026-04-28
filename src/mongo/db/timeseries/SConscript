@@ -59,3 +59,14 @@ env.Library(
         '$BUILD_DIR/mongo/db/catalog/collection_options',
     ],
 )
+
+env.CppUnitTest(
+    target='query_translator_test',
+    source=[
+        'query_translator_test.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/db/catalog/collection_options',
+        'query_translator',
+    ],
+)

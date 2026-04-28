@@ -101,6 +101,10 @@ out of scope for the first working slice:
   over reopening and appending to large existing buckets.
 - Logical `find` and `aggregate` operations translate to an aggregation over the bucket collection
   with `$_internalUnpackBucket`; native find executor unpacking is a later optimization.
+- Query translation injects a conservative bucket-level `$match` before unpacking for a leading
+  simple `$match` on the configured time field or `metaField`. The original measurement predicate
+  is still evaluated after unpacking, so bucket pruning is a performance optimization rather than
+  the source of query correctness.
 - TTL is bucket-level only and deletes entire buckets whose `control.max.<timeField>` is expired
   by the collection-level `expireAfterSeconds` option.
 - Explain output can expose `system.buckets.<collection>` until a later compatibility pass rewrites
