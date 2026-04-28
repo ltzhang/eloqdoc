@@ -38,12 +38,14 @@ public:
                           FieldPath field,
                           double step,
                           double lower,
-                          double upper)
+                          double upper,
+                          std::vector<FieldPath> partitionByFields)
         : DocumentSource(expCtx),
           _field(std::move(field)),
           _step(step),
           _lower(lower),
           _upper(upper),
+          _partitionByFields(std::move(partitionByFields)),
           _nextValue(lower) {}
 
     GetNextResult getNext() final {
@@ -57,22 +59,48 @@ public:
             }
 
             if (_inputExhausted) {
+                if (!_partitionByFields.empty() && !_havePartition) {
+                    return GetNextResult::makeEOF();
+                }
                 if (canGenerateNext()) {
                     return GetNextResult(makeSyntheticDocument(_nextValue));
                 }
                 return GetNextResult::makeEOF();
             }
 
-            auto next = pSource->getNext();
-            if (next.isPaused()) {
-                return next;
-            }
-            if (next.isEOF()) {
-                _inputExhausted = true;
-                continue;
+            Document doc;
+            Value partitionKey;
+            if (hasStashedDocument()) {
+                doc = std::move(*_stashedDocument);
+                partitionKey = std::move(_stashedPartitionKey);
+                _stashedDocument = boost::none;
+                startPartition(partitionKey);
+            } else {
+                auto next = pSource->getNext();
+                if (next.isPaused()) {
+                    return next;
+                }
+                if (next.isEOF()) {
+                    _inputExhausted = true;
+                    continue;
+                }
+
+                doc = next.releaseDocument();
+                partitionKey = makePartitionKey(doc);
             }
 
-            auto doc = next.releaseDocument();
+            if (isNewPartition(partitionKey)) {
+                if (!_havePartition) {
+                    startPartition(partitionKey);
+                } else if (canGenerateNext()) {
+                    _stashedDocument = std::move(doc);
+                    _stashedPartitionKey = partitionKey;
+                    return GetNextResult(makeSyntheticDocument(_nextValue));
+                } else {
+                    startPartition(partitionKey);
+                }
+            }
+
             double current = extractNumericField(doc);
             if (_haveLastInput) {
                 uassert(6789103,
@@ -106,6 +134,13 @@ public:
 
         MutableDocument spec;
         spec["field"] = Value(_field.fullPath());
+        if (!_partitionByFields.empty()) {
+            std::vector<Value> fields;
+            for (const auto& field : _partitionByFields) {
+                fields.push_back(Value(field.fullPath()));
+            }
+            spec["partitionByFields"] = Value(std::move(fields));
+        }
         spec["range"] = range.freezeToValue();
         return Value(Document{{kStageName, spec.freezeToValue()}});
     }
@@ -134,9 +169,18 @@ public:
         uassert(6789106,
                 "$densify requires an object 'range'",
                 rangeElem.type() == BSONType::Object);
-        uassert(6789107,
-                "$densify partitionByFields is not supported in this compatibility checkpoint",
-                spec["partitionByFields"].eoo());
+        std::vector<FieldPath> partitionByFields;
+        if (auto partitionElem = spec["partitionByFields"]) {
+            uassert(6789107,
+                    "$densify partitionByFields must be an array of strings",
+                    partitionElem.type() == BSONType::Array);
+            for (auto&& fieldElem : partitionElem.Obj()) {
+                uassert(6789116,
+                        "$densify partitionByFields entries must be strings",
+                        fieldElem.type() == BSONType::String);
+                partitionByFields.emplace_back(fieldElem.str());
+            }
+        }
 
         BSONObj range = rangeElem.Obj();
         BSONElement stepElem = range["step"];
@@ -159,11 +203,19 @@ public:
         uassert(6789113, "$densify requires exactly two bounds", bounds.size() == 2);
         uassert(6789114, "$densify lower bound must be <= upper bound", bounds[0] <= bounds[1]);
 
-        return new DocumentSourceDensify(
-            expCtx, FieldPath(fieldElem.str()), step, bounds[0], bounds[1]);
+        return new DocumentSourceDensify(expCtx,
+                                         FieldPath(fieldElem.str()),
+                                         step,
+                                         bounds[0],
+                                         bounds[1],
+                                         std::move(partitionByFields));
     }
 
 private:
+    bool hasStashedDocument() const {
+        return static_cast<bool>(_stashedDocument);
+    }
+
     bool canGenerateNext() {
         if (_nextValue > _upper || nearlyEqual(_nextValue, _upper + _step)) {
             return false;
@@ -173,6 +225,7 @@ private:
 
     Document makeSyntheticDocument(double value) {
         MutableDocument doc;
+        addPartitionFields(doc);
         doc.setNestedField(_field, numericValue(value));
         _nextValue += _step;
         return doc.freeze();
@@ -182,6 +235,47 @@ private:
         auto value = doc.getNestedField(_field);
         uassert(6789115, "$densify field must be present and numeric", value.numeric());
         return value.coerceToDouble();
+    }
+
+    Value makePartitionKey(const Document& doc) const {
+        if (_partitionByFields.empty()) {
+            return Value();
+        }
+
+        std::vector<Value> key;
+        key.reserve(_partitionByFields.size());
+        for (const auto& field : _partitionByFields) {
+            auto value = doc.getNestedField(field);
+            key.push_back(value.missing() ? Value(BSONNULL) : value);
+        }
+        return Value(std::move(key));
+    }
+
+    bool isNewPartition(const Value& partitionKey) const {
+        if (_partitionByFields.empty()) {
+            return false;
+        }
+        return !_havePartition ||
+            pExpCtx->getValueComparator().compare(partitionKey, _currentPartitionKey) != 0;
+    }
+
+    void startPartition(Value partitionKey) {
+        _havePartition = true;
+        _currentPartitionKey = std::move(partitionKey);
+        _nextValue = _lower;
+        _haveLastInput = false;
+        _lastInput = 0;
+    }
+
+    void addPartitionFields(MutableDocument& doc) const {
+        if (_partitionByFields.empty()) {
+            return;
+        }
+
+        const auto& keyValues = _currentPartitionKey.getArray();
+        for (size_t i = 0; i < _partitionByFields.size(); ++i) {
+            doc.setNestedField(_partitionByFields[i], keyValues[i]);
+        }
     }
 
     static bool nearlyEqual(double left, double right) {
@@ -204,11 +298,16 @@ private:
     double _step;
     double _lower;
     double _upper;
+    std::vector<FieldPath> _partitionByFields;
     double _nextValue;
     bool _inputExhausted = false;
+    bool _havePartition = false;
+    Value _currentPartitionKey;
     bool _haveLastInput = false;
     double _lastInput = 0;
     std::deque<Document> _pending;
+    boost::optional<Document> _stashedDocument;
+    Value _stashedPartitionKey;
 };
 
 constexpr StringData DocumentSourceDensify::kStageName;

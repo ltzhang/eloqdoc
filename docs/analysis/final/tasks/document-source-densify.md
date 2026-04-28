@@ -8,9 +8,10 @@
 
 Inserts synthetic documents to fill gaps in a sorted numeric or date sequence. Common use case: dashboards that need a row per minute even when the source data has gaps.
 
-**Checkpoint status:** explicit numeric bounds are implemented for unpartitioned input:
-`{field, range: {step, bounds: [min, max]}}`. Date units, `bounds: "full"`,
-`bounds: "partition"`, and `partitionByFields` remain deferred.
+**Checkpoint status:** explicit numeric bounds are implemented for unpartitioned and
+`partitionByFields` input:
+`{field, partitionByFields, range: {step, bounds: [min, max]}}`. Date units,
+`bounds: "full"`, and `bounds: "partition"` remain deferred.
 
 ```js
 db.events.aggregate([
@@ -64,6 +65,7 @@ class DocumentSourceDensify final : public DocumentSource {
 - `bounds: "full"`, `"partition"`, and explicit `[min, max]` all work.
 - [x] Empty input under `bounds: [min, max]` produces synthetic docs covering the entire range.
 - [x] Generated docs have only `partitionByFields` + `field`; other fields absent.
+- [x] `partitionByFields` with explicit numeric bounds densifies each sorted partition independently.
 - [x] Out-of-order input fails with a clear error.
 - **Test entry point:** `tests/jstests/eloq_basic/agg_densify.js`. Adapt `jstests/aggregation/sources/densify/`.
 
@@ -74,9 +76,13 @@ to be sorted ascending by the densified numeric field, preserves real input docu
 synthetic documents containing only the densified field. Explicit bounds allow the stage to emit a
 complete range even when the source collection is empty.
 
-Deferred semantic differences: MongoDB supports date densification with units, partitioned
-densification, and `bounds: "full"` / `"partition"`. EloqDoc currently rejects those forms with a
-parse error rather than accepting partial semantics.
+`partitionByFields` is supported for explicit numeric bounds when the upstream input is sorted by
+partition fields and then by the densified field. Synthetic partition documents contain only the
+partition fields and the densified field.
+
+Deferred semantic differences: MongoDB supports date densification with units and `bounds: "full"`
+/ `"partition"`. EloqDoc currently rejects those forms with a parse error rather than accepting
+partial semantics.
 
 ## Notes from source analyses
 
