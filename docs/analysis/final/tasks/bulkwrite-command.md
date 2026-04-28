@@ -105,7 +105,9 @@ Cursor responses now honor `cursor.batchSize`: initial results are returned in `
 
 Command-level `let`, `runtimeConstants`, and `bypassDocumentValidation` are passed through the existing `WriteCommandBase` plumbing. Per-op update/delete `hint`, collation, update `arrayFilters`, pipeline-form `updateMods`, `multi`, and `upsert` are mapped onto the existing write op entries. Authorization is checked up-front per operation against the target namespace: insert requires `insert`, update requires `update` plus `insert` for upsert, delete requires `remove`, and `bypassDocumentValidation` adds that action.
 
-Current focused coverage is `tests/jstests/eloq_basic/bulkwrite/base.js`, covering mixed cross-namespace writes, ordered halt, unordered continue, `errorsOnly`, command-level `let`, and pipeline-form updateMods, plus `tests/jstests/eloq_basic/bulkwrite/cursor.js` for command cursor pagination through `getMore`. Follow-up coverage should split the remaining large base test into dedicated ordered/unordered/errorsOnly/let/hint/pipeline-update/auth files as the implementation grows.
+Current focused coverage is `tests/jstests/eloq_basic/bulkwrite/base.js`, covering mixed cross-namespace writes, ordered halt, unordered continue, `errorsOnly`, command-level `let`, and pipeline-form updateMods; `tests/jstests/eloq_basic/bulkwrite/cursor.js` for command cursor pagination through `getMore`; and `tests/jstests/eloq_basic/bulkwrite/hint.js` for single-document per-op update/delete hints and invalid hint reporting. Follow-up coverage should split the remaining large base test into dedicated ordered/unordered/errorsOnly/let/pipeline-update/auth files as the implementation grows.
+
+Deferred: bulkWrite multi-update hint coverage should be revisited with the storage team. A first attempt at a hinted multi-update reproducer entered EloqDoc's storage update path and terminated in `EloqRecoveryUnit::discoveredTable()`, so that broader coverage is being held out of this parser/command checkpoint.
 
 ## Notes from source analyses
 
