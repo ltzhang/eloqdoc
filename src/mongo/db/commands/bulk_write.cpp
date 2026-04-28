@@ -8,13 +8,24 @@
 
 #include "mongo/platform/basic.h"
 
+#include <limits>
+
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/privilege.h"
+#include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/cursor_manager.h"
+#include "mongo/db/exec/queued_data_stage.h"
+#include "mongo/db/exec/working_set.h"
 #include "mongo/db/ops/write_ops.h"
 #include "mongo/db/ops/write_ops_exec.h"
+#include "mongo/db/query/cursor_request.h"
+#include "mongo/db/query/cursor_response.h"
+#include "mongo/db/query/find_common.h"
+#include "mongo/db/repl/read_concern_args.h"
+#include "mongo/stdx/memory.h"
 
 namespace mongo {
 namespace {
@@ -334,6 +345,68 @@ BulkWriteOpResult performBulkWriteOp(OperationContext* opCtx,
     }
 }
 
+void appendBulkWriteCursorResponse(OperationContext* opCtx,
+                                   const BSONObj& cmdObj,
+                                   const NamespaceString& cursorNss,
+                                   const std::vector<BSONObj>& replies,
+                                   BSONObjBuilder& result) {
+    const long long defaultBatchSize = std::numeric_limits<long long>::max();
+    long long batchSize;
+    uassertStatusOK(CursorRequest::parseCommandCursorOptions(cmdObj, defaultBatchSize, &batchSize));
+
+    auto ws = stdx::make_unique<WorkingSet>();
+    auto root = stdx::make_unique<QueuedDataStage>(opCtx, ws.get());
+
+    for (auto&& reply : replies) {
+        WorkingSetID id = ws->allocate();
+        WorkingSetMember* member = ws->get(id);
+        member->keyData.clear();
+        member->recordId = RecordId();
+        member->obj = Snapshotted<BSONObj>(SnapshotId(), reply.getOwned());
+        member->transitionToOwnedObj();
+        root->pushBack(id);
+    }
+
+    auto exec = uassertStatusOK(PlanExecutor::make(
+        opCtx, std::move(ws), std::move(root), cursorNss, PlanExecutor::NO_YIELD));
+
+    BSONArrayBuilder firstBatch;
+    for (long long objCount = 0; objCount < batchSize; ++objCount) {
+        BSONObj next;
+        PlanExecutor::ExecState state = exec->getNext(&next, nullptr);
+        if (state == PlanExecutor::IS_EOF) {
+            break;
+        }
+        invariant(state == PlanExecutor::ADVANCED);
+
+        if (!FindCommon::haveSpaceForNext(next, objCount, firstBatch.len())) {
+            exec->enqueue(next);
+            break;
+        }
+
+        firstBatch.append(next);
+    }
+
+    if (exec->isEOF()) {
+        appendCursorResponseObject(0LL, cursorNss.ns(), firstBatch.arr(), &result);
+        return;
+    }
+
+    exec->saveState();
+    exec->detachFromOperationContext();
+
+    const auto pinnedCursor = CursorManager::getGlobalCursorManager()->registerCursor(
+        opCtx,
+        {std::move(exec),
+         cursorNss,
+         AuthorizationSession::get(opCtx->getClient())->getAuthenticatedUserNames(),
+         repl::ReadConcernArgs::get(opCtx).getLevel(),
+         cmdObj});
+
+    appendCursorResponseObject(
+        pinnedCursor.getCursor()->cursorid(), cursorNss.ns(), firstBatch.arr(), &result);
+}
+
 class CmdBulkWrite : public BasicCommand {
 public:
     CmdBulkWrite() : BasicCommand("bulkWrite") {}
@@ -425,11 +498,8 @@ public:
         result.appendNumber("nDeleted", counters.nDeleted);
         result.appendNumber("nErrors", counters.nErrors);
 
-        BSONObjBuilder cursor(result.subobjStart("cursor"));
-        cursor.append("id", 0LL);
-        cursor.append("ns", NamespaceString(dbName, "$cmd.bulkWrite").ns());
-        cursor.append("firstBatch", replies);
-        cursor.doneFast();
+        appendBulkWriteCursorResponse(
+            opCtx, cmdObj, NamespaceString(dbName, "$cmd.bulkWrite"), replies, result);
         return true;
     }
 } cmdBulkWrite;

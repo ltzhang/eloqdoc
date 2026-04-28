@@ -87,7 +87,7 @@ static CmdBulkWrite cmdBulkWrite;
 - [x] Mixed insert/update/delete across two namespaces succeeds with correct per-op results.
 - [x] Ordered: errors halt processing; subsequent ops not attempted; `nErrors >= 1` and earlier counters reflect what completed.
 - [x] Unordered: errors don't halt; all ops attempted; per-op error reports collected.
-- [ ] Cursor reply: large `ops` lists split across `getMore` calls.
+- [x] Cursor reply: large `ops` lists split across `getMore` calls.
 - [x] Summary counters (`nInserted`, `nMatched`, etc.) accurate.
 - [x] 8.0 `errorsOnly: true` omits successes from the cursor stream.
 - [x] 8.0 `let` flows into update/delete expressions.
@@ -99,13 +99,13 @@ static CmdBulkWrite cmdBulkWrite;
 
 ## Implementation notes
 
-Initial EloqDoc support landed as a compact `BasicCommand` in `src/mongo/db/commands/bulk_write.cpp` and is wired into the standalone command library. It clean-room parses `ops` and `nsInfo`, dispatches each operation through the existing insert/update/delete execution helpers, and returns MongoDB 7.0-style summary counters plus a cursor-shaped reply.
+Initial EloqDoc support landed as a compact `BasicCommand` in `src/mongo/db/commands/bulk_write.cpp` and is wired into the standalone command library. It clean-room parses `ops` and `nsInfo`, dispatches each operation through the existing insert/update/delete execution helpers, and returns MongoDB 7.0-style summary counters plus a command cursor over per-op result documents.
 
-The first implementation intentionally returns an exhausted cursor with all returned per-op results in `firstBatch` and `id: 0`; it does not yet materialize a server cursor or split large result streams across `getMore`. It also does not add retryable-write `stmtIds` handling beyond whatever the dispatched legacy write paths already provide.
+Cursor responses now honor `cursor.batchSize`: initial results are returned in `firstBatch`, any remaining per-op result documents are materialized in a global command cursor, and follow-up `getMore` calls return `nextBatch` until exhaustion. The implementation still does not add retryable-write `stmtIds` handling beyond whatever the dispatched legacy write paths already provide.
 
 Command-level `let`, `runtimeConstants`, and `bypassDocumentValidation` are passed through the existing `WriteCommandBase` plumbing. Per-op update/delete `hint`, collation, update `arrayFilters`, pipeline-form `updateMods`, `multi`, and `upsert` are mapped onto the existing write op entries. Authorization is checked up-front per operation against the target namespace: insert requires `insert`, update requires `update` plus `insert` for upsert, delete requires `remove`, and `bypassDocumentValidation` adds that action.
 
-Current focused coverage is `tests/jstests/eloq_basic/bulkwrite/base.js`, covering mixed cross-namespace writes, ordered halt, unordered continue, `errorsOnly`, command-level `let`, and pipeline-form updateMods. Follow-up coverage should split this into dedicated ordered/unordered/cursor/errorsOnly/let/hint/pipeline-update/auth files as the implementation grows.
+Current focused coverage is `tests/jstests/eloq_basic/bulkwrite/base.js`, covering mixed cross-namespace writes, ordered halt, unordered continue, `errorsOnly`, command-level `let`, and pipeline-form updateMods, plus `tests/jstests/eloq_basic/bulkwrite/cursor.js` for command cursor pagination through `getMore`. Follow-up coverage should split the remaining large base test into dedicated ordered/unordered/errorsOnly/let/hint/pipeline-update/auth files as the implementation grows.
 
 ## Notes from source analyses
 
