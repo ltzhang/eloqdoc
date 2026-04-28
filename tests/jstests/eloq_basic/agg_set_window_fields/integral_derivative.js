@@ -54,6 +54,58 @@ assert.commandFailed(db.runCommand({
     cursor: {},
 }));
 
+const dates = db.agg_set_window_fields_integral_derivative_dates;
+dates.drop();
+
+assert.commandWorked(dates.insert([
+    {_id: 1, ts: new Date(0), y: 0},
+    {_id: 2, ts: new Date(60000), y: 6},
+    {_id: 3, ts: new Date(180000), y: 18},
+]));
+
+const dateResult = dates.aggregate([
+    {
+        $setWindowFields: {
+            sortBy: {ts: 1},
+            output: {
+                area: {
+                    $integral: {input: "$y", unit: "minute"},
+                    window: {documents: ["unbounded", "current"]},
+                },
+                rate: {
+                    $derivative: {input: "$y", unit: "minute"},
+                    window: {documents: ["unbounded", "current"]},
+                },
+            },
+        },
+    },
+    {$project: {_id: 0, area: 1, rate: 1}},
+]).toArray();
+
+assert.eq(3, dateResult.length, tojson(dateResult));
+assert.close(0, dateResult[0].area, tojson(dateResult), 8);
+assert.eq(null, dateResult[0].rate, tojson(dateResult));
+assert.close(3, dateResult[1].area, tojson(dateResult), 8);
+assert.close(6, dateResult[1].rate, tojson(dateResult), 8);
+assert.close(27, dateResult[2].area, tojson(dateResult), 8);
+assert.close(6, dateResult[2].rate, tojson(dateResult), 8);
+
+assert.commandFailed(db.runCommand({
+    aggregate: dates.getName(),
+    pipeline: [{
+        $setWindowFields: {
+            sortBy: {ts: 1},
+            output: {
+                bad: {
+                    $integral: {input: "$y", unit: "month"},
+                    window: {documents: ["unbounded", "current"]},
+                },
+            },
+        },
+    }],
+    cursor: {},
+}));
+
 assert.commandFailed(db.runCommand({
     aggregate: coll.getName(),
     pipeline: [{
@@ -61,7 +113,7 @@ assert.commandFailed(db.runCommand({
             sortBy: {t: 1},
             output: {
                 bad: {
-                    $integral: {input: "$y", unit: "second"},
+                    $derivative: {input: "$y", unit: "minute"},
                     window: {documents: ["unbounded", "current"]},
                 },
             },

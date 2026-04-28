@@ -18,8 +18,9 @@ sort key without `unit`. `$firstN`, `$lastN`, `$minN`, and `$maxN` are supported
 outputs. `$percentile` and `$median` are supported as exact in-memory percentile window outputs.
 `$top`, `$topN`, `$bottom`, and `$bottomN` are supported as top/bottom window outputs with simple
 source-field `sortBy`. Range windows over date sort keys support fixed-duration `unit` values
-(`millisecond`, `second`, `minute`, `hour`, `day`, and `week`). Calendar date units, date/time-unit
-window operators, and spill/removable optimizations remain deferred.
+(`millisecond`, `second`, `minute`, `hour`, `day`, and `week`). `$integral` and `$derivative` also
+support those fixed-duration units over date sort keys. Calendar date units and spill/removable
+optimizations remain deferred.
 
 ```js
 db.sales.aggregate([
@@ -129,8 +130,8 @@ numeric. `range` with fixed-duration `unit` requires exactly one date-valued `so
 multiplies numeric bounds by the requested unit. This checkpoint supports `millisecond`, `second`,
 `minute`, `hour`, `day`, and `week`; calendar units (`month`, `quarter`, `year`) remain unsupported
 because they require calendar-aware date arithmetic instead of fixed millisecond scaling.
-Window-operator `unit` handling, implicit sort planning, large-partition memory bounds, and
-remaining edge-case breadth are still follow-up slices.
+Calendar-aware window/operator unit handling, implicit sort planning, large-partition memory
+bounds, and remaining edge-case breadth are still follow-up slices.
 
 ## Notes from source analyses
 

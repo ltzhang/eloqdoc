@@ -14,9 +14,8 @@ Operators that only make sense inside `$setWindowFields` — they read window-po
 `$locf` is implemented for last-observation carry-forward inside a partition. `$covariancePop`
 and `$covarianceSamp` are implemented for numeric two-expression inputs over the existing
 document and numeric-range windows. `$integral` and `$derivative` are implemented for numeric
-inputs over one numeric sort key without `unit`. `$setWindowFields` date range windows support
-fixed-duration `unit` values, but date/time-unit semantics inside `$integral` and `$derivative`
-remain deferred.
+inputs over one numeric sort key without `unit`, and over one date sort key with fixed-duration
+`unit` values (`millisecond`, `second`, `minute`, `hour`, `day`, and `week`).
 
 | Operator | Description |
 | -------- | ----------- |
@@ -80,7 +79,8 @@ One file per operator group (or one mega-file `window_functions.cpp`):
 - [x] `$integral` and `$derivative` produce correct numeric results for one numeric sort key
   without `unit`.
 - Operators that don't support `remove()` (rank, denseRank, documentNumber) trigger window-recomputation correctly when window slides.
-- Date-aware operators (`$integral`, `$derivative`) produce time-unit-correct values.
+- [x] Date-aware operators (`$integral`, `$derivative`) produce time-unit-correct values for
+  fixed-duration units.
 - [x] `$shift` with absent positions returns null (or default if specified).
 - **Test entry point:** `tests/jstests/eloq_basic/agg_set_window_fields/position_operators.js`
   for the initial position-based slice, plus
@@ -99,9 +99,10 @@ pairs and computes numeric inputs through double arithmetic. Decimal128 result p
 upstream edge-case breadth remain follow-up work.
 
 Current `$integral`/`$derivative` semantic differences: this checkpoint requires exactly one
-numeric `sortBy` key, rejects operator-level `unit`, computes through double arithmetic, and does
-not yet support date/time axes. This is separate from `$setWindowFields` range windows, which now
-support fixed-duration date `unit` values for window bounds.
+numeric `sortBy` key when `unit` is absent, or exactly one date-valued `sortBy` key when fixed
+operator-level `unit` is present. It computes through double arithmetic and supports
+`millisecond`, `second`, `minute`, `hour`, `day`, and `week`; calendar units (`month`, `quarter`,
+`year`) and Decimal128 result preservation remain follow-up work.
 
 ## Notes from source analyses
 

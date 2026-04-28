@@ -81,6 +81,9 @@ public:
             } else if (out.opName == "$integral" || out.opName == "$derivative") {
                 MutableDocument operatorSpec;
                 operatorSpec["input"] = out.argument->serialize(false);
+                if (!out.operatorUnit.empty()) {
+                    operatorSpec["unit"] = Value(out.operatorUnit);
+                }
                 outSpec[out.opName] = operatorSpec.freezeToValue();
             } else if (isNValueOperator(out.opName)) {
                 MutableDocument operatorSpec;
@@ -210,6 +213,8 @@ private:
         int nValueCount = 0;
         std::vector<double> percentiles;
         BSONObj topBottomSortBy;
+        double operatorUnitMillis = 1;
+        std::string operatorUnit;
         bool hasWindow = false;
         WindowType windowType = WindowType::kDocuments;
         double windowUnitMillis = 1;
@@ -264,6 +269,8 @@ private:
                        0,
                        0,
                        {},
+                       {},
+                       1,
                        {},
                        false,
                        WindowType::kDocuments,
@@ -430,10 +437,13 @@ private:
                     str::stream() << "unknown $setWindowFields " << out->opName << " option '"
                                   << fieldName << "'",
                     fieldName == "input"_sd || fieldName == "unit"_sd);
-            uassert(6789360,
-                    str::stream() << out->opName
-                                  << " unit is not supported in this checkpoint",
-                    fieldName != "unit"_sd);
+            if (fieldName == "unit"_sd) {
+                uassert(6789360,
+                        str::stream() << out->opName << " unit must be a string",
+                        option.type() == BSONType::String);
+                out->operatorUnit = option.str();
+                out->operatorUnitMillis = fixedUnitMillis(out->operatorUnit, out->opName);
+            }
         }
     }
 
@@ -622,7 +632,7 @@ private:
                         "$setWindowFields range unit must be a string",
                         option.type() == BSONType::String);
                 out->windowUnit = option.str();
-                out->windowUnitMillis = unitMillis(out->windowUnit);
+                out->windowUnitMillis = fixedUnitMillis(out->windowUnit, "$setWindowFields range");
                 if (out->lower.kind == BoundKind::kOffset) {
                     out->lower.offset *= out->windowUnitMillis;
                 }
@@ -882,7 +892,7 @@ private:
         double previousY = 0;
         double area = 0;
         for (int i = first; i <= last; ++i) {
-            const double x = numericSortKey(partitionStart, i);
+            const double x = integralDerivativeSortKey(outSpec, partitionStart, i);
             auto input = outSpec.argument->evaluate(_buffer[partitionStart + i].doc);
             if (!input.numeric()) {
                 continue;
@@ -913,7 +923,7 @@ private:
         double lastX = 0;
         double lastY = 0;
         for (int i = first; i <= last; ++i) {
-            const double x = numericSortKey(partitionStart, i);
+            const double x = integralDerivativeSortKey(outSpec, partitionStart, i);
             auto input = outSpec.argument->evaluate(_buffer[partitionStart + i].doc);
             if (!input.numeric()) {
                 continue;
@@ -934,11 +944,20 @@ private:
         return numericValue((lastY - firstY) / (lastX - firstX));
     }
 
-    double numericSortKey(size_t partitionStart, int relativeIndex) const {
+    double integralDerivativeSortKey(const OutputSpec& outSpec,
+                                     size_t partitionStart,
+                                     int relativeIndex) const {
         uassert(6789362,
                 "$setWindowFields integral/derivative require exactly one sortBy field",
                 _sortDirections.size() == 1);
         auto sortKey = _buffer[partitionStart + relativeIndex].sortKeys[0];
+        if (!outSpec.operatorUnit.empty()) {
+            uassert(6789391,
+                    "$setWindowFields integral/derivative with unit require date sort keys",
+                    sortKey.getType() == BSONType::Date);
+            return static_cast<double>(sortKey.getDate().toMillisSinceEpoch()) /
+                outSpec.operatorUnitMillis;
+        }
         uassert(6789363,
                 "$setWindowFields integral/derivative require numeric sort keys",
                 sortKey.numeric());
@@ -1252,7 +1271,7 @@ private:
         return Value(value);
     }
 
-    static double unitMillis(const std::string& unit) {
+    static double fixedUnitMillis(const std::string& unit, const std::string& context) {
         if (unit == "millisecond") {
             return 1;
         }
@@ -1272,7 +1291,9 @@ private:
             return 7 * 24 * 60 * 60 * 1000;
         }
         uasserted(6789390,
-                  "$setWindowFields range unit must be millisecond, second, minute, hour, day, or week");
+                  str::stream()
+                      << context
+                      << " unit must be millisecond, second, minute, hour, day, or week");
     }
 
     static Value windowBoundValue(const WindowBound& bound) {
