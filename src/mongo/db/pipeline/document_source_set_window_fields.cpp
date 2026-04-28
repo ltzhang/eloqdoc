@@ -87,6 +87,18 @@ public:
                 operatorSpec["input"] = out.argument->serialize(false);
                 operatorSpec["n"] = Value(out.nValueCount);
                 outSpec[out.opName] = operatorSpec.freezeToValue();
+            } else if (isPercentileOperator(out.opName)) {
+                MutableDocument operatorSpec;
+                operatorSpec["input"] = out.argument->serialize(false);
+                operatorSpec["method"] = Value("approximate"_sd);
+                if (out.opName == "$percentile") {
+                    std::vector<Value> pValues;
+                    for (double percentile : out.percentiles) {
+                        pValues.push_back(numericValue(percentile));
+                    }
+                    operatorSpec["p"] = Value(pValues);
+                }
+                outSpec[out.opName] = operatorSpec.freezeToValue();
             } else {
                 outSpec[out.opName] = out.argument ? out.argument->serialize(false) : Value(Document());
             }
@@ -185,6 +197,7 @@ private:
         int shiftBy = 0;
         double expMovingAvgAlpha = 0;
         int nValueCount = 0;
+        std::vector<double> percentiles;
         bool hasWindow = false;
         WindowType windowType = WindowType::kDocuments;
         WindowBound lower;
@@ -236,6 +249,7 @@ private:
                        0,
                        0,
                        0,
+                       {},
                        false,
                        WindowType::kDocuments,
                        {},
@@ -249,7 +263,8 @@ private:
                     out.opName == "$shift" || out.opName == "$expMovingAvg" ||
                     out.opName == "$locf" || out.opName == "$covariancePop" ||
                     out.opName == "$covarianceSamp" || out.opName == "$integral" ||
-                    out.opName == "$derivative" || isNValueOperator(out.opName));
+                    out.opName == "$derivative" || isNValueOperator(out.opName) ||
+                    isPercentileOperator(out.opName));
 
         if (out.opName == "$count") {
             uassert(6789330,
@@ -268,6 +283,8 @@ private:
             parseIntegralDerivativeSpec(expCtx, *opElem, &out);
         } else if (isNValueOperator(out.opName)) {
             parseNValueSpec(expCtx, *opElem, &out);
+        } else if (isPercentileOperator(out.opName)) {
+            parsePercentileSpec(expCtx, *opElem, &out);
         } else {
             if (out.opName == "$covariancePop" || out.opName == "$covarianceSamp") {
                 uassert(6789355,
@@ -431,6 +448,55 @@ private:
                     str::stream() << "unknown $setWindowFields " << out->opName << " option '"
                                   << fieldName << "'",
                     fieldName == "input"_sd || fieldName == "n"_sd);
+        }
+    }
+
+    static bool isPercentileOperator(const std::string& opName) {
+        return opName == "$percentile" || opName == "$median";
+    }
+
+    static void parsePercentileSpec(const boost::intrusive_ptr<ExpressionContext>& expCtx,
+                                    BSONElement opElem,
+                                    OutputSpec* out) {
+        uassert(6789368,
+                str::stream() << out->opName << " argument must be an object",
+                opElem.type() == BSONType::Object);
+        auto spec = opElem.Obj();
+        auto inputElem = spec["input"];
+        auto methodElem = spec["method"];
+        uassert(6789369, str::stream() << out->opName << " requires input", inputElem);
+        uassert(6789370,
+                str::stream() << out->opName << " requires method: 'approximate'",
+                methodElem.type() == BSONType::String &&
+                    methodElem.valueStringData() == "approximate"_sd);
+
+        VariablesParseState vps = expCtx->variablesParseState;
+        out->argument = Expression::parseOperand(expCtx, inputElem, vps)->optimize();
+
+        if (out->opName == "$median") {
+            out->percentiles = {0.5};
+        } else {
+            auto pElem = spec["p"];
+            uassert(6789371,
+                    "$percentile requires p to be a non-empty array",
+                    pElem.type() == BSONType::Array && !pElem.Obj().isEmpty());
+            for (auto&& percentileElem : pElem.Obj()) {
+                uassert(6789372, "$percentile p values must be numeric", percentileElem.isNumber());
+                double percentile = percentileElem.numberDouble();
+                uassert(6789373,
+                        "$percentile p values must be in [0, 1]",
+                        percentile >= 0 && percentile <= 1);
+                out->percentiles.push_back(percentile);
+            }
+        }
+
+        for (auto&& option : spec) {
+            auto fieldName = option.fieldNameStringData();
+            uassert(6789374,
+                    str::stream() << "unknown $setWindowFields " << out->opName << " option '"
+                                  << fieldName << "'",
+                    fieldName == "input"_sd || fieldName == "method"_sd ||
+                        (out->opName == "$percentile" && fieldName == "p"_sd));
         }
     }
 
@@ -632,6 +698,9 @@ private:
         if (isNValueOperator(outSpec.opName)) {
             return evaluateNValue(outSpec, partitionStart, first, last);
         }
+        if (isPercentileOperator(outSpec.opName)) {
+            return evaluatePercentile(outSpec, partitionStart, first, last);
+        }
         return evaluateWindow(outSpec, partitionStart, first, last);
     }
 
@@ -809,6 +878,49 @@ private:
             values.resize(outSpec.nValueCount);
         }
         return Value(values);
+    }
+
+    Value evaluatePercentile(const OutputSpec& outSpec,
+                             size_t partitionStart,
+                             int first,
+                             int last) const {
+        std::vector<double> values;
+        for (int i = first; i <= last; ++i) {
+            auto value = outSpec.argument->evaluate(_buffer[partitionStart + i].doc);
+            if (value.numeric()) {
+                values.push_back(value.coerceToDouble());
+            }
+        }
+        std::sort(values.begin(), values.end());
+
+        std::vector<Value> percentileValues;
+        percentileValues.reserve(outSpec.percentiles.size());
+        for (double percentile : outSpec.percentiles) {
+            percentileValues.push_back(interpolatePercentile(values, percentile));
+        }
+        if (outSpec.opName == "$median") {
+            return percentileValues.empty() ? Value(BSONNULL) : percentileValues.front();
+        }
+        return Value(percentileValues);
+    }
+
+    static Value interpolatePercentile(const std::vector<double>& values, double percentile) {
+        if (values.empty()) {
+            return Value(BSONNULL);
+        }
+        if (values.size() == 1) {
+            return numericValue(values.front());
+        }
+
+        double rank = percentile * static_cast<double>(values.size() - 1);
+        size_t lower = static_cast<size_t>(std::floor(rank));
+        size_t upper = static_cast<size_t>(std::ceil(rank));
+        if (lower == upper) {
+            return numericValue(values[lower]);
+        }
+
+        double fraction = rank - static_cast<double>(lower);
+        return numericValue(values[lower] + (values[upper] - values[lower]) * fraction);
     }
 
     int rankFor(size_t partitionStart, size_t partitionEnd, int relativeIndex) const {

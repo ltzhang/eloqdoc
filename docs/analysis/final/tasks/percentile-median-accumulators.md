@@ -10,8 +10,10 @@ Approximate percentile and median accumulators using the t-digest algorithm. Ava
 
 **Checkpoint status:** `$percentile` and `$median` are implemented as `$group` accumulators for
 numeric inputs with `method: "approximate"`. This checkpoint uses exact in-memory sorting for
-compatibility on bounded result sets; the bounded-memory t-digest sketch, merge serialization, window
-operator support, and plain-expression support remain deferred.
+compatibility on bounded result sets. `$percentile` and `$median` are also implemented as
+`$setWindowFields` outputs over the existing document and numeric-range windows with the same exact
+in-memory percentile calculation. The bounded-memory t-digest sketch, merge serialization, and
+plain-expression support remain deferred.
 
 ```js
 db.c.aggregate([
@@ -86,8 +88,11 @@ REGISTER_ACCUMULATOR(median, AccumulatorMedian::create);
 - [x] Empty input groups return null (matches upstream behavior).
 - [x] Non-numeric input is skipped.
 - Merge path produces digests equivalent to single-pass digests on combined input.
+- [x] `$percentile` and `$median` work as `$setWindowFields` outputs.
 - [x] **Test entry point:** `tests/jstests/eloq_basic/accumulator_percentile.js`.
   Adapt `jstests/aggregation/accumulators/percentile.js`.
+  `tests/jstests/eloq_basic/agg_set_window_fields/percentile_median.js` covers the window
+  integration slice.
 
 ## Implementation notes
 
@@ -98,8 +103,7 @@ This intentionally differs from MongoDB's t-digest-backed approximate implementa
 the user-visible accumulator API for small and moderate groups.
 
 Deferred semantic differences: this checkpoint is not memory-bounded, does not serialize/merge
-partial digests, and does not expose `$percentile` / `$median` as window operators or plain
-expressions.
+partial digests, and does not expose `$percentile` / `$median` as plain expressions.
 
 ## Notes from source analyses
 

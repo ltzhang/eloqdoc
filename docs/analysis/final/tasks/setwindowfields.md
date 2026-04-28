@@ -15,8 +15,9 @@ and standard output operators `$sum`, `$avg`, `$count`, `$min`, `$max`, `$first`
 `$denseRank`, and `$shift`, plus numeric `$expMovingAvg`, `$locf`, `$covariancePop`, and
 `$covarianceSamp`. `$integral` and `$derivative` are supported for numeric inputs over one numeric
 sort key without `unit`. `$firstN`, `$lastN`, `$minN`, and `$maxN` are supported as N-value window
-outputs. Date range units, date/time-unit window operators, remaining N-value/top-bottom window
-operators, and spill/removable optimizations remain deferred.
+outputs. `$percentile` and `$median` are supported as exact in-memory percentile window outputs.
+Date range units, date/time-unit window operators, remaining top-bottom window operators, and
+spill/removable optimizations remain deferred.
 
 ```js
 db.sales.aggregate([
@@ -106,6 +107,7 @@ The window executor must support:
 - [x] `$integral` and `$derivative` produce correct numeric results for one numeric sort key
   without `unit`.
 - [x] `$firstN`, `$lastN`, `$minN`, and `$maxN` work as window outputs.
+- [x] `$percentile` and `$median` work as window outputs.
 - [x] Removable accumulators ($sum, $avg, $count) maintain correct state under sliding-window updates.
 - [x] Non-removable accumulators ($min, $max) work correctly (may be slower).
 - [x] Empty windows return null per accumulator's null-policy (`$count` returns `0`).
