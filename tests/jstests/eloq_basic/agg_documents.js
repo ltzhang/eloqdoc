@@ -24,6 +24,18 @@ assert.eq([{source: "also literal"}, {source: "literal"}], docs);
 
 assert.eq([{_id: "ignored"}], coll.find().toArray());
 
+const ignoredSourceColl = db.agg_documents_source_is_ignored;
+ignoredSourceColl.drop();
+assert.commandWorked(ignoredSourceColl.insert({_id: 99, value: "from collection"}));
+
+res = db.runCommand({
+    aggregate: ignoredSourceColl.getName(),
+    pipeline: [{$documents: [{_id: 3, value: "from documents"}]}],
+    cursor: {},
+});
+assert.commandWorked(res);
+assert.eq([{_id: 3, value: "from documents"}], res.cursor.firstBatch, tojson(res));
+
 assert.commandFailed(db.runCommand({
     aggregate: 1,
     pipeline: [

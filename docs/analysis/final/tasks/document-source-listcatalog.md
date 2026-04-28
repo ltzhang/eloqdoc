@@ -19,6 +19,12 @@ Two forms:
 
 Output schema mirrors `listCollections` + index information.
 
+**Implementation status: initial stage landed.** EloqDoc supports database-level and
+collection-level `$listCatalog` as a first-stage catalog source. Output includes `db`, `name`,
+`type`, `ns`, `md.options`, `md.indexes`, and `idxIdent`. This is a pragmatic catalog snapshot
+for client compatibility, not a guarantee that every upstream 6.0 metadata field is byte-for-byte
+identical.
+
 ## Extension pattern
 
 Pattern B — `REGISTER_DOCUMENT_SOURCE`. The stage reads from the catalog, similar to `$indexStats` and `$collStats` (both already in EloqDoc).
@@ -54,11 +60,19 @@ REGISTER_DOCUMENT_SOURCE(listCatalog, ...);
 
 ## Acceptance criteria
 
-- `db.aggregate([{$listCatalog:{}}])` returns one document per collection in the current database.
-- `db.coll.aggregate([{$listCatalog:{}}])` returns the single document for `coll`.
-- Each document contains `db`, `name`, `type`, `md.options`, `md.indexes`, `idxIdent`, `ns`, etc. — match upstream output.
-- Authorization: requires `listCollections` privilege on the database.
+- [x] `db.aggregate([{$listCatalog:{}}])` returns one document per collection in the current database.
+- [x] `db.coll.aggregate([{$listCatalog:{}}])` returns the single document for `coll`.
+- [x] Each document contains `db`, `name`, `type`, `md.options`, `md.indexes`, `idxIdent`, `ns`, etc. — match upstream output.
+- [x] Authorization: requires `listCollections` privilege on the database.
 - **Test entry point:** `tests/jstests/eloq_basic/agg_list_catalog.js`. Adapt `jstests/aggregation/sources/listCatalog.js`.
+
+## Implementation notes
+
+The stage is a first-position source stage registered with `REGISTER_DOCUMENT_SOURCE`. It reads the
+opened database under an `MODE_IS` database lock using `DatabaseHolder`, avoiding a dependency from
+the pipeline library back through `db_raii` and `views`. KV catalog entries expose index idents via
+`CollectionCatalogEntry::getIndexIdent()` for the `idxIdent` field; other storage engines can leave
+the field empty.
 
 ## Notes from source analyses
 

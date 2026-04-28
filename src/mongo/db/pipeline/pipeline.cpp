@@ -163,7 +163,8 @@ void Pipeline::validateTopLevelPipeline() const {
 
         if (!nss.isCollectionlessAggregateNS() &&
             firstStageConstraints.isIndependentOfAnyCollection &&
-            "$documents"_sd != _sources.front()->getSourceName()) {
+            "$documents"_sd != _sources.front()->getSourceName() &&
+            "$listCatalog"_sd != _sources.front()->getSourceName()) {
             uasserted(ErrorCodes::InvalidNamespace,
                       str::stream() << "'" << _sources.front()->getSourceName()
                                     << "' can only be run with {aggregate: 1}");

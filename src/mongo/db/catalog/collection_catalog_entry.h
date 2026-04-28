@@ -361,6 +361,10 @@ public:
 
     virtual BSONObj getIndexSpec(OperationContext* opCtx, StringData idxName) const = 0;
 
+    virtual std::string getIndexIdent(OperationContext* opCtx, StringData idxName) const {
+        return {};
+    }
+
     /**
      * Returns true if the index identified by 'indexName' is multikey, and returns false otherwise.
      *

@@ -58,6 +58,8 @@ public:
         return 64;
     };
 
+    std::string getIndexIdent(OperationContext* opCtx, StringData idxName) const final;
+
     bool setIndexIsMultikey(OperationContext* opCtx,
                             StringData indexName,
                             const MultikeyPaths& multikeyPaths) final;

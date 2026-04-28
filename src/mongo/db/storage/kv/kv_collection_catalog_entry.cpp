@@ -103,6 +103,11 @@ CollectionOptions KVCollectionCatalogEntry::getCollectionOptions(OperationContex
     return md.options;
 }
 
+std::string KVCollectionCatalogEntry::getIndexIdent(OperationContext* opCtx,
+                                                    StringData idxName) const {
+    return _catalog->getIndexIdent(opCtx, ns().ns(), idxName);
+}
+
 bool KVCollectionCatalogEntry::setIndexIsMultikey(OperationContext* opCtx,
                                                   StringData indexName,
                                                   const MultikeyPaths& multikeyPaths) {

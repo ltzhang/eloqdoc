@@ -72,3 +72,10 @@ REGISTER_DOCUMENT_SOURCE(documents,
 ## Notes from source analyses
 
 `analysis_gpt5.5/feature-backport-evaluation.md` rates this Tier 1. `analysis_cc/forward_compat_eval.md` agrees and explicitly notes: "the only complication is the no-collection aggregate form — handle it once, and `$listCatalog` and other db-level pipeline stages get the same plumbing for free." Worth bundling those in a single PR.
+
+## Implementation status
+
+Implemented before the `$listCatalog` slice. EloqDoc supports literal object arrays in
+`$documents`, allows the stage as the first stage of collectionless aggregate commands, and allows
+collection-level aggregate with `$documents` as the first stage while ignoring the source
+collection. The regression entry point is `tests/jstests/eloq_basic/agg_documents.js`.
