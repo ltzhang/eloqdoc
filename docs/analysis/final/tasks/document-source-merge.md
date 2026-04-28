@@ -81,14 +81,31 @@ For each pipeline output document `D`:
 
 ## Acceptance criteria
 
-- `$merge` into a new collection (collection auto-created).
-- Each `whenMatched` mode produces correct results: `replace`, `keepExisting`, `merge`, `fail`.
-- `whenMatched: <pipeline>` works (depends on pipeline-update task).
-- `whenNotMatched: "discard"` skips inserts; `"fail"` errors when no match.
-- Cross-database: `{into: {db: "other", coll: "t"}}` writes to `other.t`.
-- Authorization fails for users without write on the target.
-- A pipeline that writes 1M documents completes (no memory blowup; per-document write).
+- [x] `$merge` into a new collection (collection auto-created).
+- [x] Each `whenMatched` mode produces correct results: `replace`, `keepExisting`, `merge`, `fail`.
+- [ ] `whenMatched: <pipeline>` works (depends on pipeline-update task).
+- [x] `whenNotMatched: "discard"` skips inserts; `"fail"` errors when no match.
+- [ ] Cross-database: `{into: {db: "other", coll: "t"}}` writes to `other.t`.
+- [ ] Authorization fails for users without write on the target.
+- [ ] A pipeline that writes 1M documents completes (no memory blowup; per-document write).
 - **Test entry point:** `tests/jstests/eloq_basic/agg_merge.js`. Adapt `jstests/aggregation/sources/merge/`.
+
+## Implementation status
+
+Implemented an initial same-database sink stage:
+
+- Supports string and object `into` forms targeting the current database.
+- Supports top-level `on` fields, defaulting to `_id`.
+- Supports string `whenMatched` modes: `merge`, `replace`, `keepExisting`, and `fail`.
+- Supports `whenNotMatched` modes: `insert`, `discard`, and `fail`.
+- Writes through the existing direct-client write path and checks `getLastErrorDetailed()` after mutations.
+- Runtime coverage is in `tests/jstests/eloq_basic/agg_merge.js`.
+
+Deferred:
+
+- Cross-database output currently fails fast with `IllegalOperation`. The direct-client write path hit a catalog invariant when writing another database from an aggregation locked on the source database, so this needs a catalog/locking design pass.
+- `whenMatched: <pipeline>` and `$merge.let` are not implemented in this checkpoint.
+- Dotted `on` fields, explicit authorization tests, and large streaming coverage remain open.
 
 ## Notes from source analyses
 
