@@ -8,6 +8,11 @@
 
 Approximate percentile and median accumulators using the t-digest algorithm. Available as group accumulators, window operators, and (in 8.0) plain expressions.
 
+**Checkpoint status:** `$percentile` and `$median` are implemented as `$group` accumulators for
+numeric inputs with `method: "approximate"`. This checkpoint uses exact in-memory sorting for
+compatibility on bounded result sets; the bounded-memory t-digest sketch, merge serialization, window
+operator support, and plain-expression support remain deferred.
+
 ```js
 db.c.aggregate([
   { $group: {
@@ -74,14 +79,27 @@ REGISTER_ACCUMULATOR(median, AccumulatorMedian::create);
 
 ## Acceptance criteria
 
-- `$percentile` with single `p` returns a 1-element array.
-- `$percentile` with multiple `p` returns matching-length array.
-- `$median` returns a single number.
+- [x] `$percentile` with single `p` returns a 1-element array.
+- [x] `$percentile` with multiple `p` returns matching-length array.
+- [x] `$median` returns a single number.
 - Approximation error within published t-digest bounds against known distributions.
-- Empty input groups return null (matches upstream behavior).
-- Non-numeric input is skipped (or errors — match upstream).
+- [x] Empty input groups return null (matches upstream behavior).
+- [x] Non-numeric input is skipped.
 - Merge path produces digests equivalent to single-pass digests on combined input.
-- **Test entry point:** `tests/jstests/eloq_basic/accumulator_percentile.js`. Adapt `jstests/aggregation/accumulators/percentile.js`.
+- [x] **Test entry point:** `tests/jstests/eloq_basic/accumulator_percentile.js`.
+  Adapt `jstests/aggregation/accumulators/percentile.js`.
+
+## Implementation notes
+
+Initial support is registered in `accumulator_percentile.cpp`. The parser accepts the MongoDB
+7.0 group-accumulator shape with `input`, `method: "approximate"`, and `$percentile.p` values in
+`[0, 1]`. Numeric inputs are collected per group, sorted at result time, and interpolated exactly.
+This intentionally differs from MongoDB's t-digest-backed approximate implementation, but preserves
+the user-visible accumulator API for small and moderate groups.
+
+Deferred semantic differences: this checkpoint is not memory-bounded, does not serialize/merge
+partial digests, and does not expose `$percentile` / `$median` as window operators or plain
+expressions.
 
 ## Notes from source analyses
 
