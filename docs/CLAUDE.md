@@ -76,3 +76,7 @@ python scripts/buildscripts/scons.py \
 - Treat `INSTALL_PREFIX=/home/lintaoz/eloq/bin` as the default local install destination.
 - Do not spend time rebuilding third-party dependencies unless there is clear evidence they changed or are missing.
 - For compatibility work, verify behavior at the MongoDB API level whenever possible.
+
+## Project Scope, Stage and Status
+
+The project will follow the plan established by the analysis under docs/backport/README.md to implement the backport. Current feature status is tracked in docs/backport/current-state.md.

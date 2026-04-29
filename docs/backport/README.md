@@ -19,6 +19,9 @@ A canonical, EloqDoc-grounded plan to bring EloqDoc's wire/API surface from Mong
 
 ## How to use this folder
 
+0. **Read [`current-state.md`](./current-state.md)** — what this branch currently implements,
+   which features are partial, and the important EloqDoc-vs-MongoDB semantic differences.
+
 1. **Start with [`baseline.md`](./baseline.md)** — what EloqDoc 4.0.3 *already* supports, plus the seven extension patterns every backport relies on. Engineers should read this once before picking up any task.
 
 2. **Skim [`version-evolution.md`](./version-evolution.md)** — a one-screen-per-version delta table for 5.0 / 6.0 / 7.0 / 8.0. Every row links to a task spec or to `tier-4-deferred.md`.
