@@ -1,9 +1,9 @@
 # Current Backport State
 
 This document describes the current EloqDoc MongoDB API backport state on the
-`backport/tier1-phase1a` branch as of commit `36f516c5`. It is intended for users and engineers
-who need to know what works today, where EloqDoc intentionally differs from MongoDB, and which
-MongoDB 5.0-8.0 features remain incomplete.
+`backport/tier1-phase1a` branch as of April 29, 2026. It is intended for users and engineers who
+need to know what works today, where EloqDoc intentionally differs from MongoDB, and which MongoDB
+5.0-8.0 features remain incomplete.
 
 The backport scope is the MongoDB data API surface: commands, aggregation stages and expressions,
 index options, collection options, and data-model features. Replication, sharding control-plane
