@@ -471,7 +471,7 @@ void addBucketExclusionField(const TimeseriesOptions& tsOptions,
     if (translateMetaPath(field, tsOptions.metaField, &metaPath)) {
         bucketProject->append(metaPath, 0);
     } else {
-        bucketProject->append(str::stream() << "data." << field, 0);
+        bucketProject->append("data." + field.toString(), 0);
     }
 }
 
@@ -538,6 +538,31 @@ bool conflictsWithRequiredFields(StringData excludedField, const std::set<std::s
     return false;
 }
 
+bool appendBucketExclusionProject(const TimeseriesOptions& tsOptions,
+                                  const std::vector<std::string>& excludedFields,
+                                  const std::set<std::string>& requiredFields,
+                                  std::vector<BSONObj>* translated) {
+    BSONObjBuilder bucketProject;
+    bucketProject.append("_id", 0);
+    bool hasFieldProjection = false;
+
+    for (const auto& field : excludedFields) {
+        if (conflictsWithRequiredFields(field, requiredFields)) {
+            continue;
+        }
+
+        addBucketExclusionField(tsOptions, field, &bucketProject);
+        hasFieldProjection = true;
+    }
+
+    if (!hasFieldProjection) {
+        return false;
+    }
+
+    translated->push_back(BSON("$project" << bucketProject.obj()));
+    return true;
+}
+
 bool appendLeadingProjectPushdown(const CollectionOptions& options,
                                   const BSONObj& stage,
                                   const std::set<std::string>& requiredFields,
@@ -554,6 +579,7 @@ bool appendLeadingProjectPushdown(const CollectionOptions& options,
     bucketProject.append("_id", 0);
     bool hasFieldProjection = false;
     std::set<std::string> projectedFields;
+    std::vector<std::string> excludedFields;
     boost::optional<bool> isInclusionProjection;
 
     BSONForEach(projection, firstElem.Obj()) {
@@ -587,11 +613,7 @@ bool appendLeadingProjectPushdown(const CollectionOptions& options,
             continue;
         }
 
-        if (conflictsWithRequiredFields(field, requiredFields)) {
-            continue;
-        }
-
-        addBucketExclusionField(tsOptions, field, &bucketProject);
+        excludedFields.push_back(field.toString());
         hasFieldProjection = true;
     }
 
@@ -608,8 +630,45 @@ bool appendLeadingProjectPushdown(const CollectionOptions& options,
         }
     }
 
+    if (!*isInclusionProjection) {
+        return appendBucketExclusionProject(tsOptions, excludedFields, requiredFields, translated);
+    }
+
     translated->push_back(BSON("$project" << bucketProject.obj()));
     return true;
+}
+
+bool appendLeadingUnsetPushdown(const CollectionOptions& options,
+                                const BSONObj& stage,
+                                const std::set<std::string>& requiredFields,
+                                std::vector<BSONObj>* translated) {
+    invariant(options.timeseries);
+    const auto& tsOptions = *options.timeseries;
+
+    const auto firstElem = stage.firstElement();
+    if (firstElem.fieldNameStringData() != "$unset") {
+        return false;
+    }
+
+    std::vector<std::string> excludedFields;
+    if (firstElem.type() == mongo::String) {
+        excludedFields.push_back(firstElem.String());
+    } else if (firstElem.type() == mongo::Array) {
+        BSONForEach(field, firstElem.Obj()) {
+            if (field.type() != mongo::String) {
+                return false;
+            }
+            excludedFields.push_back(field.String());
+        }
+    } else {
+        return false;
+    }
+
+    if (excludedFields.empty()) {
+        return false;
+    }
+
+    return appendBucketExclusionProject(tsOptions, excludedFields, requiredFields, translated);
 }
 
 bool containsExpressionReference(const BSONElement& value) {
@@ -1040,6 +1099,10 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
         }
 
         if (appendLeadingProjectPushdown(options, stage, fieldsRequiredAfterUnpack, &translated)) {
+            break;
+        }
+
+        if (appendLeadingUnsetPushdown(options, stage, fieldsRequiredAfterUnpack, &translated)) {
             break;
         }
 

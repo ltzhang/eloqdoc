@@ -412,6 +412,9 @@ Query pruning:
   `$match` and time/meta `$sort` pushdowns. Inclusion pushdown retains fields needed by preserved
   post-unpack matches and sorts; exclusion pushdown avoids excluding fields needed by those
   preserved stages.
+- A leading simple `$unset` with a string field or array of string fields can be pushed before
+  unpacking as the same bucket-level exclusion projection, with the original `$unset` still applied
+  after unpacking.
 - A leading meta-only `$addFields` / `$set` with literal values can be pushed before unpacking as a
   bucket stage over `meta` paths.
 - A single-stage whole-collection or meta-grouped `$group` can be answered without unpacking when
