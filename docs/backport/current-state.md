@@ -403,8 +403,9 @@ Query pruning:
 - Multiple leading `$match` stages can contribute bucket-level predicates.
 - Leading `$sort` on time/meta paths may be pushed before unpacking while preserving the original
   user sort after unpack.
-- A leading `$limit` can be pushed before unpacking when it is the first stage, with the original
-  limit still applied after unpack.
+- A leading `$limit` can be pushed before unpacking when it is the first stage or when it
+  immediately follows a pushed time/meta bucket sort, with the original limit still applied after
+  unpack.
 - A leading simple inclusion `$project` over time, meta, and measurement fields can be pushed before
   unpacking as a bucket projection that keeps `control.count`, `meta`, and selected `data.<field>`
   paths.

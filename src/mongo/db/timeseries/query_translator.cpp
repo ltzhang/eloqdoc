@@ -624,21 +624,25 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
         return translated;
     }
 
+    bool lastPushdownWasSort = false;
     for (const auto& stage : userPipeline) {
         const auto firstElem = stage.firstElement();
         if (firstElem.fieldNameStringData() == "$match" && firstElem.type() == mongo::Object) {
             const auto bucketMatch = makeBucketMatchPredicate(options, firstElem.Obj());
             if (!bucketMatch.isEmpty()) {
                 translated.push_back(BSON("$match" << bucketMatch));
+                lastPushdownWasSort = false;
                 continue;
             }
         }
 
         if (appendLeadingSortPushdown(options, stage, &translated)) {
+            lastPushdownWasSort = true;
             continue;
         }
 
-        if (translated.empty() && appendLeadingLimitPushdown(stage, &translated)) {
+        if ((translated.empty() || lastPushdownWasSort) &&
+            appendLeadingLimitPushdown(stage, &translated)) {
             break;
         }
 
