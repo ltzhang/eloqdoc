@@ -75,6 +75,17 @@ TEST(TimeSeriesIndexSchema, RejectsGeospatialIndexes) {
         ErrorCodes::CannotCreateIndex);
 }
 
+TEST(TimeSeriesIndexSchema, RejectsPartialFilterExpression) {
+    ASSERT_THROWS_CODE(
+        translateIndexSpecToBucketSchema(
+            NamespaceString("db.system.buckets.metrics"),
+            makeOptions(),
+            fromjson("{ns: 'db.metrics', key: {temp: 1}, name: 'temp_partial', "
+                     "partialFilterExpression: {temp: {$gt: 10}}}")),
+        AssertionException,
+        ErrorCodes::CannotCreateIndex);
+}
+
 }  // namespace
 }  // namespace timeseries
 }  // namespace mongo

@@ -99,6 +99,10 @@ BSONObj translateIndexSpec(const NamespaceString& nss,
             }
         } else if (fieldName == IndexDescriptor::kNamespaceFieldName) {
             builder.append(IndexDescriptor::kNamespaceFieldName, nss.ns());
+        } else if (toBucketSchema &&
+                   fieldName == IndexDescriptor::kPartialFilterExprFieldName) {
+            uasserted(ErrorCodes::CannotCreateIndex,
+                      "time-series partial indexes are not supported");
         } else {
             builder.append(elem);
         }

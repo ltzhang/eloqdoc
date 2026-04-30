@@ -140,6 +140,8 @@ Implemented behavior:
 - `createIndexes` rejects unsupported geospatial time-series index key types (`2d`, `2dsphere`,
   `geoHaystack`, and bucket geospatial sentinels) with `CannotCreateIndex` instead of silently
   creating an incompatible bucket index.
+- `createIndexes` rejects `partialFilterExpression` on time-series indexes with
+  `CannotCreateIndex`; partial-filter paths are not translated to bucket schema yet.
 - `listIndexes` on the logical collection translates bucket index specs back to logical names.
 - `listCollections` hides backing `system.buckets.*` collections.
 - Time-series option parsing enforces mutual exclusion between `granularity` and custom
@@ -161,6 +163,8 @@ Remaining functional or semantic differences:
 - Explain output may expose the physical `system.buckets.<collection>` namespace.
 - Geospatial time-series indexes are not implemented; logical create-index requests for those
   key types fail fast with `CannotCreateIndex`.
+- Partial time-series indexes are not implemented; logical create-index requests with
+  `partialFilterExpression` fail fast with `CannotCreateIndex`.
 - Sharded time-series collection semantics are not implemented.
 - Retryability, transactions, write concern, and replication edge cases follow EloqDoc/Data
   Substrate behavior rather than MongoDB replica-set internals.

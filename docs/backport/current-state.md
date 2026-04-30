@@ -374,6 +374,8 @@ Implemented:
   user key patterns and bucket key patterns.
 - Logical geospatial time-series index requests are rejected with `CannotCreateIndex`; EloqDoc does
   not silently create incompatible bucket geospatial indexes.
+- Time-series index requests with `partialFilterExpression` are rejected with `CannotCreateIndex`;
+  partial-filter paths are not translated to bucket schema yet.
 - `listCollections` hides backing `system.buckets.<collection>` collections.
 
 Bucket layout:
@@ -450,6 +452,7 @@ Important differences from MongoDB:
 - Bucket collections are ordinary collections; clustered bucket storage is deferred.
 - Bucket compression is not implemented.
 - Geospatial time-series indexes are not implemented and are rejected at index-creation time.
+- Partial time-series indexes are not implemented and are rejected at index-creation time.
 - Sharded time-series collection semantics are not implemented.
 - Explain output may expose `system.buckets.<collection>` rather than rewriting everything back to
   the logical namespace.
@@ -498,8 +501,9 @@ The following are not implemented in this branch, or exist only as parser/catalo
 - MongoDB replica-set coordination semantics.
 - Oplog-dependent features that do not map directly to Data Substrate.
 - Geospatial time-series indexes.
+- Partial time-series indexes.
 - Full time-series parity, including compression, clustered bucket storage, geospatial
-  indexes, advanced time-series aggregation rewrites, and sharded time-series.
+  indexes, partial indexes, advanced time-series aggregation rewrites, and sharded time-series.
 
 ## Practical Guidance For Users
 
@@ -519,8 +523,8 @@ Avoid assuming full MongoDB parity for:
 - Very large analytic windows or interpolation workloads.
 - Exact date arithmetic across DST/month/quarter/year boundaries.
 - Time-series workloads that rely on compression, clustered bucket storage, geospatial
-  indexes, sharded time-series, advanced aggregation rewrites, or exact MongoDB retryable-write
-  semantics.
+  indexes, partial indexes, sharded time-series, advanced aggregation rewrites, or exact MongoDB
+  retryable-write semantics.
 - Workloads depending on exact MongoDB retryable-write or write-concern edge cases.
 
 When in doubt, check the focused task spec under `docs/backport/tasks/` and add an EloqDoc-specific
