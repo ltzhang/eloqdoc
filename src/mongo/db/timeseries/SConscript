@@ -39,6 +39,27 @@ env.Library(
 )
 
 env.Library(
+    target='bucket_mutation',
+    source=[
+        'bucket_mutation.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/base',
+    ],
+)
+
+env.CppUnitTest(
+    target='bucket_mutation_test',
+    source=[
+        'bucket_mutation_test.cpp',
+    ],
+    LIBDEPS=[
+        'bucket_catalog',
+        'bucket_mutation',
+    ],
+)
+
+env.Library(
     target='index_schema',
     source=[
         'index_schema.cpp',

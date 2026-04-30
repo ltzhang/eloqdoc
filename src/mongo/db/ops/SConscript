@@ -17,6 +17,8 @@ env.Library(
         '$BUILD_DIR/mongo/db/repl/oplog',
         '$BUILD_DIR/mongo/db/repl/repl_coordinator_interface',
         '$BUILD_DIR/mongo/db/stats/counters',
+        '$BUILD_DIR/mongo/db/timeseries/bucket_catalog',
+        '$BUILD_DIR/mongo/db/timeseries/bucket_mutation',
         '$BUILD_DIR/mongo/db/timeseries/insert_router',
         '$BUILD_DIR/mongo/db/timeseries/timeseries_namespace',
         '$BUILD_DIR/mongo/db/write_ops',

@@ -48,6 +48,8 @@
 #include "mongo/db/exec/update.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/lasterror.h"
+#include "mongo/db/matcher/expression.h"
+#include "mongo/db/matcher/expression_parser.h"
 #include "mongo/db/ops/delete_request.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/parsed_delete.h"
@@ -57,6 +59,7 @@
 #include "mongo/db/ops/write_ops_exec.h"
 #include "mongo/db/ops/write_ops_gen.h"
 #include "mongo/db/ops/write_ops_retryability.h"
+#include "mongo/db/op_observer.h"
 #include "mongo/db/query/get_executor.h"
 #include "mongo/db/query/plan_summary_stats.h"
 #include "mongo/db/query/query_knobs.h"
@@ -69,9 +72,12 @@
 #include "mongo/db/session_catalog.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/stats/top.h"
+#include "mongo/db/timeseries/bucket_catalog.h"
+#include "mongo/db/timeseries/bucket_mutation.h"
 #include "mongo/db/timeseries/insert_router.h"
 #include "mongo/db/timeseries/timeseries_namespace.h"
 #include "mongo/db/write_concern.h"
+#include "mongo/db/pipeline/expression_context.h"
 #include "mongo/rpc/get_status_from_command_result.h"
 #include "mongo/s/cannot_implicitly_create_collection_info.h"
 #include "mongo/stdx/memory.h"
@@ -1007,6 +1013,130 @@ static SingleWriteResult performSingleDeleteOp(OperationContext* opCtx,
     return result;
 }
 
+boost::optional<CollectionOptions> getTimeSeriesOptionsForWrite(OperationContext* opCtx,
+                                                                const NamespaceString& ns) {
+    AutoGetCollection collection(opCtx, ns, MODE_IS);
+    if (!collection.getCollection()) {
+        return boost::none;
+    }
+
+    auto options = collection.getCollection()->getCatalogEntry()->getCollectionOptions(opCtx);
+    if (!options.timeseries) {
+        return boost::none;
+    }
+    return options;
+}
+
+SingleWriteResult performSingleTimeSeriesDeleteOp(OperationContext* opCtx,
+                                                  const NamespaceString& logicalNss,
+                                                  const CollectionOptions& options,
+                                                  StmtId stmtId,
+                                                  const write_ops::WriteCommandBase& commandBase,
+                                                  const write_ops::DeleteOpEntry& op) {
+    auto session = OperationContextSession::get(opCtx);
+    uassert(ErrorCodes::InvalidOptions,
+            "Cannot use (or request) retryable writes with limit=0",
+            (session && session->inMultiDocumentTransaction()) || !opCtx->getTxnNumber() ||
+                !op.getMulti());
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series deletes do not support hint",
+            write_ops::hintOf(op).isEmpty());
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series deletes do not support collation",
+            write_ops::collationOf(op).isEmpty());
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series deletes do not support command let",
+            write_ops::letOf(commandBase).isEmpty());
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series deletes do not support runtime constants",
+            write_ops::runtimeConstantsOf(commandBase).isEmpty());
+
+    globalOpCounters.gotDelete();
+    auto& curOp = *CurOp::get(opCtx);
+    {
+        stdx::lock_guard<Client> lk(*opCtx->getClient());
+        curOp.setNS_inlock(logicalNss.ns());
+        curOp.setNetworkOp_inlock(dbDelete);
+        curOp.setLogicalOp_inlock(LogicalOp::opDelete);
+        curOp.setOpDescription_inlock(op.toBSON());
+        curOp.ensureStarted();
+    }
+    curOp.debug().additiveMetrics.ndeleted = 0;
+
+    const auto bucketNss = timeseries::makeBucketNamespace(logicalNss);
+    AutoGetCollection bucketCollection(opCtx, bucketNss, MODE_IX, MODE_IX);
+    uassert(ErrorCodes::NamespaceNotFound,
+            str::stream() << "missing time-series bucket collection " << bucketNss.ns(),
+            bucketCollection.getCollection());
+    assertCanWrite_inlock(opCtx, bucketNss);
+
+    boost::intrusive_ptr<ExpressionContext> expCtx(new ExpressionContext(opCtx, nullptr));
+    auto swMatcher = MatchExpressionParser::parse(op.getQ(), expCtx);
+    uassertStatusOK(swMatcher.getStatus());
+    auto matcher = std::move(swMatcher.getValue());
+
+    std::vector<std::pair<RecordId, BSONObj>> candidateBuckets;
+    {
+        auto cursor = bucketCollection.getCollection()->getCursor(opCtx);
+        while (auto record = cursor->next()) {
+            candidateBuckets.emplace_back(record->id, record->data.releaseToBson().getOwned());
+        }
+    }
+
+    long long deleted = 0;
+    for (const auto& candidate : candidateBuckets) {
+        const auto& oldBucket = candidate.second;
+        auto swDeleteResult = timeseries::deleteMatchingMeasurementsFromBucket(
+            *options.timeseries,
+            oldBucket,
+            [&matcher](const BSONObj& measurement) { return matcher->matchesBSON(measurement); },
+            op.getMulti());
+        uassertStatusOK(swDeleteResult.getStatus());
+        auto deleteResult = swDeleteResult.getValue();
+        if (deleteResult.deleted == 0) {
+            continue;
+        }
+
+        WriteUnitOfWork wuow(opCtx);
+        if (deleteResult.survivors.empty()) {
+            bucketCollection.getCollection()->deleteDocument(opCtx,
+                                                             stmtId,
+                                                             candidate.first,
+                                                             Snapshotted<BSONObj>(
+                                                                 opCtx->recoveryUnit()->getSnapshotId(),
+                                                                 oldBucket),
+                                                             &CurOp::get(opCtx)->debug(),
+                                                             false,
+                                                             false);
+        } else {
+            OplogUpdateEntryArgs args;
+            bucketCollection.getCollection()->updateDocument(
+                opCtx,
+                candidate.first,
+                Snapshotted<BSONObj>(opCtx->recoveryUnit()->getSnapshotId(), oldBucket),
+                *deleteResult.replacementBucket,
+                true,
+                true,
+                &CurOp::get(opCtx)->debug(),
+                &args);
+        }
+        wuow.commit();
+
+        timeseries::BucketCatalog::get().closeBucketById(logicalNss, oldBucket["_id"].OID());
+        deleted += deleteResult.deleted;
+        if (!op.getMulti()) {
+            break;
+        }
+    }
+
+    curOp.debug().additiveMetrics.ndeleted = deleted;
+    LastError::get(opCtx->getClient()).recordDelete(deleted);
+
+    SingleWriteResult result;
+    result.setN(deleted);
+    return result;
+}
+
 WriteResult performDeletes(OperationContext* opCtx, const write_ops::Delete& wholeOp) {
     // EloqDoc enables command level transaction.
     //
@@ -1016,7 +1146,8 @@ WriteResult performDeletes(OperationContext* opCtx, const write_ops::Delete& who
     // invariant(!opCtx->lockState()->inAWriteUnitOfWork() ||
     //           (session && session->inActiveOrKilledMultiDocumentTransaction()));
     uassertStatusOK(userAllowedWriteNS(wholeOp.getNamespace()));
-    assertNotTimeSeriesCollection(opCtx, wholeOp.getNamespace(), "delete from");
+    const auto timeseriesOptions =
+        getTimeSeriesOptionsForWrite(opCtx, wholeOp.getNamespace());
 
     DisableDocumentValidationIfTrue docValidationDisabler(
         opCtx, wholeOp.getWriteCommandBase().getBypassDocumentValidation());
@@ -1053,9 +1184,20 @@ WriteResult performDeletes(OperationContext* opCtx, const write_ops::Delete& who
         ON_BLOCK_EXIT([&] { finishCurOp(opCtx, &curOp); });
         try {
             lastOpFixer.startingOp();
-            out.results.emplace_back(
-                performSingleDeleteOp(
-                    opCtx, wholeOp.getNamespace(), stmtId, wholeOp.getWriteCommandBase(), singleOp));
+            if (timeseriesOptions) {
+                out.results.emplace_back(performSingleTimeSeriesDeleteOp(opCtx,
+                                                                         wholeOp.getNamespace(),
+                                                                         *timeseriesOptions,
+                                                                         stmtId,
+                                                                         wholeOp.getWriteCommandBase(),
+                                                                         singleOp));
+            } else {
+                out.results.emplace_back(performSingleDeleteOp(opCtx,
+                                                               wholeOp.getNamespace(),
+                                                               stmtId,
+                                                               wholeOp.getWriteCommandBase(),
+                                                               singleOp));
+            }
             lastOpFixer.finishedOpSuccessfully();
         } catch (const DBException& ex) {
             const bool canContinue =
