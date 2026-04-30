@@ -746,6 +746,16 @@ TEST(TimeSeriesQueryTranslator, BucketAggregationRequestPreservesNaturalHint) {
     ASSERT_BSONOBJ_EQ(BSON("$natural" << 1), bucketRequest.getHint());
 }
 
+TEST(TimeSeriesQueryTranslator, BucketAggregationRequestPreservesNamedHint) {
+    AggregationRequest request(NamespaceString("db.metrics"), {fromjson("{$match: {v: 1}}")});
+    request.setHint(BSON("$hint" << "v_1"));
+
+    const auto bucketRequest = makeBucketAggregationRequest(
+        NamespaceString("db.system.buckets.metrics"), makeOptions(), request);
+
+    ASSERT_BSONOBJ_EQ(BSON("$hint" << "v_1"), bucketRequest.getHint());
+}
+
 }  // namespace
 }  // namespace timeseries
 }  // namespace mongo

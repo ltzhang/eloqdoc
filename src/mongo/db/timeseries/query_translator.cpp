@@ -976,7 +976,8 @@ BSONObj makeMetaDistinctGroupRewrite(const CollectionOptions& options,
 BSONObj translateHintToBucketSchema(const NamespaceString& bucketNss,
                                     const CollectionOptions& options,
                                     const BSONObj& hint) {
-    if (hint.isEmpty() || hint.firstElement().fieldNameStringData() == "$natural"_sd) {
+    if (hint.isEmpty() || hint.firstElement().fieldNameStringData() == "$natural"_sd ||
+        hint.firstElement().fieldNameStringData() == "$hint"_sd) {
         return hint;
     }
 
