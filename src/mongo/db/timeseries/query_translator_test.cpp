@@ -112,6 +112,31 @@ TEST(TimeSeriesQueryTranslator, DoesNotPushDownMeasurementSortBeforeUnpack) {
     ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[2]);
 }
 
+TEST(TimeSeriesQueryTranslator, PushesDownLeadingLimitBeforeUnpack) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(), {fromjson("{$limit: 5}"), fromjson("{$project: {_id: 0}}")});
+
+    ASSERT_EQUALS(4U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[2]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0}}"), pipeline[3]);
+}
+
+TEST(TimeSeriesQueryTranslator, DoesNotPushDownLimitAfterBucketPredicate) {
+    const auto start = Date_t::fromMillisSinceEpoch(1735689600000LL);
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {BSON("$match" << BSON("t" << BSON("$gte" << start))), fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(4U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("control.max.t" << BSON("$gte" << start))),
+                      pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("t" << BSON("$gte" << start))), pipeline[2]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
+}
+
 TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementEqualityPredicate) {
     const auto pipeline =
         makeBucketPipeline(makeOptions(), {BSON("$match" << BSON("v" << BSON("$eq" << 7)))});

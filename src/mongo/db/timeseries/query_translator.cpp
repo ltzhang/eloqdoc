@@ -329,6 +329,16 @@ bool appendLeadingSortPushdown(const CollectionOptions& options,
     return true;
 }
 
+bool appendLeadingLimitPushdown(const BSONObj& stage, std::vector<BSONObj>* translated) {
+    const auto firstElem = stage.firstElement();
+    if (firstElem.fieldNameStringData() != "$limit" || !firstElem.isNumber()) {
+        return false;
+    }
+
+    translated->push_back(stage.getOwned());
+    return true;
+}
+
 }  // namespace
 
 std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
@@ -356,6 +366,10 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
 
         if (appendLeadingSortPushdown(options, stage, &translated)) {
             continue;
+        }
+
+        if (translated.empty() && appendLeadingLimitPushdown(stage, &translated)) {
+            break;
         }
 
         break;
