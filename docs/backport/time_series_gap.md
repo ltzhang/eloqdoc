@@ -142,6 +142,9 @@ Implemented behavior:
   creating an incompatible bucket index.
 - `createIndexes` rejects `partialFilterExpression` on time-series indexes with
   `CannotCreateIndex`; partial-filter paths are not translated to bucket schema yet.
+- `createIndexes` rejects wildcard time-series index key patterns (`$**` and subtree wildcard
+  keys) with `CannotCreateIndex`; wildcard key/projection semantics are not translated to bucket
+  schema yet.
 - `listIndexes` on the logical collection translates bucket index specs back to logical names.
 - `listCollections` hides backing `system.buckets.*` collections.
 - Time-series option parsing enforces mutual exclusion between `granularity` and custom
@@ -165,6 +168,8 @@ Remaining functional or semantic differences:
   key types fail fast with `CannotCreateIndex`.
 - Partial time-series indexes are not implemented; logical create-index requests with
   `partialFilterExpression` fail fast with `CannotCreateIndex`.
+- Wildcard time-series indexes are not implemented; logical create-index requests for `$**` and
+  subtree wildcard keys fail fast with `CannotCreateIndex`.
 - Sharded time-series collection semantics are not implemented.
 - Retryability, transactions, write concern, and replication edge cases follow EloqDoc/Data
   Substrate behavior rather than MongoDB replica-set internals.

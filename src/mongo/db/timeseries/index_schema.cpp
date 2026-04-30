@@ -58,6 +58,10 @@ bool isUnsupportedGeospatialIndexType(const BSONElement& keyValue) {
         indexType == "geoHaystack"_sd || indexType == "2dsphere_bucket"_sd;
 }
 
+bool isUnsupportedWildcardIndexPath(StringData path) {
+    return path == "$**"_sd || path.endsWith(".$**"_sd);
+}
+
 BSONObj translateKeyPatternToBucketSchema(const BSONObj& keyPattern,
                                           const timeseries::TimeseriesOptions& tsOptions) {
     BSONObjBuilder builder;
@@ -65,6 +69,9 @@ BSONObj translateKeyPatternToBucketSchema(const BSONObj& keyPattern,
         uassert(ErrorCodes::CannotCreateIndex,
                 str::stream() << "time-series geospatial indexes are not supported: " << elem,
                 !isUnsupportedGeospatialIndexType(elem));
+        uassert(ErrorCodes::CannotCreateIndex,
+                str::stream() << "time-series wildcard indexes are not supported: " << elem,
+                !isUnsupportedWildcardIndexPath(elem.fieldNameStringData()));
         builder.appendAs(elem, translateKeyPathToBucketSchema(elem.fieldNameStringData(), tsOptions));
     }
     return builder.obj();

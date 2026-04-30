@@ -86,6 +86,23 @@ TEST(TimeSeriesIndexSchema, RejectsPartialFilterExpression) {
         ErrorCodes::CannotCreateIndex);
 }
 
+TEST(TimeSeriesIndexSchema, RejectsWildcardIndexes) {
+    ASSERT_THROWS_CODE(
+        translateIndexSpecToBucketSchema(NamespaceString("db.system.buckets.metrics"),
+                                         makeOptions(),
+                                         fromjson("{ns: 'db.metrics', key: {'$**': 1}, "
+                                                  "name: '$**_1'}")),
+        AssertionException,
+        ErrorCodes::CannotCreateIndex);
+    ASSERT_THROWS_CODE(
+        translateIndexSpecToBucketSchema(NamespaceString("db.system.buckets.metrics"),
+                                         makeOptions(),
+                                         fromjson("{ns: 'db.metrics', key: {'temp.$**': 1}, "
+                                                  "name: 'temp_wildcard'}")),
+        AssertionException,
+        ErrorCodes::CannotCreateIndex);
+}
+
 }  // namespace
 }  // namespace timeseries
 }  // namespace mongo
