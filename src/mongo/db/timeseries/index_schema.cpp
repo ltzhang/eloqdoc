@@ -48,10 +48,23 @@ std::string translateKeyPathFromBucketSchema(StringData path,
     return path.toString();
 }
 
+bool isUnsupportedGeospatialIndexType(const BSONElement& keyValue) {
+    if (keyValue.type() != mongo::String) {
+        return false;
+    }
+
+    const auto indexType = keyValue.valueStringData();
+    return indexType == "2d"_sd || indexType == "2dsphere"_sd ||
+        indexType == "geoHaystack"_sd || indexType == "2dsphere_bucket"_sd;
+}
+
 BSONObj translateKeyPatternToBucketSchema(const BSONObj& keyPattern,
                                           const timeseries::TimeseriesOptions& tsOptions) {
     BSONObjBuilder builder;
     for (auto&& elem : keyPattern) {
+        uassert(ErrorCodes::CannotCreateIndex,
+                str::stream() << "time-series geospatial indexes are not supported: " << elem,
+                !isUnsupportedGeospatialIndexType(elem));
         builder.appendAs(elem, translateKeyPathToBucketSchema(elem.fieldNameStringData(), tsOptions));
     }
     return builder.obj();

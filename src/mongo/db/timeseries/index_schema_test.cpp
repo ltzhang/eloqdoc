@@ -51,6 +51,30 @@ TEST(TimeSeriesIndexSchema, TranslatesBucketSpecToLogicalSchema) {
         translated);
 }
 
+TEST(TimeSeriesIndexSchema, RejectsGeospatialIndexes) {
+    ASSERT_THROWS_CODE(
+        translateIndexSpecToBucketSchema(NamespaceString("db.system.buckets.metrics"),
+                                         makeOptions(),
+                                         fromjson("{ns: 'db.metrics', key: {loc: '2d'}, "
+                                                  "name: 'loc_2d'}")),
+        AssertionException,
+        ErrorCodes::CannotCreateIndex);
+    ASSERT_THROWS_CODE(
+        translateIndexSpecToBucketSchema(NamespaceString("db.system.buckets.metrics"),
+                                         makeOptions(),
+                                         fromjson("{ns: 'db.metrics', key: {loc: '2dsphere'}, "
+                                                  "name: 'loc_2dsphere'}")),
+        AssertionException,
+        ErrorCodes::CannotCreateIndex);
+    ASSERT_THROWS_CODE(
+        translateIndexSpecToBucketSchema(NamespaceString("db.system.buckets.metrics"),
+                                         makeOptions(),
+                                         fromjson("{ns: 'db.metrics', key: {loc: 'geoHaystack'}, "
+                                                  "name: 'loc_geoHaystack'}")),
+        AssertionException,
+        ErrorCodes::CannotCreateIndex);
+}
+
 }  // namespace
 }  // namespace timeseries
 }  // namespace mongo

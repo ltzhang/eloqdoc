@@ -372,6 +372,8 @@ Implemented:
   custom bucket span/rounding.
 - `createIndexes` and `listIndexes` on logical time-series collections translate between logical
   user key patterns and bucket key patterns.
+- Logical geospatial time-series index requests are rejected with `CannotCreateIndex`; EloqDoc does
+  not silently create incompatible bucket geospatial indexes.
 - `listCollections` hides backing `system.buckets.<collection>` collections.
 
 Bucket layout:
@@ -447,7 +449,8 @@ Important differences from MongoDB:
   view-based catalog model.
 - Bucket collections are ordinary collections; clustered bucket storage is deferred.
 - Bucket compression is not implemented.
-- Geospatial bucket indexes and sharded time-series are not implemented.
+- Geospatial time-series indexes are not implemented and are rejected at index-creation time.
+- Sharded time-series collection semantics are not implemented.
 - Explain output may expose `system.buckets.<collection>` rather than rewriting everything back to
   the logical namespace.
 - TTL is bucket-level only; EloqDoc deletes entire expired buckets and does not delete individual
@@ -494,8 +497,8 @@ The following are not implemented in this branch, or exist only as parser/catalo
 - MongoDB sharding command semantics.
 - MongoDB replica-set coordination semantics.
 - Oplog-dependent features that do not map directly to Data Substrate.
-- Geospatial bucket indexes for time-series.
-- Full time-series parity, including compression, clustered bucket storage, geospatial bucket
+- Geospatial time-series indexes.
+- Full time-series parity, including compression, clustered bucket storage, geospatial
   indexes, advanced time-series aggregation rewrites, and sharded time-series.
 
 ## Practical Guidance For Users
@@ -515,7 +518,7 @@ Avoid assuming full MongoDB parity for:
 - Sharding/replication behavior.
 - Very large analytic windows or interpolation workloads.
 - Exact date arithmetic across DST/month/quarter/year boundaries.
-- Time-series workloads that rely on compression, clustered bucket storage, geospatial bucket
+- Time-series workloads that rely on compression, clustered bucket storage, geospatial
   indexes, sharded time-series, advanced aggregation rewrites, or exact MongoDB retryable-write
   semantics.
 - Workloads depending on exact MongoDB retryable-write or write-concern edge cases.
