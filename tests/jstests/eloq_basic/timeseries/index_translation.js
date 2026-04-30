@@ -30,6 +30,21 @@
                   (idx) => idx.name === "host_time_temp"));
 
     assert.commandWorked(metrics.createIndex({temp: 1}, {name: "temp_1"}));
+    assert.commandWorked(testDB.runCommand({
+        collMod: "metrics",
+        index: {keyPattern: {temp: 1}, hidden: true}
+    }));
+    let hiddenIndex = metrics.getIndexes().find((idx) => idx.name === "temp_1");
+    assert.neq(undefined, hiddenIndex, tojson(metrics.getIndexes()));
+    assert.eq(true, hiddenIndex.hidden, tojson(hiddenIndex));
+    assert.commandWorked(testDB.runCommand({
+        collMod: "metrics",
+        index: {name: "temp_1", hidden: false}
+    }));
+    hiddenIndex = metrics.getIndexes().find((idx) => idx.name === "temp_1");
+    assert.neq(undefined, hiddenIndex, tojson(metrics.getIndexes()));
+    assert.eq(false, hiddenIndex.hidden, tojson(hiddenIndex));
+
     assert.commandWorked(metrics.dropIndex("temp_1"));
     assert.eq(undefined,
               testDB.getCollection("system.buckets.metrics").getIndexes().find(

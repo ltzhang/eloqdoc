@@ -51,6 +51,8 @@
 #include "mongo/db/server_options.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/storage/recovery_unit.h"
+#include "mongo/db/timeseries/index_schema.h"
+#include "mongo/db/timeseries/timeseries_namespace.h"
 #include "mongo/db/views/view_catalog.h"
 #include "mongo/s/catalog/type_collection.h"
 #include "mongo/s/client/shard_registry.h"
@@ -82,6 +84,35 @@ struct CollModRequest {
     BSONElement usePowerOf2Sizes = {};
     BSONElement noPadding = {};
 };
+
+bool hasIndexCollMod(const BSONObj& cmdObj) {
+    return !cmdObj["index"].eoo();
+}
+
+BSONObj translateIndexCollModRequestForTimeseries(const NamespaceString& bucketNss,
+                                                  const CollectionOptions& options,
+                                                  const BSONObj& cmdObj) {
+    BSONObjBuilder builder;
+    for (auto&& elem : cmdObj) {
+        if (elem.fieldNameStringData() == "index"_sd && elem.type() == Object) {
+            BSONObjBuilder indexBuilder(builder.subobjStart("index"));
+            for (auto&& indexElem : elem.Obj()) {
+                if (indexElem.fieldNameStringData() == "keyPattern"_sd &&
+                    indexElem.type() == Object) {
+                    const auto translatedSpec = timeseries::translateIndexSpecToBucketSchema(
+                        bucketNss, options, BSON("key" << indexElem.Obj()));
+                    indexBuilder.append("keyPattern", translatedSpec["key"].Obj());
+                } else {
+                    indexBuilder.append(indexElem);
+                }
+            }
+            indexBuilder.doneFast();
+        } else {
+            builder.append(elem);
+        }
+    }
+    return builder.obj();
+}
 
 int granularityRank(StringData granularity) {
     if (granularity == "seconds") {
@@ -394,6 +425,18 @@ Status _collModInternal(OperationContext* opCtx,
     AutoGetDb autoDb(opCtx, dbName, MODE_X);
     Database* const db = autoDb.getDb();
     Collection* coll = db ? db->getCollection(opCtx, nss) : nullptr;
+    NamespaceString targetNss = nss;
+    Collection* targetColl = coll;
+    BSONObj targetCmdObj = cmdObj;
+
+    if (coll && hasIndexCollMod(cmdObj)) {
+        auto options = coll->getCatalogEntry()->getCollectionOptions(opCtx);
+        if (options.timeseries) {
+            targetNss = timeseries::makeBucketNamespace(nss);
+            targetColl = db ? db->getCollection(opCtx, targetNss) : nullptr;
+            targetCmdObj = translateIndexCollModRequestForTimeseries(targetNss, options, cmdObj);
+        }
+    }
 
     // May also modify a view instead of a collection.
     boost::optional<ViewDefinition> view;
@@ -407,32 +450,34 @@ Status _collModInternal(OperationContext* opCtx,
 
     // This can kill all cursors so don't allow running it while a background operation is in
     // progress.
-    BackgroundOperation::assertNoBgOpInProgForNs(nss);
+    BackgroundOperation::assertNoBgOpInProgForNs(targetNss);
 
     // If db/collection/view does not exist, short circuit and return.
-    if (!db || (!coll && !view)) {
+    if (!db || (!targetColl && !view)) {
         return Status(ErrorCodes::NamespaceNotFound, "ns does not exist");
     }
 
     // This is necessary to set up CurOp and update the Top stats.
-    OldClientContext ctx(opCtx, nss.ns());
+    OldClientContext ctx(opCtx, targetNss.ns());
 
     bool userInitiatedWritesAndNotPrimary = opCtx->writesAreReplicated() &&
-        !repl::ReplicationCoordinator::get(opCtx)->canAcceptWritesFor(opCtx, nss);
+        !repl::ReplicationCoordinator::get(opCtx)->canAcceptWritesFor(opCtx, targetNss);
 
     if (userInitiatedWritesAndNotPrimary) {
         return Status(ErrorCodes::NotMaster,
                       str::stream()
-                          << "Not primary while setting collection options on " << nss.ns());
+                          << "Not primary while setting collection options on " << targetNss.ns());
     }
 
     BSONObjBuilder oplogEntryBuilder;
-    auto statusW = parseCollModRequest(opCtx, nss, coll, cmdObj, &oplogEntryBuilder);
+    auto statusW =
+        parseCollModRequest(opCtx, targetNss, targetColl, targetCmdObj, &oplogEntryBuilder);
     if (!statusW.isOK()) {
         return statusW.getStatus();
     }
 
     CollModRequest cmr = statusW.getValue();
+    coll = targetColl;
 
     WriteUnitOfWork wunit(opCtx);
 
@@ -625,7 +670,7 @@ Status _collModInternal(OperationContext* opCtx,
     // Only observe non-view collMods, as view operations are observed as operations on the
     // system.views collection.
     getGlobalServiceContext()->getOpObserver()->onCollMod(
-        opCtx, nss, coll->uuid(), oplogEntryBuilder.obj(), oldCollOptions, ttlInfo);
+        opCtx, targetNss, coll->uuid(), oplogEntryBuilder.obj(), oldCollOptions, ttlInfo);
 
     wunit.commit();
 
