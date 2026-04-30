@@ -28,7 +28,10 @@
 
 #include "mongo/platform/basic.h"
 
+#include <boost/optional.hpp>
+
 #include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/catalog/collection_options.h"
 #include "mongo/db/catalog/collection_catalog_entry.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
@@ -44,6 +47,8 @@
 #include "mongo/db/query/find_common.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/storage/storage_engine.h"
+#include "mongo/db/timeseries/index_schema.h"
+#include "mongo/db/timeseries/timeseries_namespace.h"
 #include "mongo/stdx/memory.h"
 
 namespace mongo {
@@ -55,6 +60,28 @@ using std::vector;
 using stdx::make_unique;
 
 namespace {
+
+struct ListIndexesTarget {
+    NamespaceString logicalNss;
+    NamespaceString storageNss;
+    boost::optional<CollectionOptions> timeseriesOptions;
+};
+
+ListIndexesTarget resolveListIndexesTarget(OperationContext* opCtx,
+                                           const NamespaceString& requestedNss) {
+    AutoGetCollectionForReadCommand logicalCtx(opCtx, requestedNss);
+    auto logicalCollection = logicalCtx.getCollection();
+    uassert(ErrorCodes::NamespaceNotFound,
+            str::stream() << "ns does not exist: " << logicalCtx.getNss().ns(),
+            logicalCollection);
+
+    auto options = logicalCollection->getCatalogEntry()->getCollectionOptions(opCtx);
+    if (!options.timeseries) {
+        return {logicalCtx.getNss(), logicalCtx.getNss(), boost::none};
+    }
+
+    return {logicalCtx.getNss(), timeseries::makeBucketNamespace(logicalCtx.getNss()), options};
+}
 
 /**
  * Lists the indexes for a given collection.
@@ -129,8 +156,11 @@ public:
         NamespaceString cursorNss;
         BSONArrayBuilder firstBatch;
         {
-            AutoGetCollectionForReadCommand ctx(opCtx,
-                                                CommandHelpers::parseNsOrUUID(dbname, cmdObj));
+            auto target = resolveListIndexesTarget(
+                opCtx,
+                AutoGetCollection::resolveNamespaceStringOrUUID(
+                    opCtx, CommandHelpers::parseNsOrUUID(dbname, cmdObj)));
+            AutoGetCollectionForReadCommand ctx(opCtx, target.storageNss);
             Collection* collection = ctx.getCollection();
             uassert(ErrorCodes::NamespaceNotFound,
                     str::stream() << "ns does not exist: " << ctx.getNss().ns(),
@@ -155,6 +185,10 @@ public:
                     opCtx, "listIndexes", nss.ns(), [&cce, &opCtx, &indexNames, i] {
                         return cce->getIndexSpec(opCtx, indexNames[i]);
                     });
+                if (target.timeseriesOptions) {
+                    indexSpec = timeseries::translateIndexSpecFromBucketSchema(
+                        target.logicalNss, *target.timeseriesOptions, indexSpec);
+                }
 
                 WorkingSetID id = ws->allocate();
                 WorkingSetMember* member = ws->get(id);
@@ -165,8 +199,8 @@ public:
                 root->pushBack(id);
             }
 
-            cursorNss = NamespaceString::makeListIndexesNSS(dbname, nss.coll());
-            invariant(nss == cursorNss.getTargetNSForListIndexes());
+            cursorNss = NamespaceString::makeListIndexesNSS(dbname, target.logicalNss.coll());
+            invariant(target.logicalNss == cursorNss.getTargetNSForListIndexes());
 
             exec = uassertStatusOK(PlanExecutor::make(
                 opCtx, std::move(ws), std::move(root), cursorNss, PlanExecutor::NO_YIELD));

@@ -34,6 +34,7 @@
 #include "mongo/base/string_data.h"
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/catalog/collection.h"
+#include "mongo/db/catalog/collection_catalog_entry.h"
 #include "mongo/db/catalog/database.h"
 #include "mongo/db/catalog/database_holder.h"
 #include "mongo/db/catalog/index_create.h"
@@ -56,6 +57,8 @@
 #include "mongo/db/s/database_sharding_state.h"
 #include "mongo/db/server_options.h"
 #include "mongo/db/views/view_catalog.h"
+#include "mongo/db/timeseries/index_schema.h"
+#include "mongo/db/timeseries/timeseries_namespace.h"
 #include "mongo/s/shard_key_pattern.h"
 #include "mongo/util/scopeguard.h"
 
@@ -248,6 +251,37 @@ std::vector<BSONObj> resolveDefaultsAndRemoveExistingIndexes(OperationContext* o
     return specs;
 }
 
+bool getTimeseriesOptionsIfPresent(OperationContext* opCtx,
+                                   const NamespaceString& nss,
+                                   CollectionOptions* options) {
+    AutoGetCollection autoColl(opCtx, nss, MODE_IS);
+    auto collection = autoColl.getCollection();
+    if (!collection) {
+        return false;
+    }
+
+    auto collectionOptions = collection->getCatalogEntry()->getCollectionOptions(opCtx);
+    if (!collectionOptions.timeseries) {
+        return false;
+    }
+
+    *options = collectionOptions;
+    return true;
+}
+
+std::vector<BSONObj> translateIndexSpecsForTimeseriesBucket(
+    const NamespaceString& bucketNss,
+    const CollectionOptions& options,
+    const std::vector<BSONObj>& specs) {
+    std::vector<BSONObj> translatedSpecs;
+    translatedSpecs.reserve(specs.size());
+    for (const auto& spec : specs) {
+        translatedSpecs.push_back(
+            timeseries::translateIndexSpecToBucketSchema(bucketNss, options, spec));
+    }
+    return translatedSpecs;
+}
+
 }  // namespace
 
 /**
@@ -295,12 +329,21 @@ public:
             parseAndValidateIndexSpecs(opCtx, ns, cmdObj, serverGlobalParams.featureCompatibility);
         uassertStatusOK(specsWithStatus.getStatus());
         auto specs = std::move(specsWithStatus.getValue());
+        CollectionOptions timeseriesOptions;
+        const bool isTimeseriesCollection =
+            getTimeseriesOptionsIfPresent(opCtx, ns, &timeseriesOptions);
+        const NamespaceString buildNs =
+            isTimeseriesCollection ? timeseries::makeBucketNamespace(ns) : ns;
+        if (isTimeseriesCollection) {
+            uassertStatusOK(timeseries::ensureBucketCollection(opCtx, ns));
+            specs = translateIndexSpecsForTimeseriesBucket(buildNs, timeseriesOptions, specs);
+        }
 
         // Do not use AutoGetOrCreateDb because we may relock the database in mode X.
-        Lock::DBLock dbLock(opCtx, ns.db(), MODE_IX);
-        if (!repl::ReplicationCoordinator::get(opCtx)->canAcceptWritesFor(opCtx, ns)) {
+        Lock::DBLock dbLock(opCtx, buildNs.db(), MODE_IX);
+        if (!repl::ReplicationCoordinator::get(opCtx)->canAcceptWritesFor(opCtx, buildNs)) {
             uasserted(ErrorCodes::NotMaster,
-                      str::stream() << "Not primary while creating indexes in " << ns.ns());
+                      str::stream() << "Not primary while creating indexes in " << buildNs.ns());
         }
 
         const auto indexesAlreadyExist = [&result](int numIndexes) {
@@ -314,7 +357,7 @@ public:
         // while holding an intent lock. Only continue if new indexes need to be built and the
         // database should be re-locked in exclusive mode.
         {
-            AutoGetCollection autoColl(opCtx, ns, MODE_IX);
+            AutoGetCollection autoColl(opCtx, buildNs, MODE_IX);
             if (auto collection = autoColl.getCollection()) {
                 auto specsCopy = resolveDefaultsAndRemoveExistingIndexes(opCtx, collection, specs);
                 if (specsCopy.size() == 0) {
@@ -336,39 +379,39 @@ public:
         // not allow locks or re-locks to be interrupted.
         UninterruptibleLockGuard noInterrupt(opCtx->lockState());
 
-        Database* db = DatabaseHolder::getDatabaseHolder().get(opCtx, ns.db());
+        Database* db = DatabaseHolder::getDatabaseHolder().get(opCtx, buildNs.db());
         if (!db) {
-            db = DatabaseHolder::getDatabaseHolder().openDb(opCtx, ns.db());
+            db = DatabaseHolder::getDatabaseHolder().openDb(opCtx, buildNs.db());
         }
         DatabaseShardingState::get(db).checkDbVersion(opCtx);
 
-        Collection* collection_tmp = db->getCollection(opCtx, ns, true);
+        Collection* collection_tmp = db->getCollection(opCtx, buildNs, true);
         if (collection_tmp) {
             result.appendBool("createdCollectionAutomatically", false);
         } else {
             // Prevent collection from being deleted immediately after creation
             uint32_t retry_cnt = 10;
             while (!collection_tmp && --retry_cnt > 0) {
-                db = DatabaseHolder::getDatabaseHolder().get(opCtx, ns.db());
+                db = DatabaseHolder::getDatabaseHolder().get(opCtx, buildNs.db());
                 if (!db) {
-                    db = DatabaseHolder::getDatabaseHolder().openDb(opCtx, ns.db());
+                    db = DatabaseHolder::getDatabaseHolder().openDb(opCtx, buildNs.db());
                 }
                 DatabaseShardingState::get(db).checkDbVersion(opCtx);
-                if (db->getViewCatalog()->lookup(opCtx, ns.ns())) {
+                if (db->getViewCatalog()->lookup(opCtx, buildNs.ns())) {
                     errmsg = "Cannot create indexes on a view";
                     uasserted(ErrorCodes::CommandNotSupportedOnView, errmsg);
                 }
 
-                status = userAllowedCreateNS(ns.db(), ns.coll());
+                status = userAllowedCreateNS(buildNs.db(), buildNs.coll());
                 uassertStatusOK(status);
 
-                writeConflictRetry(opCtx, kCommandName, ns.ns(), [&] {
+                writeConflictRetry(opCtx, kCommandName, buildNs.ns(), [&] {
                     WriteUnitOfWork wunit(opCtx);
-                    collection_tmp = db->createCollection(opCtx, ns.ns(), CollectionOptions());
+                    collection_tmp = db->createCollection(opCtx, buildNs.ns(), CollectionOptions());
                     invariant(collection_tmp);
                     wunit.commit();
                 });
-                collection_tmp = db->getCollection(opCtx, ns, true);
+                collection_tmp = db->getCollection(opCtx, buildNs, true);
             }
 
             if (!collection_tmp) {
@@ -404,13 +447,13 @@ public:
         for (size_t i = 0; i < specs.size(); i++) {
             const BSONObj& spec = specs[i];
             if (spec["unique"].trueValue()) {
-                status = checkUniqueIndexConstraints(opCtx, ns, spec["key"].Obj());
+                status = checkUniqueIndexConstraints(opCtx, buildNs, spec["key"].Obj());
                 uassertStatusOK(status);
             }
         }
 
         std::vector<BSONObj> indexInfoObjs =
-            writeConflictRetry(opCtx, kCommandName, ns.ns(), [&indexer, &specs] {
+            writeConflictRetry(opCtx, kCommandName, buildNs.ns(), [&indexer, &specs] {
                 return uassertStatusOK(indexer.init(specs));
             });
 
@@ -457,12 +500,12 @@ public:
         //     ns));
         // }
 
-        writeConflictRetry(opCtx, kCommandName, ns.ns(), [&] {
+        writeConflictRetry(opCtx, kCommandName, buildNs.ns(), [&] {
             WriteUnitOfWork wunit(opCtx);
 
-            indexer.commit([opCtx, &ns, collection](const BSONObj& spec) {
+            indexer.commit([opCtx, &buildNs, collection](const BSONObj& spec) {
                 opCtx->getServiceContext()->getOpObserver()->onCreateIndex(
-                    opCtx, ns, collection->uuid(), spec, false);
+                    opCtx, buildNs, collection->uuid(), spec, false);
             });
 
             wunit.commit();
