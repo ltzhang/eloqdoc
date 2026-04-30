@@ -455,6 +455,72 @@ bool appendLeadingMetaAddFieldsPushdown(const CollectionOptions& options,
     return true;
 }
 
+bool appendWholeCollectionGroupRewrite(const CollectionOptions& options,
+                                       const BSONObj& stage,
+                                       std::vector<BSONObj>* translated) {
+    invariant(options.timeseries);
+    const auto& tsOptions = *options.timeseries;
+
+    const auto firstElem = stage.firstElement();
+    if (firstElem.fieldNameStringData() != "$group" || firstElem.type() != mongo::Object) {
+        return false;
+    }
+
+    const auto groupSpec = firstElem.Obj();
+    const auto idElem = groupSpec["_id"];
+    if (idElem.eoo() || idElem.type() != mongo::jstNULL) {
+        return false;
+    }
+
+    BSONObjBuilder bucketGroup;
+    bucketGroup.appendNull("_id");
+    bool hasAccumulator = false;
+
+    BSONForEach(field, groupSpec) {
+        const auto outputField = field.fieldNameStringData();
+        if (outputField == "_id") {
+            continue;
+        }
+
+        if (field.type() != mongo::Object) {
+            return false;
+        }
+
+        const auto accumulator = field.Obj();
+        if (accumulator.nFields() != 1) {
+            return false;
+        }
+
+        const auto op = accumulator.firstElement();
+        const auto opName = op.fieldNameStringData();
+        if (opName == "$sum" && op.isNumber() && op.numberInt() == 1) {
+            bucketGroup.append(outputField, BSON("$sum" << "$control.count"));
+            hasAccumulator = true;
+            continue;
+        }
+
+        const std::string logicalTimePath = str::stream() << "$" << tsOptions.timeField;
+        if ((opName == "$min" || opName == "$max") && op.type() == mongo::String &&
+            op.String() == logicalTimePath) {
+            const auto controlField = opName == "$min" ? "min" : "max";
+            const std::string inputPath =
+                str::stream() << "$" << makeControlPath(controlField, tsOptions.timeField);
+            bucketGroup.append(outputField, BSON(opName << inputPath));
+            hasAccumulator = true;
+            continue;
+        }
+
+        return false;
+    }
+
+    if (!hasAccumulator) {
+        return false;
+    }
+
+    translated->push_back(BSON("$group" << bucketGroup.obj()));
+    return true;
+}
+
 }  // namespace
 
 std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
@@ -469,6 +535,11 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
 
     std::vector<BSONObj> translated;
     translated.reserve(userPipeline.size() + 2);
+
+    if (userPipeline.size() == 1 &&
+        appendWholeCollectionGroupRewrite(options, userPipeline.front(), &translated)) {
+        return translated;
+    }
 
     for (const auto& stage : userPipeline) {
         const auto firstElem = stage.firstElement();

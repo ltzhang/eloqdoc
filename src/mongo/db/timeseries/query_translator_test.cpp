@@ -233,6 +233,28 @@ TEST(TimeSeriesQueryTranslator, DoesNotPushDownMeasurementAddFieldsBeforeUnpack)
     ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[2]);
 }
 
+TEST(TimeSeriesQueryTranslator, RewritesWholeCollectionGroupCountAndTimeBoundsWithoutUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {fromjson("{$group: {_id: null, n: {$sum: 1}, minT: {$min: '$t'}, maxT: {$max: '$t'}}}")});
+
+    ASSERT_EQUALS(1U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(
+        fromjson("{$group: {_id: null, n: {$sum: '$control.count'}, "
+                 "minT: {$min: '$control.min.t'}, maxT: {$max: '$control.max.t'}}}"),
+        pipeline[0]);
+}
+
+TEST(TimeSeriesQueryTranslator, DoesNotRewriteGroupedTimeSeriesGroupBeforeUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {fromjson("{$group: {_id: '$tags.host', n: {$sum: 1}}}")});
+
+    ASSERT_EQUALS(2U, pipeline.size());
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: '$tags.host', n: {$sum: 1}}}"), pipeline[1]);
+}
+
 TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementEqualityPredicate) {
     const auto pipeline =
         makeBucketPipeline(makeOptions(), {BSON("$match" << BSON("v" << BSON("$eq" << 7)))});
