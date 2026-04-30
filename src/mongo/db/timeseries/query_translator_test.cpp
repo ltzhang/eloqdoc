@@ -189,6 +189,39 @@ TEST(TimeSeriesQueryTranslator, DoesNotPushDownComputedProjectBeforeUnpack) {
     ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[2]);
 }
 
+TEST(TimeSeriesQueryTranslator, PushesDownMetaOnlyAddFieldsBeforeUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {fromjson("{$addFields: {tags: {site: 'north'}}}"), fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(4U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$addFields: {meta: {site: 'north'}}}"), pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$addFields: {tags: {site: 'north'}}}"), pipeline[2]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
+}
+
+TEST(TimeSeriesQueryTranslator, PushesDownMetaOnlySetBeforeUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(), {fromjson("{$set: {'tags.site': 'north'}}"), fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(4U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$set: {'meta.site': 'north'}}"), pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$set: {'tags.site': 'north'}}"), pipeline[2]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
+}
+
+TEST(TimeSeriesQueryTranslator, DoesNotPushDownMeasurementAddFieldsBeforeUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(), {fromjson("{$addFields: {v: 7}}"), fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(3U, pipeline.size());
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$addFields: {v: 7}}"), pipeline[1]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[2]);
+}
+
 TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementEqualityPredicate) {
     const auto pipeline =
         makeBucketPipeline(makeOptions(), {BSON("$match" << BSON("v" << BSON("$eq" << 7)))});

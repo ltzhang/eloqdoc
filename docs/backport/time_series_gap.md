@@ -74,6 +74,8 @@ Implemented bucket-level pruning:
 - A leading simple inclusion `$project` over time, meta, and measurement fields can be pushed before
   unpack as a bucket projection over `control.count`, `meta`, and `data.<field>` paths, while the
   original projection is preserved after unpack.
+- A leading meta-only `$addFields` / `$set` with literal values can be pushed before unpack as a
+  bucket update over `meta` paths, while the original stage is preserved after unpack.
 
 The original user pipeline stages remain after unpacking. Bucket pushdown is therefore a
 performance optimization and not the source of query correctness.
@@ -138,7 +140,8 @@ Remaining performance differences:
 - `$group` rewrites that answer min/max/count from `control.min` / `control.max` without unpacking
   are not implemented.
 - Last-point and DISTINCT_SCAN style optimizations are not implemented.
-- Meta-only `$addFields` pushdown is not implemented.
+- More general `$addFields` / `$set` pushdown, including computed expressions and measurement
+  fields, is not implemented.
 - Broader sort and index-aware time-series planning remains limited.
 
 ---
@@ -152,11 +155,11 @@ Focused C++ validation has been run for the core time-series helper paths:
 - `bucket_mutation_test`
 - `collection_options_test`
 
-The May 1, 2026 Gap 12 `$limit` and simple inclusion `$project` pushdown changes were validated
-with:
+The May 1, 2026 Gap 12 `$limit`, simple inclusion `$project`, and meta-only `$addFields` / `$set`
+pushdown changes were validated with:
 
 - `document_source_internal_unpack_bucket_test` (4 tests, 0 failures)
-- `query_translator_test` (17 tests, 0 failures)
+- `query_translator_test` (20 tests, 0 failures)
 - `insert_router_test` (2 tests, 0 failures)
 - `bucket_mutation_test` (5 tests, 0 failures across bucket catalog and mutation suites)
 - `collection_options_test` (35 tests, 0 failures)

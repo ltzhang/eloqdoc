@@ -399,6 +399,61 @@ bool appendLeadingProjectPushdown(const CollectionOptions& options,
     return true;
 }
 
+bool containsExpressionReference(const BSONElement& value) {
+    if (value.type() == mongo::String) {
+        return StringData(value.String()).startsWith("$");
+    }
+
+    if (value.type() != mongo::Object && value.type() != mongo::Array) {
+        return false;
+    }
+
+    BSONForEach(child, value.Obj()) {
+        if (StringData(child.fieldName()).startsWith("$") || containsExpressionReference(child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool appendLeadingMetaAddFieldsPushdown(const CollectionOptions& options,
+                                        const BSONObj& stage,
+                                        std::vector<BSONObj>* translated) {
+    invariant(options.timeseries);
+    const auto& tsOptions = *options.timeseries;
+    if (!tsOptions.hasMetaField()) {
+        return false;
+    }
+
+    const auto firstElem = stage.firstElement();
+    const auto stageName = firstElem.fieldNameStringData();
+    if ((stageName != "$addFields" && stageName != "$set") || firstElem.type() != mongo::Object) {
+        return false;
+    }
+
+    BSONObjBuilder bucketFields;
+    bool hasField = false;
+    BSONForEach(field, firstElem.Obj()) {
+        std::string metaPath;
+        if (!translateMetaPath(field.fieldNameStringData(), tsOptions.metaField, &metaPath) ||
+            containsExpressionReference(field)) {
+            return false;
+        }
+
+        bucketFields.appendAs(field, metaPath);
+        hasField = true;
+    }
+
+    if (!hasField) {
+        return false;
+    }
+
+    BSONObjBuilder stageBuilder;
+    stageBuilder.append(stageName, bucketFields.obj());
+    translated->push_back(stageBuilder.obj());
+    return true;
+}
+
 }  // namespace
 
 std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
@@ -433,6 +488,10 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
         }
 
         if (translated.empty() && appendLeadingProjectPushdown(options, stage, &translated)) {
+            break;
+        }
+
+        if (translated.empty() && appendLeadingMetaAddFieldsPushdown(options, stage, &translated)) {
             break;
         }
 
