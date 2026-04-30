@@ -58,6 +58,10 @@ bool isUnsupportedGeospatialIndexType(const BSONElement& keyValue) {
         indexType == "geoHaystack"_sd || indexType == "2dsphere_bucket"_sd;
 }
 
+bool isUnsupportedTextIndexType(const BSONElement& keyValue) {
+    return keyValue.type() == mongo::String && keyValue.valueStringData() == "text"_sd;
+}
+
 bool isUnsupportedWildcardIndexPath(StringData path) {
     return path == "$**"_sd || path.endsWith(".$**"_sd);
 }
@@ -69,6 +73,9 @@ BSONObj translateKeyPatternToBucketSchema(const BSONObj& keyPattern,
         uassert(ErrorCodes::CannotCreateIndex,
                 str::stream() << "time-series geospatial indexes are not supported: " << elem,
                 !isUnsupportedGeospatialIndexType(elem));
+        uassert(ErrorCodes::CannotCreateIndex,
+                str::stream() << "time-series text indexes are not supported: " << elem,
+                !isUnsupportedTextIndexType(elem));
         uassert(ErrorCodes::CannotCreateIndex,
                 str::stream() << "time-series wildcard indexes are not supported: " << elem,
                 !isUnsupportedWildcardIndexPath(elem.fieldNameStringData()));

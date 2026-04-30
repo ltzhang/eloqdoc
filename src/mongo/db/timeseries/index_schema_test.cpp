@@ -103,6 +103,16 @@ TEST(TimeSeriesIndexSchema, RejectsWildcardIndexes) {
         ErrorCodes::CannotCreateIndex);
 }
 
+TEST(TimeSeriesIndexSchema, RejectsTextIndexes) {
+    ASSERT_THROWS_CODE(
+        translateIndexSpecToBucketSchema(NamespaceString("db.system.buckets.metrics"),
+                                         makeOptions(),
+                                         fromjson("{ns: 'db.metrics', key: {description: 'text'}, "
+                                                  "name: 'description_text'}")),
+        AssertionException,
+        ErrorCodes::CannotCreateIndex);
+}
+
 }  // namespace
 }  // namespace timeseries
 }  // namespace mongo
