@@ -77,8 +77,8 @@ void DocumentSourceInternalUnpackBucket::unpackBucket(const Document& bucketDoc)
             "time-series bucket is missing object control field",
             control.type() == BSONType::Object);
     uassert(ErrorCodes::FailedToParse,
-            "time-series bucket is missing object data field",
-            data.type() == BSONType::Object);
+            "time-series bucket data field must be an object",
+            data.eoo() || data.type() == BSONType::Object);
 
     auto countElem = control.Obj()["count"];
     uassert(ErrorCodes::FailedToParse,
@@ -90,13 +90,15 @@ void DocumentSourceInternalUnpackBucket::unpackBucket(const Document& bucketDoc)
     for (long long i = 0; i < count; ++i) {
         const auto index = std::to_string(i);
         BSONObjBuilder measurement;
-        BSONForEach(columnElem, data.Obj()) {
-            uassert(ErrorCodes::FailedToParse,
-                    "time-series bucket data columns must be objects",
-                    columnElem.type() == BSONType::Object);
-            auto value = columnElem.Obj()[index];
-            if (!value.eoo()) {
-                measurement.appendAs(value, columnElem.fieldName());
+        if (!data.eoo()) {
+            BSONForEach(columnElem, data.Obj()) {
+                uassert(ErrorCodes::FailedToParse,
+                        "time-series bucket data columns must be objects",
+                        columnElem.type() == BSONType::Object);
+                auto value = columnElem.Obj()[index];
+                if (!value.eoo()) {
+                    measurement.appendAs(value, columnElem.fieldName());
+                }
             }
         }
 

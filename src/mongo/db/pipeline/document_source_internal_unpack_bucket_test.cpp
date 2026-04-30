@@ -80,6 +80,27 @@ TEST(InternalUnpackBucketTest, OmitsMetaWhenNoMetaFieldConfigured) {
     ASSERT_TRUE(stage->getNext().isEOF());
 }
 
+TEST(InternalUnpackBucketTest, UnpacksMetaOnlyProjectedBucket) {
+    auto expCtx = makeExpCtx();
+    auto stage = makeUnpackStage(expCtx,
+                                 BSON("$_internalUnpackBucket"
+                                      << BSON("timeField"
+                                              << "t"
+                                              << "metaField"
+                                              << "tags")));
+    boost::intrusive_ptr<DocumentSourceMock> source =
+        new DocumentSourceMock(std::deque<DocumentSource::GetNextResult>{Document{
+        {"control", Document{{"version", 1}, {"count", 2}}},
+        {"meta", Document{{"host", "a"_sd}}}}}, expCtx);
+    stage->setSource(source.get());
+
+    ASSERT_DOCUMENT_EQ(stage->getNext().getDocument(),
+                       (Document{{"tags", Document{{"host", "a"_sd}}}}));
+    ASSERT_DOCUMENT_EQ(stage->getNext().getDocument(),
+                       (Document{{"tags", Document{{"host", "a"_sd}}}}));
+    ASSERT_TRUE(stage->getNext().isEOF());
+}
+
 TEST(InternalUnpackBucketTest, SparseDataDoesNotInventMissingValues) {
     auto expCtx = makeExpCtx();
     auto stage = makeUnpackStage(expCtx,
