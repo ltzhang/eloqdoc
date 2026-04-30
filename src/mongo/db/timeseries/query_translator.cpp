@@ -652,6 +652,23 @@ bool appendWholeCollectionGroupRewrite(const CollectionOptions& options,
             continue;
         }
 
+        if (opName == "$addToSet" && op.type() == mongo::String) {
+            const StringData expression(op.String());
+            if (!expression.startsWith("$") || expression.startsWith("$$")) {
+                return false;
+            }
+
+            std::string metaPath;
+            if (!translateMetaPath(expression.substr(1), tsOptions.metaField, &metaPath)) {
+                return false;
+            }
+
+            const std::string inputPath = str::stream() << "$" << metaPath;
+            bucketGroup.append(outputField, BSON("$addToSet" << inputPath));
+            hasAccumulator = true;
+            continue;
+        }
+
         return false;
     }
 

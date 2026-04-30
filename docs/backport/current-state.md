@@ -412,7 +412,8 @@ Query pruning:
 - A leading meta-only `$addFields` / `$set` with literal values can be pushed before unpacking as a
   bucket stage over `meta` paths.
 - A single-stage whole-collection or meta-grouped `$group` can be answered without unpacking when
-  it only computes count and time/measurement/meta min/max from bucket fields.
+  it only computes count, time/measurement/meta min/max, and direct meta-field `$addToSet` from
+  bucket fields.
 - One or more leading exact meta-only `$match` stages can be combined with a supported bucket-level
   `$group` without unpacking.
 - A single-stage `$count`, or exact meta-only `$match` stages followed by `$count`, can be answered
@@ -445,8 +446,9 @@ Important differences from MongoDB:
 - TTL is bucket-level only; EloqDoc deletes entire expired buckets and does not delete individual
   expired measurements from otherwise-live buckets.
 - Advanced MongoDB optimizer rewrites such as measurement-grouped `$group` min/max/count from
-  bucket control fields, computed `$group` accumulators, last-point DISTINCT_SCAN, computed
-  `$addFields` pushdown, and broader index-aware planning are not implemented.
+  bucket control fields, computed `$group` accumulators, measurement-field `$addToSet`, last-point
+  DISTINCT_SCAN, computed `$addFields` pushdown, and broader index-aware planning are not
+  implemented.
 
 ## Analyze Command
 

@@ -81,10 +81,10 @@ Implemented bucket-level pruning:
 - A leading meta-only `$addFields` / `$set` with literal values can be pushed before unpack as a
   bucket update over `meta` paths, while the original stage is preserved after unpack.
 - A single-stage whole-collection or meta-grouped `$group` can avoid unpacking when it only
-  computes `$sum: 1` and `$min` / `$max` over the time field, scalar measurement fields, or meta
-  fields. It rewrites those accumulators to `control.count`, `control.min.<field>`,
-  `control.max.<field>`, and `meta.<field>`. Supported grouped rewrites are limited to `_id`
-  values that are null or direct meta-field paths.
+  computes `$sum: 1`, `$min` / `$max` over the time field, scalar measurement fields, or meta
+  fields, and `$addToSet` over direct meta-field paths. It rewrites those accumulators to
+  `control.count`, `control.min.<field>`, `control.max.<field>`, and `meta.<field>` paths.
+  Supported grouped rewrites are limited to `_id` values that are null or direct meta-field paths.
 - One or more leading exact meta-only `$match` stages can be combined with a supported single-stage
   `$group` without unpacking. Measurement and time predicates remain unpacked for grouped queries
   unless the original measurement-level pipeline is preserved.
@@ -157,7 +157,8 @@ Remaining functional or semantic differences:
 Remaining performance differences:
 
 - Broader `$group` rewrites, including measurement-field grouped aggregations, computed
-  expressions, and non-min/max measurement accumulators, are not implemented.
+  expressions, measurement-field `$addToSet`, and non-min/max measurement accumulators, are not
+  implemented.
 - Last-point and DISTINCT_SCAN style optimizations are not implemented.
 - More general `$addFields` / `$set` pushdown, including computed expressions and measurement
   fields, is not implemented.
@@ -176,11 +177,12 @@ Focused C++ validation has been run for the core time-series helper paths:
 
 The May 1, 2026 Gap 12 `$limit`, sort-plus-limit, simple inclusion `$project`, meta-only
 `$addFields` / `$set`, numeric measurement `$in`, exact meta-match grouped aggregation,
-bucket-level `$count`, meta-field `$sortByCount`, meta-field distinct, and whole-collection/meta-grouped
-time/count/measurement-bound `$group` changes were validated with:
+bucket-level `$count`, meta-field `$sortByCount`, meta-field distinct, direct meta-field
+`$addToSet`, and whole-collection/meta-grouped time/count/measurement-bound `$group` changes were
+validated with:
 
 - `document_source_internal_unpack_bucket_test` (4 tests, 0 failures)
-- `query_translator_test` (38 tests, 0 failures)
+- `query_translator_test` (41 tests, 0 failures)
 - `insert_router_test` (2 tests, 0 failures)
 - `bucket_mutation_test` (5 tests, 0 failures across bucket catalog and mutation suites)
 - `collection_options_test` (35 tests, 0 failures)

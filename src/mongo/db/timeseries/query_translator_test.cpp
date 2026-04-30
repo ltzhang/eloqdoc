@@ -324,6 +324,38 @@ TEST(TimeSeriesQueryTranslator, RewritesMetaFieldGroupBoundsWithoutUnpack) {
                       pipeline[0]);
 }
 
+TEST(TimeSeriesQueryTranslator, RewritesMetaAddToSetGroupWithoutUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(), {fromjson("{$group: {_id: null, hosts: {$addToSet: '$tags.host'}}}")});
+
+    ASSERT_EQUALS(1U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: null, hosts: {$addToSet: '$meta.host'}}}"),
+                      pipeline[0]);
+}
+
+TEST(TimeSeriesQueryTranslator, RewritesMetaMatchedMetaAddToSetGroupWithoutUnpack) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(),
+                           {fromjson("{$match: {'tags.site': 'north'}}"),
+                            fromjson("{$group: {_id: null, "
+                                     "hosts: {$addToSet: '$tags.host'}}}")});
+
+    ASSERT_EQUALS(2U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {'meta.site': 'north'}}"), pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: null, hosts: {$addToSet: '$meta.host'}}}"),
+                      pipeline[1]);
+}
+
+TEST(TimeSeriesQueryTranslator, DoesNotRewriteMeasurementAddToSetGroupBeforeUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(), {fromjson("{$group: {_id: null, values: {$addToSet: '$v'}}}")});
+
+    ASSERT_EQUALS(2U, pipeline.size());
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: null, values: {$addToSet: '$v'}}}"),
+                      pipeline[1]);
+}
+
 TEST(TimeSeriesQueryTranslator, RewritesWholeCollectionCountWithoutUnpack) {
     const auto pipeline = makeBucketPipeline(makeOptions(), {fromjson("{$count: 'n'}")});
 
