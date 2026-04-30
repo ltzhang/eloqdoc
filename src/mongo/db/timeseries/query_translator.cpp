@@ -288,18 +288,44 @@ BSONObj makeBucketMatchPredicate(const CollectionOptions& options, const BSONObj
     return bucketMatch.obj();
 }
 
-bool firstStageIsMatch(const std::vector<BSONObj>& userPipeline, BSONObj* matchSpec) {
-    if (userPipeline.empty()) {
+BSONObj makeBucketSortPredicate(const CollectionOptions& options, const BSONObj& userSort) {
+    invariant(options.timeseries);
+    const auto& tsOptions = *options.timeseries;
+
+    BSONObjBuilder bucketSort;
+    BSONForEach(sortField, userSort) {
+        const auto field = sortField.fieldNameStringData();
+        if (field == tsOptions.timeField) {
+            bucketSort.appendAs(sortField, makeControlPath("min", tsOptions.timeField));
+            continue;
+        }
+
+        std::string metaPath;
+        if (translateMetaPath(field, tsOptions.metaField, &metaPath)) {
+            bucketSort.appendAs(sortField, metaPath);
+            continue;
+        }
+
+        return BSONObj();
+    }
+
+    return bucketSort.obj();
+}
+
+bool appendLeadingSortPushdown(const CollectionOptions& options,
+                               const BSONObj& stage,
+                               std::vector<BSONObj>* translated) {
+    const auto firstElem = stage.firstElement();
+    if (firstElem.fieldNameStringData() != "$sort" || firstElem.type() != mongo::Object) {
         return false;
     }
 
-    const auto firstStage = userPipeline.front();
-    const auto firstElem = firstStage.firstElement();
-    if (firstElem.fieldNameStringData() != "$match" || firstElem.type() != mongo::Object) {
+    const auto bucketSort = makeBucketSortPredicate(options, firstElem.Obj());
+    if (bucketSort.isEmpty()) {
         return false;
     }
 
-    *matchSpec = firstElem.Obj();
+    translated->push_back(BSON("$sort" << bucketSort));
     return true;
 }
 
@@ -318,12 +344,21 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
     std::vector<BSONObj> translated;
     translated.reserve(userPipeline.size() + 2);
 
-    BSONObj firstMatch;
-    if (firstStageIsMatch(userPipeline, &firstMatch)) {
-        const auto bucketMatch = makeBucketMatchPredicate(options, firstMatch);
-        if (!bucketMatch.isEmpty()) {
-            translated.push_back(BSON("$match" << bucketMatch));
+    for (const auto& stage : userPipeline) {
+        const auto firstElem = stage.firstElement();
+        if (firstElem.fieldNameStringData() == "$match" && firstElem.type() == mongo::Object) {
+            const auto bucketMatch = makeBucketMatchPredicate(options, firstElem.Obj());
+            if (!bucketMatch.isEmpty()) {
+                translated.push_back(BSON("$match" << bucketMatch));
+                continue;
+            }
         }
+
+        if (appendLeadingSortPushdown(options, stage, &translated)) {
+            continue;
+        }
+
+        break;
     }
 
     translated.push_back(BSON("$_internalUnpackBucket" << unpackSpec.obj()));

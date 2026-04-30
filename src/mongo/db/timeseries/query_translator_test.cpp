@@ -70,6 +70,48 @@ TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementRangePredicates) {
     ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
 }
 
+TEST(TimeSeriesQueryTranslator, AddsBucketMatchesForConsecutiveLeadingMatches) {
+    const auto start = Date_t::fromMillisSinceEpoch(1735689600000LL);
+
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {BSON("$match" << BSON("t" << BSON("$gte" << start))),
+         fromjson("{$match: {v: {$gt: 10}}}"),
+         fromjson("{$project: {_id: 0, v: 1}}")});
+
+    ASSERT_EQUALS(6U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("control.max.t" << BSON("$gte" << start))),
+                      pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {'control.max.v': {$gt: 10}}}"), pipeline[1]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[2].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("t" << BSON("$gte" << start))), pipeline[3]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {v: {$gt: 10}}}"), pipeline[4]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, v: 1}}"), pipeline[5]);
+}
+
+TEST(TimeSeriesQueryTranslator, PushesDownLeadingTimeAndMetaSortBeforeUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {fromjson("{$sort: {t: 1, 'tags.host': -1}}"), fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(4U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$sort: {'control.min.t': 1, 'meta.host': -1}}"), pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$sort: {t: 1, 'tags.host': -1}}"), pipeline[2]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
+}
+
+TEST(TimeSeriesQueryTranslator, DoesNotPushDownMeasurementSortBeforeUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {fromjson("{$sort: {v: 1}}"), fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(3U, pipeline.size());
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$sort: {v: 1}}"), pipeline[1]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[2]);
+}
+
 TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementEqualityPredicate) {
     const auto pipeline =
         makeBucketPipeline(makeOptions(), {BSON("$match" << BSON("v" << BSON("$eq" << 7)))});
