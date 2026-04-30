@@ -23,4 +23,15 @@
     assert.neq(undefined, logicalIndex, tojson(logicalIndexes));
     assert.eq({"tags.host": 1, t: -1, temp: 1}, logicalIndex.key, tojson(logicalIndex));
     assert.eq("eloq_ts_index_translation.metrics", logicalIndex.ns, tojson(logicalIndex));
+
+    assert.commandWorked(metrics.dropIndex({"tags.host": 1, t: -1, temp: 1}));
+    assert.eq(undefined,
+              testDB.getCollection("system.buckets.metrics").getIndexes().find(
+                  (idx) => idx.name === "host_time_temp"));
+
+    assert.commandWorked(metrics.createIndex({temp: 1}, {name: "temp_1"}));
+    assert.commandWorked(metrics.dropIndex("temp_1"));
+    assert.eq(undefined,
+              testDB.getCollection("system.buckets.metrics").getIndexes().find(
+                  (idx) => idx.name === "temp_1"));
 })();

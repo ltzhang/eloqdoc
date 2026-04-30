@@ -34,7 +34,9 @@
 #include "mongo/db/op_observer.h"
 
 #include "mongo/db/background.h"
+#include "mongo/db/catalog/collection_catalog_entry.h"
 #include "mongo/db/catalog/index_catalog.h"
+#include "mongo/db/catalog/collection_options.h"
 #include "mongo/db/client.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
 #include "mongo/db/curop.h"
@@ -43,6 +45,8 @@
 #include "mongo/db/index_builder.h"
 #include "mongo/db/repl/replication_coordinator.h"
 #include "mongo/db/service_context.h"
+#include "mongo/db/timeseries/index_schema.h"
+#include "mongo/db/timeseries/timeseries_namespace.h"
 #include "mongo/util/log.h"
 
 namespace mongo {
@@ -140,6 +144,22 @@ Status wrappedRun(OperationContext* opCtx,
     return Status(ErrorCodes::IndexNotFound, "invalid index name spec");
 }
 
+BSONObj translateDropIndexesDescriptorForTimeseries(const NamespaceString& bucketNss,
+                                                    const CollectionOptions& options,
+                                                    const BSONObj& idxDescriptor) {
+    BSONObjBuilder builder;
+    for (auto&& elem : idxDescriptor) {
+        if (elem.fieldNameStringData() == "index"_sd && elem.type() == Object) {
+            const auto translatedSpec = timeseries::translateIndexSpecToBucketSchema(
+                bucketNss, options, BSON("key" << elem.Obj()));
+            builder.append("index", translatedSpec["key"].Obj());
+        } else {
+            builder.append(elem);
+        }
+    }
+    return builder.obj();
+}
+
 }  // namespace
 
 Status dropIndexes(OperationContext* opCtx,
@@ -165,8 +185,8 @@ Status dropIndexes(OperationContext* opCtx,
 
             // If db/collection does not exist, short circuit and return.
             Database* db = autoDb.getDb();
-            Collection* collection = db ? db->getCollection(opCtx, nss, true) : nullptr;
-            if (!db || !collection) {
+            Collection* logicalCollection = db ? db->getCollection(opCtx, nss, true) : nullptr;
+            if (!db || !logicalCollection) {
                 if (db && db->getViewCatalog()->lookup(opCtx, nss.ns())) {
                     return Status(ErrorCodes::CommandNotSupportedOnView,
                                   str::stream() << "Cannot drop indexes on view " << nss.ns());
@@ -175,9 +195,24 @@ Status dropIndexes(OperationContext* opCtx,
                 return Status(ErrorCodes::NamespaceNotFound, "ns not found");
             }
 
+            auto targetNss = nss;
+            auto targetIdxDescriptor = idxDescriptor;
+            auto options =
+                logicalCollection->getCatalogEntry()->getCollectionOptions(opCtx);
+            if (options.timeseries) {
+                targetNss = timeseries::makeBucketNamespace(nss);
+                targetIdxDescriptor = translateDropIndexesDescriptorForTimeseries(
+                    targetNss, options, idxDescriptor);
+            }
+
+            Collection* collection = db->getCollection(opCtx, targetNss, true);
+            if (!collection) {
+                return Status(ErrorCodes::NamespaceNotFound, "ns not found");
+            }
+
             WriteUnitOfWork wunit(opCtx);
-            OldClientContext ctx(opCtx, nss.ns());
-            BackgroundOperation::assertNoBgOpInProgForNs(nss);
+            OldClientContext ctx(opCtx, targetNss.ns());
+            BackgroundOperation::assertNoBgOpInProgForNs(targetNss);
 
             // In EloqDoc, once the txservice executed UpsertTable , the
             // collection in cache is expired and may be erased. But, the collection pointer is
@@ -185,7 +220,7 @@ Status dropIndexes(OperationContext* opCtx,
             auto collection_uptr = collection->clone(opCtx);
             Collection* collection_tmp = collection_uptr.get();
 
-            Status status = wrappedRun(opCtx, collection_tmp, idxDescriptor, result);
+            Status status = wrappedRun(opCtx, collection_tmp, targetIdxDescriptor, result);
             if (!status.isOK()) {
                 return status;
             }

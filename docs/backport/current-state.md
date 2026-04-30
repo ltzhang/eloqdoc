@@ -370,8 +370,8 @@ Implemented:
   matching buckets, filtering/updating measurements, and repacking survivors.
 - `collMod` supports one-way granularity promotion for time-series collections that do not use
   custom bucket span/rounding, and rejects other nested time-series options.
-- `createIndexes` and `listIndexes` on logical time-series collections translate between logical
-  user key patterns and bucket key patterns.
+- `createIndexes`, `listIndexes`, and `dropIndexes` on logical time-series collections translate
+  between logical user key patterns and bucket key patterns.
 - Logical geospatial time-series index requests are rejected with `CannotCreateIndex`; EloqDoc does
   not silently create incompatible bucket geospatial indexes.
 - Time-series index requests with `partialFilterExpression` are rejected with `CannotCreateIndex`;
