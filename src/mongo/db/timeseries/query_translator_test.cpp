@@ -101,6 +101,17 @@ TEST(TimeSeriesQueryTranslator, PushesDownLeadingTimeAndMetaSortBeforeUnpack) {
     ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
 }
 
+TEST(TimeSeriesQueryTranslator, PushesDownDescendingTimeSortUsingBucketMaxBeforeUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(), {fromjson("{$sort: {t: -1}}"), fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(4U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$sort: {'control.max.t': -1}}"), pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$sort: {t: -1}}"), pipeline[2]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
+}
+
 TEST(TimeSeriesQueryTranslator, DoesNotPushDownMeasurementSortBeforeUnpack) {
     const auto pipeline = makeBucketPipeline(
         makeOptions(),

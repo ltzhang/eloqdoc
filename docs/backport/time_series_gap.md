@@ -159,7 +159,7 @@ The May 1, 2026 Gap 12 `$limit`, simple inclusion `$project`, and meta-only `$ad
 pushdown changes were validated with:
 
 - `document_source_internal_unpack_bucket_test` (4 tests, 0 failures)
-- `query_translator_test` (20 tests, 0 failures)
+- `query_translator_test` (21 tests, 0 failures)
 - `insert_router_test` (2 tests, 0 failures)
 - `bucket_mutation_test` (5 tests, 0 failures across bucket catalog and mutation suites)
 - `collection_options_test` (35 tests, 0 failures)

@@ -296,7 +296,8 @@ BSONObj makeBucketSortPredicate(const CollectionOptions& options, const BSONObj&
     BSONForEach(sortField, userSort) {
         const auto field = sortField.fieldNameStringData();
         if (field == tsOptions.timeField) {
-            bucketSort.appendAs(sortField, makeControlPath("min", tsOptions.timeField));
+            const auto controlField = sortField.numberInt() < 0 ? "max" : "min";
+            bucketSort.appendAs(sortField, makeControlPath(controlField, tsOptions.timeField));
             continue;
         }
 
