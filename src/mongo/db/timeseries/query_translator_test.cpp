@@ -345,6 +345,37 @@ TEST(TimeSeriesQueryTranslator, RewritesMetaMatchedCountWithoutUnpack) {
     ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, n: 1}}"), pipeline[2]);
 }
 
+TEST(TimeSeriesQueryTranslator, RewritesMetaSortByCountWithoutUnpack) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(), {fromjson("{$sortByCount: '$tags.host'}")});
+
+    ASSERT_EQUALS(2U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: '$meta.host', count: {$sum: '$control.count'}}}"),
+                      pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$sort: {count: -1}}"), pipeline[1]);
+}
+
+TEST(TimeSeriesQueryTranslator, RewritesMetaMatchedSortByCountWithoutUnpack) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(),
+                           {fromjson("{$match: {'tags.site': 'north'}}"),
+                            fromjson("{$sortByCount: '$tags.host'}")});
+
+    ASSERT_EQUALS(3U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {'meta.site': 'north'}}"), pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: '$meta.host', count: {$sum: '$control.count'}}}"),
+                      pipeline[1]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$sort: {count: -1}}"), pipeline[2]);
+}
+
+TEST(TimeSeriesQueryTranslator, DoesNotRewriteMeasurementSortByCountBeforeUnpack) {
+    const auto pipeline = makeBucketPipeline(makeOptions(), {fromjson("{$sortByCount: '$v'}")});
+
+    ASSERT_EQUALS(2U, pipeline.size());
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$sortByCount: '$v'}"), pipeline[1]);
+}
+
 TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementEqualityPredicate) {
     const auto pipeline =
         makeBucketPipeline(makeOptions(), {BSON("$match" << BSON("v" << BSON("$eq" << 7)))});

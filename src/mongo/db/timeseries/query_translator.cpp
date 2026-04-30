@@ -682,6 +682,36 @@ bool appendCountRewrite(const BSONObj& stage, std::vector<BSONObj>* translated) 
     return true;
 }
 
+bool appendMetaSortByCountRewrite(const CollectionOptions& options,
+                                  const BSONObj& stage,
+                                  std::vector<BSONObj>* translated) {
+    invariant(options.timeseries);
+    const auto& tsOptions = *options.timeseries;
+
+    const auto firstElem = stage.firstElement();
+    if (firstElem.fieldNameStringData() != "$sortByCount" ||
+        firstElem.type() != mongo::String) {
+        return false;
+    }
+
+    const StringData expression(firstElem.String());
+    if (!expression.startsWith("$") || expression.startsWith("$$")) {
+        return false;
+    }
+
+    std::string metaPath;
+    if (!translateMetaPath(expression.substr(1), tsOptions.metaField, &metaPath)) {
+        return false;
+    }
+
+    const std::string bucketIdPath = str::stream() << "$" << metaPath;
+    translated->push_back(
+        BSON("$group" << BSON("_id" << bucketIdPath << "count" << BSON("$sum"
+                                                                        << "$control.count"))));
+    translated->push_back(BSON("$sort" << BSON("count" << -1)));
+    return true;
+}
+
 }  // namespace
 
 std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
@@ -706,9 +736,15 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
         return translated;
     }
 
+    if (userPipeline.size() == 1 &&
+        appendMetaSortByCountRewrite(options, userPipeline.front(), &translated)) {
+        return translated;
+    }
+
     if (userPipeline.size() >= 2 &&
         (appendWholeCollectionGroupRewrite(options, userPipeline.back(), &translated) ||
-         appendCountRewrite(userPipeline.back(), &translated))) {
+         appendCountRewrite(userPipeline.back(), &translated) ||
+         appendMetaSortByCountRewrite(options, userPipeline.back(), &translated))) {
         std::vector<BSONObj> exactMetaMatches;
         exactMetaMatches.reserve(userPipeline.size() - 1);
         bool hasOnlyExactMetaMatches = true;
