@@ -79,14 +79,17 @@ TEST(TimeSeriesQueryTranslator, AddsBucketMatchesForConsecutiveLeadingMatches) {
          fromjson("{$match: {v: {$gt: 10}}}"),
          fromjson("{$project: {_id: 0, v: 1}}")});
 
-    ASSERT_EQUALS(6U, pipeline.size());
+    ASSERT_EQUALS(7U, pipeline.size());
     ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("control.max.t" << BSON("$gte" << start))),
                       pipeline[0]);
     ASSERT_BSONOBJ_EQ(fromjson("{$match: {'control.max.v': {$gt: 10}}}"), pipeline[1]);
-    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[2].firstElementFieldName());
-    ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("t" << BSON("$gte" << start))), pipeline[3]);
-    ASSERT_BSONOBJ_EQ(fromjson("{$match: {v: {$gt: 10}}}"), pipeline[4]);
-    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, v: 1}}"), pipeline[5]);
+    ASSERT_BSONOBJ_EQ(
+        fromjson("{$project: {_id: 0, 'control.count': 1, 'data.v': 1, 'data.t': 1}}"),
+        pipeline[2]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[3].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("t" << BSON("$gte" << start))), pipeline[4]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {v: {$gt: 10}}}"), pipeline[5]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, v: 1}}"), pipeline[6]);
 }
 
 TEST(TimeSeriesQueryTranslator, PushesDownLeadingTimeAndMetaSortBeforeUnpack) {
@@ -187,6 +190,29 @@ TEST(TimeSeriesQueryTranslator, PushesDownSimpleInclusionProjectBeforeUnpack) {
     ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
     ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, t: 1, tags: 1, v: 1}}"), pipeline[2]);
     ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
+}
+
+TEST(TimeSeriesQueryTranslator, PushesDownProjectAfterLeadingBucketMatchesBeforeUnpack) {
+    const auto start = Date_t::fromMillisSinceEpoch(1735689600000LL);
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(),
+                           {BSON("$match" << BSON("t" << BSON("$gte" << start))),
+                            fromjson("{$match: {'tags.site': 'north'}}"),
+                            fromjson("{$project: {_id: 0, tags: 1, v: 1}}"),
+                            fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(8U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("control.max.t" << BSON("$gte" << start))),
+                      pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {'meta.site': 'north'}}"), pipeline[1]);
+    ASSERT_BSONOBJ_EQ(
+        fromjson("{$project: {_id: 0, 'control.count': 1, meta: 1, 'data.v': 1, 'data.t': 1}}"),
+        pipeline[2]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[3].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("t" << BSON("$gte" << start))), pipeline[4]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {'tags.site': 'north'}}"), pipeline[5]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, tags: 1, v: 1}}"), pipeline[6]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[7]);
 }
 
 TEST(TimeSeriesQueryTranslator, DoesNotPushDownComputedProjectBeforeUnpack) {

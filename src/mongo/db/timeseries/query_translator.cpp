@@ -13,6 +13,8 @@
 #include "mongo/base/string_data.h"
 #include "mongo/util/mongoutils/str.h"
 
+#include <set>
+
 namespace mongo {
 namespace timeseries {
 namespace {
@@ -451,8 +453,60 @@ bool isFalsyProjectionValue(const BSONElement& value) {
     return value.isNumber() && value.numberInt() == 0;
 }
 
+void addBucketProjectionField(const TimeseriesOptions& tsOptions,
+                              StringData field,
+                              BSONObjBuilder* bucketProject) {
+    std::string metaPath;
+    if (translateMetaPath(field, tsOptions.metaField, &metaPath)) {
+        bucketProject->append(metaPath, 1);
+    } else {
+        bucketProject->append(str::stream() << "data." << field, 1);
+    }
+}
+
+void collectMatchDependencies(const BSONObj& match, std::set<std::string>* fields) {
+    BSONForEach(predicate, match) {
+        const StringData field = predicate.fieldNameStringData();
+        if (field == "$and" || field == "$or") {
+            if (predicate.type() != mongo::Array) {
+                continue;
+            }
+
+            BSONForEach(child, predicate.Obj()) {
+                if (child.type() == mongo::Object) {
+                    collectMatchDependencies(child.Obj(), fields);
+                }
+            }
+            continue;
+        }
+
+        if (!field.startsWith("$")) {
+            fields->insert(field.toString());
+        }
+    }
+}
+
+bool logicalFieldCovers(StringData projectedField, StringData requiredField) {
+    if (projectedField == requiredField) {
+        return true;
+    }
+
+    const std::string prefix = str::stream() << projectedField << ".";
+    return requiredField.startsWith(prefix);
+}
+
+bool isCoveredByProjectedFields(StringData requiredField, const std::set<std::string>& projected) {
+    for (const auto& projectedField : projected) {
+        if (logicalFieldCovers(projectedField, requiredField)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool appendLeadingProjectPushdown(const CollectionOptions& options,
                                   const BSONObj& stage,
+                                  const std::set<std::string>& requiredFields,
                                   std::vector<BSONObj>* translated) {
     invariant(options.timeseries);
     const auto& tsOptions = *options.timeseries;
@@ -466,6 +520,7 @@ bool appendLeadingProjectPushdown(const CollectionOptions& options,
     bucketProject.append("_id", 0);
     bucketProject.append("control.count", 1);
     bool hasFieldProjection = false;
+    std::set<std::string> projectedFields;
 
     BSONForEach(projection, firstElem.Obj()) {
         const auto field = projection.fieldNameStringData();
@@ -480,17 +535,20 @@ bool appendLeadingProjectPushdown(const CollectionOptions& options,
             return false;
         }
 
-        std::string metaPath;
-        if (translateMetaPath(field, tsOptions.metaField, &metaPath)) {
-            bucketProject.append(metaPath, 1);
-        } else {
-            bucketProject.append(str::stream() << "data." << field, 1);
-        }
+        addBucketProjectionField(tsOptions, field, &bucketProject);
+        projectedFields.insert(field.toString());
         hasFieldProjection = true;
     }
 
     if (!hasFieldProjection) {
         return false;
+    }
+
+    for (const auto& field : requiredFields) {
+        if (isCoveredByProjectedFields(field, projectedFields)) {
+            continue;
+        }
+        addBucketProjectionField(tsOptions, field, &bucketProject);
     }
 
     translated->push_back(BSON("$project" << bucketProject.obj()));
@@ -900,12 +958,15 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
     }
 
     bool lastPushdownWasSort = false;
+    bool hasPushdownOnlyPrefix = true;
+    std::set<std::string> fieldsRequiredAfterUnpack;
     for (const auto& stage : userPipeline) {
         const auto firstElem = stage.firstElement();
         if (firstElem.fieldNameStringData() == "$match" && firstElem.type() == mongo::Object) {
             const auto bucketMatch = makeBucketMatchPredicate(options, firstElem.Obj());
             if (!bucketMatch.isEmpty()) {
                 translated.push_back(BSON("$match" << bucketMatch));
+                collectMatchDependencies(firstElem.Obj(), &fieldsRequiredAfterUnpack);
                 lastPushdownWasSort = false;
                 continue;
             }
@@ -913,6 +974,7 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
 
         if (appendLeadingSortPushdown(options, stage, &translated)) {
             lastPushdownWasSort = true;
+            hasPushdownOnlyPrefix = false;
             continue;
         }
 
@@ -921,7 +983,8 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
             break;
         }
 
-        if (translated.empty() && appendLeadingProjectPushdown(options, stage, &translated)) {
+        if (hasPushdownOnlyPrefix &&
+            appendLeadingProjectPushdown(options, stage, fieldsRequiredAfterUnpack, &translated)) {
             break;
         }
 

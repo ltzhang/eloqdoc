@@ -408,7 +408,8 @@ Query pruning:
   unpack.
 - A leading simple inclusion `$project` over time, meta, and measurement fields can be pushed before
   unpacking as a bucket projection that keeps `control.count`, `meta`, and selected `data.<field>`
-  paths.
+  paths. It can also be pushed after leading bucket-level `$match` pushdowns while retaining fields
+  needed by the preserved post-unpack matches.
 - A leading meta-only `$addFields` / `$set` with literal values can be pushed before unpacking as a
   bucket stage over `meta` paths.
 - A single-stage whole-collection or meta-grouped `$group` can be answered without unpacking when
