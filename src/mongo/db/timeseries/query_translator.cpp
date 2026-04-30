@@ -712,6 +712,75 @@ bool appendMetaSortByCountRewrite(const CollectionOptions& options,
     return true;
 }
 
+BSONObj makeMetaDistinctGroupRewrite(const CollectionOptions& options,
+                                     const BSONObj& unwindStage,
+                                     const BSONObj& groupStage) {
+    invariant(options.timeseries);
+    const auto& tsOptions = *options.timeseries;
+
+    const auto unwindElem = unwindStage.firstElement();
+    if (unwindElem.fieldNameStringData() != "$unwind" || unwindElem.type() != mongo::Object) {
+        return BSONObj();
+    }
+
+    const auto unwindSpec = unwindElem.Obj();
+    if (unwindSpec.nFields() != 2 ||
+        !unwindSpec["preserveNullAndEmptyArrays"].trueValue() ||
+        unwindSpec["path"].type() != mongo::String) {
+        return BSONObj();
+    }
+
+    const StringData unwindPath(unwindSpec["path"].String());
+    if (!unwindPath.startsWith("$") || unwindPath.startsWith("$$")) {
+        return BSONObj();
+    }
+
+    const auto groupElem = groupStage.firstElement();
+    if (groupElem.fieldNameStringData() != "$group" || groupElem.type() != mongo::Object) {
+        return BSONObj();
+    }
+
+    const auto groupSpec = groupElem.Obj();
+    if (groupSpec.nFields() != 2 || groupSpec["_id"].type() != mongo::jstNULL) {
+        return BSONObj();
+    }
+
+    BSONElement distinctElem;
+    BSONForEach(field, groupSpec) {
+        if (field.fieldNameStringData() != "_id") {
+            distinctElem = field;
+            break;
+        }
+    }
+
+    if (distinctElem.eoo() || distinctElem.type() != mongo::Object) {
+        return BSONObj();
+    }
+
+    const auto distinctSpec = distinctElem.Obj();
+    if (distinctSpec.nFields() != 1) {
+        return BSONObj();
+    }
+
+    const auto accumulator = distinctSpec.firstElement();
+    if (accumulator.fieldNameStringData() != "$addToSet" ||
+        accumulator.type() != mongo::String ||
+        accumulator.String() != unwindPath) {
+        return BSONObj();
+    }
+
+    std::string metaPath;
+    if (!translateMetaPath(unwindPath.substr(1), tsOptions.metaField, &metaPath)) {
+        return BSONObj();
+    }
+
+    const std::string bucketMetaPath = str::stream() << "$" << metaPath;
+    BSONObjBuilder bucketGroup;
+    bucketGroup.appendNull("_id");
+    bucketGroup.append(distinctElem.fieldNameStringData(), BSON("$addToSet" << bucketMetaPath));
+    return BSON("$group" << bucketGroup.obj());
+}
+
 }  // namespace
 
 std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
@@ -739,6 +808,47 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
     if (userPipeline.size() == 1 &&
         appendMetaSortByCountRewrite(options, userPipeline.front(), &translated)) {
         return translated;
+    }
+
+    if (userPipeline.size() == 2) {
+        auto distinctGroup =
+            makeMetaDistinctGroupRewrite(options, userPipeline.front(), userPipeline.back());
+        if (!distinctGroup.isEmpty()) {
+            translated.push_back(distinctGroup);
+            return translated;
+        }
+    }
+
+    if (userPipeline.size() >= 3) {
+        auto distinctGroup = makeMetaDistinctGroupRewrite(
+            options, userPipeline[userPipeline.size() - 2], userPipeline.back());
+        if (!distinctGroup.isEmpty()) {
+            std::vector<BSONObj> exactMetaMatches;
+            exactMetaMatches.reserve(userPipeline.size() - 2);
+            bool hasOnlyExactMetaMatches = true;
+            for (size_t i = 0; i + 2 < userPipeline.size(); ++i) {
+                const auto firstElem = userPipeline[i].firstElement();
+                if (firstElem.fieldNameStringData() != "$match" ||
+                    firstElem.type() != mongo::Object) {
+                    hasOnlyExactMetaMatches = false;
+                    break;
+                }
+
+                const auto bucketMatch = makeExactBucketMetaMatchPredicate(options, firstElem.Obj());
+                if (bucketMatch.isEmpty()) {
+                    hasOnlyExactMetaMatches = false;
+                    break;
+                }
+
+                exactMetaMatches.push_back(BSON("$match" << bucketMatch));
+            }
+
+            if (hasOnlyExactMetaMatches && !exactMetaMatches.empty()) {
+                translated.insert(translated.end(), exactMetaMatches.begin(), exactMetaMatches.end());
+                translated.push_back(distinctGroup);
+                return translated;
+            }
+        }
     }
 
     if (userPipeline.size() >= 2 &&

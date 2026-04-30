@@ -420,6 +420,8 @@ Query pruning:
 - A single-stage `$sortByCount` over a direct meta-field path, or exact meta-only `$match` stages
   followed by that `$sortByCount`, can be answered by grouping buckets on the translated `meta`
   path and summing `control.count`.
+- The distinct-command aggregation shape over a direct meta-field path can be answered without
+  unpacking, including exact meta-only `$match` prefixes.
 - The original measurement-level predicate remains after unpacking, so bucket pruning is a
   performance optimization rather than the source of correctness.
 

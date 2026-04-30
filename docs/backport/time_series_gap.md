@@ -93,6 +93,8 @@ Implemented bucket-level pruning:
 - A single-stage `$sortByCount` over a direct meta-field path, or exact meta-only `$match` stages
   followed by that `$sortByCount`, can avoid unpacking by grouping buckets on the translated
   `meta` path and summing `control.count`.
+- The distinct-command aggregation shape over a direct meta-field path can avoid unpacking,
+  including exact meta-only `$match` prefixes.
 
 The original user pipeline stages remain after unpacking. Bucket pushdown is therefore a
 performance optimization and not the source of query correctness.
@@ -174,11 +176,11 @@ Focused C++ validation has been run for the core time-series helper paths:
 
 The May 1, 2026 Gap 12 `$limit`, sort-plus-limit, simple inclusion `$project`, meta-only
 `$addFields` / `$set`, numeric measurement `$in`, exact meta-match grouped aggregation,
-bucket-level `$count`, meta-field `$sortByCount`, and whole-collection/meta-grouped
+bucket-level `$count`, meta-field `$sortByCount`, meta-field distinct, and whole-collection/meta-grouped
 time/count/measurement-bound `$group` changes were validated with:
 
 - `document_source_internal_unpack_bucket_test` (4 tests, 0 failures)
-- `query_translator_test` (35 tests, 0 failures)
+- `query_translator_test` (38 tests, 0 failures)
 - `insert_router_test` (2 tests, 0 failures)
 - `bucket_mutation_test` (5 tests, 0 failures across bucket catalog and mutation suites)
 - `collection_options_test` (35 tests, 0 failures)

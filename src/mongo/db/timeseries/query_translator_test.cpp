@@ -376,6 +376,49 @@ TEST(TimeSeriesQueryTranslator, DoesNotRewriteMeasurementSortByCountBeforeUnpack
     ASSERT_BSONOBJ_EQ(fromjson("{$sortByCount: '$v'}"), pipeline[1]);
 }
 
+TEST(TimeSeriesQueryTranslator, RewritesMetaDistinctAggregationWithoutUnpack) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(),
+                           {fromjson("{$unwind: {path: '$tags.host', "
+                                     "preserveNullAndEmptyArrays: true}}"),
+                            fromjson("{$group: {_id: null, "
+                                     "distinct: {$addToSet: '$tags.host'}}}")});
+
+    ASSERT_EQUALS(1U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: null, distinct: {$addToSet: '$meta.host'}}}"),
+                      pipeline[0]);
+}
+
+TEST(TimeSeriesQueryTranslator, RewritesMetaMatchedDistinctAggregationWithoutUnpack) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(),
+                           {fromjson("{$match: {'tags.site': 'north'}}"),
+                            fromjson("{$unwind: {path: '$tags.host', "
+                                     "preserveNullAndEmptyArrays: true}}"),
+                            fromjson("{$group: {_id: null, "
+                                     "distinct: {$addToSet: '$tags.host'}}}")});
+
+    ASSERT_EQUALS(2U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {'meta.site': 'north'}}"), pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: null, distinct: {$addToSet: '$meta.host'}}}"),
+                      pipeline[1]);
+}
+
+TEST(TimeSeriesQueryTranslator, DoesNotRewriteMeasurementDistinctAggregationBeforeUnpack) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(),
+                           {fromjson("{$unwind: {path: '$v', "
+                                     "preserveNullAndEmptyArrays: true}}"),
+                            fromjson("{$group: {_id: null, distinct: {$addToSet: '$v'}}}")});
+
+    ASSERT_EQUALS(3U, pipeline.size());
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$unwind: {path: '$v', preserveNullAndEmptyArrays: true}}"),
+                      pipeline[1]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: null, distinct: {$addToSet: '$v'}}}"),
+                      pipeline[2]);
+}
+
 TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementEqualityPredicate) {
     const auto pipeline =
         makeBucketPipeline(makeOptions(), {BSON("$match" << BSON("v" << BSON("$eq" << 7)))});
