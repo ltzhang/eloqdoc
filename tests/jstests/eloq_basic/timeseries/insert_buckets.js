@@ -16,11 +16,17 @@
 
     assert.eq(0, testDB.metrics.count({}), "logical namespace should not store raw docs directly");
     const bucketDocs = testDB.system.buckets.metrics.find().toArray();
-    assert.gte(bucketDocs.length, 2, tojson(bucketDocs));
-    bucketDocs.forEach(bucket => {
-        assert(bucket.control, tojson(bucket));
-        assert(bucket.control.min.t, tojson(bucket));
-        assert(bucket.control.max.t, tojson(bucket));
-        assert(bucket.data.t, tojson(bucket));
-    });
+    assert.eq(2, bucketDocs.length, tojson(bucketDocs));
+
+    const hostABucket = bucketDocs.find(bucket => bucket.meta && bucket.meta.host === "a");
+    assert(hostABucket, tojson(bucketDocs));
+    assert.eq(2, hostABucket.control.count, tojson(hostABucket));
+    assert.eq(ISODate("2025-01-01T00:00:01Z"), hostABucket.control.min.t, tojson(hostABucket));
+    assert.eq(ISODate("2025-01-01T00:00:05Z"), hostABucket.control.max.t, tojson(hostABucket));
+    assert.eq(1, hostABucket.control.min.v, tojson(hostABucket));
+    assert.eq(2, hostABucket.control.max.v, tojson(hostABucket));
+    assert.eq(ISODate("2025-01-01T00:00:01Z"), hostABucket.data.t["0"], tojson(hostABucket));
+    assert.eq(ISODate("2025-01-01T00:00:05Z"), hostABucket.data.t["1"], tojson(hostABucket));
+    assert.eq(1, hostABucket.data.v["0"], tojson(hostABucket));
+    assert.eq(2, hostABucket.data.v["1"], tojson(hostABucket));
 })();

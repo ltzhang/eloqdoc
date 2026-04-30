@@ -87,6 +87,12 @@ TEST(CollectionOptions, RejectsInvalidTimeSeriesOptions) {
         fromjson("{timeseries: {timeField: 't', bucketMaxSpanSeconds: -1}}")));
     ASSERT_NOT_OK(CollectionOptions().parse(
         fromjson("{timeseries: {timeField: 't', bucketRoundingSeconds: 0}}")));
+    ASSERT_NOT_OK(CollectionOptions().parse(
+        fromjson("{timeseries: {timeField: 't', granularity: 'minutes', "
+                 "bucketMaxSpanSeconds: 3600}}")));
+    ASSERT_NOT_OK(CollectionOptions().parse(
+        fromjson("{timeseries: {timeField: 't', bucketMaxSpanSeconds: 3600, "
+                 "bucketRoundingSeconds: 60}}")));
     ASSERT_NOT_OK(CollectionOptions().parse(fromjson("{expireAfterSeconds: 3600}")));
 }
 

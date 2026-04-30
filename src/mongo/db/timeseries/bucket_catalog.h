@@ -11,6 +11,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "mongo/db/jsobj.h"
 #include "mongo/db/namespace_string.h"
@@ -27,20 +28,26 @@ struct BucketKey {
 struct BucketHandle {
     OID id;
     std::size_t count = 0;
+    long long minTimeMillis = 0;
+    long long roundedMillis = 0;
 };
 
 class BucketCatalog {
 public:
     static BucketCatalog& get();
 
-    BucketHandle getOrCreateBucket(const BucketKey& key);
-    void recordInsert(const BucketKey& key);
+    boost::optional<BucketHandle> findOpenBucket(const BucketKey& key,
+                                                 long long measurementTimeMillis,
+                                                 long long maxSpanMillis,
+                                                 std::size_t maxCount);
+    void upsertBucket(const BucketKey& key, const BucketHandle& handle);
+    void closeBucket(const BucketKey& key, const OID& id);
 
 private:
     std::string makeKeyString(const BucketKey& key) const;
 
     std::mutex _mutex;
-    std::unordered_map<std::string, BucketHandle> _openBuckets;
+    std::unordered_map<std::string, std::vector<BucketHandle>> _openBuckets;
 };
 
 }  // namespace timeseries

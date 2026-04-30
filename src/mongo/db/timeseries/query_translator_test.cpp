@@ -55,6 +55,30 @@ TEST(TimeSeriesQueryTranslator, AddsBucketMatchForSimpleTimeAndMetaPredicates) {
     ASSERT_BSONOBJ_EQ(fromjson("{$sort: {v: 1}}"), pipeline[3]);
 }
 
+TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementRangePredicates) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {BSON("$match" << BSON("v" << BSON("$gt" << 10 << "$lte" << 20)))});
+
+    ASSERT_EQUALS(3U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("control.max.v" << BSON("$gt" << 10)
+                                                            << "control.min.v"
+                                                            << BSON("$lte" << 20))),
+                      pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+}
+
+TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementEqualityPredicate) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(), {BSON("$match" << BSON("v" << BSON("$eq" << 7)))});
+
+    ASSERT_EQUALS(3U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("control.min.v" << BSON("$lte" << 7)
+                                                            << "control.max.v"
+                                                            << BSON("$gte" << 7))),
+                      pipeline[0]);
+}
+
 TEST(TimeSeriesQueryTranslator, KeepsUnpackFirstWhenNoBucketPredicateCanBeBuilt) {
     const auto pipeline = makeBucketPipeline(makeOptions(), {fromjson("{$match: {v: 1}}")});
 

@@ -10,6 +10,7 @@
 
 #include "mongo/db/timeseries/bucket_catalog.h"
 
+#include <algorithm>
 #include <map>
 
 #include "mongo/bson/bsonobjbuilder.h"
@@ -38,30 +39,58 @@ BucketCatalog& BucketCatalog::get() {
     return catalog;
 }
 
-BucketHandle BucketCatalog::getOrCreateBucket(const BucketKey& key) {
+boost::optional<BucketHandle> BucketCatalog::findOpenBucket(const BucketKey& key,
+                                                            long long measurementTimeMillis,
+                                                            long long maxSpanMillis,
+                                                            std::size_t maxCount) {
     std::lock_guard<std::mutex> lk(_mutex);
     auto keyString = makeKeyString(key);
     auto it = _openBuckets.find(keyString);
-    if (it != _openBuckets.end()) {
-        if (it->second.count > 0) {
-            it->second.id = OID::gen();
-            it->second.count = 0;
-        }
-        return it->second;
+    if (it == _openBuckets.end()) {
+        return boost::none;
     }
 
-    BucketHandle handle;
-    handle.id = OID::gen();
-    _openBuckets.emplace(keyString, handle);
-    return handle;
+    for (const auto& handle : it->second) {
+        if (handle.count >= maxCount) {
+            continue;
+        }
+        if (measurementTimeMillis >= handle.minTimeMillis &&
+            measurementTimeMillis < handle.minTimeMillis + maxSpanMillis) {
+            return handle;
+        }
+    }
+
+    return boost::none;
 }
 
-void BucketCatalog::recordInsert(const BucketKey& key) {
+void BucketCatalog::upsertBucket(const BucketKey& key, const BucketHandle& handle) {
+    std::lock_guard<std::mutex> lk(_mutex);
+    auto keyString = makeKeyString(key);
+    auto& handles = _openBuckets[keyString];
+    for (auto& existing : handles) {
+        if (existing.id == handle.id) {
+            existing = handle;
+            return;
+        }
+    }
+    handles.push_back(handle);
+}
+
+void BucketCatalog::closeBucket(const BucketKey& key, const OID& id) {
     std::lock_guard<std::mutex> lk(_mutex);
     auto keyString = makeKeyString(key);
     auto it = _openBuckets.find(keyString);
-    if (it != _openBuckets.end()) {
-        ++it->second.count;
+    if (it == _openBuckets.end()) {
+        return;
+    }
+
+    auto& handles = it->second;
+    handles.erase(std::remove_if(handles.begin(),
+                                 handles.end(),
+                                 [&](const BucketHandle& handle) { return handle.id == id; }),
+                  handles.end());
+    if (handles.empty()) {
+        _openBuckets.erase(it);
     }
 }
 

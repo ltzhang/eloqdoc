@@ -29,4 +29,24 @@
         testDB.createCollection("badGranularity",
                                 {timeseries: {timeField: "t", granularity: "weeks"}}),
         ErrorCodes.InvalidOptions);
+
+    assert.commandFailedWithCode(
+        testDB.createCollection("badGranularityAndSpan", {
+            timeseries: {timeField: "t", granularity: "minutes", bucketMaxSpanSeconds: 3600}
+        }),
+        ErrorCodes.InvalidOptions);
+
+    assert.commandFailedWithCode(
+        testDB.createCollection("badCustomSpanRounding", {
+            timeseries: {
+                timeField: "t",
+                bucketMaxSpanSeconds: 3600,
+                bucketRoundingSeconds: 60
+            }
+        }),
+        ErrorCodes.InvalidOptions);
+
+    const collectionNames = testDB.getCollectionNames();
+    assert(collectionNames.includes("metrics"), tojson(collectionNames));
+    assert(!collectionNames.includes("system.buckets.metrics"), tojson(collectionNames));
 })();

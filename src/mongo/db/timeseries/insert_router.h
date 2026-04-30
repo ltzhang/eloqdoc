@@ -8,20 +8,21 @@
 
 #pragma once
 
-#include <vector>
-
 #include "mongo/base/status.h"
 #include "mongo/db/catalog/collection_options.h"
+#include "mongo/db/catalog/collection.h"
 #include "mongo/db/namespace_string.h"
+#include "mongo/db/operation_context.h"
 #include "mongo/db/repl/oplog.h"
 
 namespace mongo {
 namespace timeseries {
 
-Status routeInsert(const NamespaceString& logicalNss,
+Status routeInsert(OperationContext* opCtx,
+                   const NamespaceString& logicalNss,
                    const CollectionOptions& options,
                    const std::vector<InsertStatement>& input,
-                   std::vector<InsertStatement>* bucketStatements);
+                   Collection* bucketCollection);
 
 }  // namespace timeseries
 }  // namespace mongo

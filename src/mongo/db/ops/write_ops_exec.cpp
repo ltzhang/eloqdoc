@@ -465,10 +465,6 @@ bool insertBatchAndHandleErrors(OperationContext* opCtx,
         auto collectionOptions =
             collection->getCollection()->getCatalogEntry()->getCollectionOptions(opCtx);
         if (collectionOptions.timeseries) {
-            std::vector<InsertStatement> bucketBatch;
-            uassertStatusOK(timeseries::routeInsert(
-                wholeOp.getNamespace(), collectionOptions, batch, &bucketBatch));
-
             const auto bucketNss = timeseries::makeBucketNamespace(wholeOp.getNamespace());
             boost::optional<AutoGetCollection> bucketCollection;
             bucketCollection.emplace(opCtx, bucketNss, MODE_IX);
@@ -484,13 +480,15 @@ bool insertBatchAndHandleErrors(OperationContext* opCtx,
                     bucketCollection->getCollection());
 
             lastOpFixer->startingOp();
-            insertDocuments(opCtx,
-                            bucketCollection->getCollection(),
-                            bucketBatch.begin(),
-                            bucketBatch.end(),
-                            fromMigrate);
+            WriteUnitOfWork wuow(opCtx);
+            uassertStatusOK(timeseries::routeInsert(opCtx,
+                                                    wholeOp.getNamespace(),
+                                                    collectionOptions,
+                                                    batch,
+                                                    bucketCollection->getCollection()));
+            wuow.commit();
             lastOpFixer->finishedOpSuccessfully();
-            globalOpCounters.gotInserts(bucketBatch.size());
+            globalOpCounters.gotInserts(batch.size());
 
             SingleWriteResult result;
             result.setN(1);

@@ -68,10 +68,31 @@ Status parseTimeseriesOptions(const BSONElement& elem, TimeseriesOptions* out) {
                 "'timeseries.metaField' must be different from 'timeseries.timeField'."};
     }
 
+    if ((!parsed.granularity.empty()) &&
+        (parsed.bucketMaxSpanSeconds || parsed.bucketRoundingSeconds)) {
+        return {ErrorCodes::InvalidOptions,
+                "'timeseries.granularity' cannot be combined with custom bucket span or rounding "
+                "options."};
+    }
+
     if (parsed.granularity != "seconds" && parsed.granularity != "minutes" &&
         parsed.granularity != "hours") {
         return {ErrorCodes::InvalidOptions,
                 "'timeseries.granularity' must be 'seconds', 'minutes', or 'hours'."};
+    }
+
+    if (parsed.bucketMaxSpanSeconds || parsed.bucketRoundingSeconds) {
+        if (!parsed.bucketMaxSpanSeconds || !parsed.bucketRoundingSeconds) {
+            return {ErrorCodes::InvalidOptions,
+                    "'timeseries.bucketMaxSpanSeconds' and "
+                    "'timeseries.bucketRoundingSeconds' must be specified together."};
+        }
+
+        if (*parsed.bucketMaxSpanSeconds != *parsed.bucketRoundingSeconds) {
+            return {ErrorCodes::InvalidOptions,
+                    "'timeseries.bucketRoundingSeconds' must equal "
+                    "'timeseries.bucketMaxSpanSeconds'."};
+        }
     }
 
     *out = parsed;

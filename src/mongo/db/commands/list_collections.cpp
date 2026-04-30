@@ -56,6 +56,7 @@
 #include "mongo/db/service_context.h"
 #include "mongo/db/storage/storage_engine.h"
 #include "mongo/db/storage/storage_options.h"
+#include "mongo/db/timeseries/timeseries_namespace.h"
 #include "mongo/db/views/view_catalog.h"
 #include "mongo/stdx/memory.h"
 
@@ -169,6 +170,9 @@ BSONObj buildCollectionBson(OperationContext* opCtx,
     auto nss = collection->ns();
     auto collectionName = nss.coll();
     if (collectionName == "system.namespaces") {
+        return {};
+    }
+    if (timeseries::isBucketNamespace(nss)) {
         return {};
     }
 

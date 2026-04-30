@@ -21,6 +21,10 @@ std::string makeControlPath(StringData minOrMax, StringData timeField) {
     return str::stream() << "control." << minOrMax << "." << timeField;
 }
 
+std::string makeFieldControlPath(StringData minOrMax, StringData field) {
+    return str::stream() << "control." << minOrMax << "." << field;
+}
+
 void appendRangePredicate(BSONObjBuilder* builder,
                           StringData path,
                           StringData opName,
@@ -33,6 +37,64 @@ void appendRangePredicate(BSONObjBuilder* builder,
 bool appendTimeInPredicate(BSONObjBuilder* builder,
                            StringData timeField,
                            const BSONElement& predicate);
+
+bool appendMeasurementPredicate(BSONObjBuilder* builder,
+                                StringData field,
+                                const BSONElement& predicate) {
+    const auto minPath = makeFieldControlPath("min", field);
+    const auto maxPath = makeFieldControlPath("max", field);
+
+    if (predicate.type() != mongo::Object) {
+        appendRangePredicate(builder, minPath, "$lte", predicate);
+        appendRangePredicate(builder, maxPath, "$gte", predicate);
+        return true;
+    }
+
+    BSONObjBuilder minBuilder;
+    BSONObjBuilder maxBuilder;
+    bool hasMinPredicate = false;
+    bool hasMaxPredicate = false;
+    bool hasPredicate = false;
+    bool hasEqPredicate = false;
+    BSONElement eqPredicate;
+
+    BSONForEach(op, predicate.Obj()) {
+        const auto opName = op.fieldNameStringData();
+        if (!opName.startsWith("$")) {
+            return false;
+        }
+
+        if (opName == "$gt" || opName == "$gte") {
+            maxBuilder.appendAs(op, opName);
+            hasMaxPredicate = true;
+            hasPredicate = true;
+        } else if (opName == "$lt" || opName == "$lte") {
+            minBuilder.appendAs(op, opName);
+            hasMinPredicate = true;
+            hasPredicate = true;
+        } else if (opName == "$eq") {
+            eqPredicate = op;
+            hasEqPredicate = true;
+            hasPredicate = true;
+        } else {
+            return false;
+        }
+    }
+
+    if (hasEqPredicate) {
+        appendRangePredicate(builder, minPath, "$lte", eqPredicate);
+        appendRangePredicate(builder, maxPath, "$gte", eqPredicate);
+        return true;
+    }
+
+    if (hasMaxPredicate) {
+        builder->append(maxPath, maxBuilder.obj());
+    }
+    if (hasMinPredicate) {
+        builder->append(minPath, minBuilder.obj());
+    }
+    return hasPredicate;
+}
 
 bool appendTimePredicate(BSONObjBuilder* builder,
                          StringData timeField,
@@ -212,7 +274,11 @@ BSONObj makeBucketMatchPredicate(const CollectionOptions& options, const BSONObj
         if (translateMetaPath(field, tsOptions.metaField, &metaPath)) {
             bucketMatch.appendAs(predicate, metaPath);
             hasBucketPredicate = true;
+            continue;
         }
+
+        hasBucketPredicate =
+            appendMeasurementPredicate(&bucketMatch, field, predicate) || hasBucketPredicate;
     }
 
     if (!hasBucketPredicate) {
