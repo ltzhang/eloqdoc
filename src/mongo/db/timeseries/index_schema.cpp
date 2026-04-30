@@ -117,6 +117,21 @@ BSONObj translateIndexSpec(const NamespaceString& nss,
                    fieldName == IndexDescriptor::kPartialFilterExprFieldName) {
             uasserted(ErrorCodes::CannotCreateIndex,
                       "time-series partial indexes are not supported");
+        } else if (toBucketSchema && fieldName == IndexDescriptor::kUniqueFieldName) {
+            uassert(ErrorCodes::CannotCreateIndex,
+                    "time-series unique indexes are not supported",
+                    !elem.trueValue());
+            builder.append(elem);
+        } else if (toBucketSchema && fieldName == IndexDescriptor::kSparseFieldName) {
+            uassert(ErrorCodes::CannotCreateIndex,
+                    "time-series sparse indexes are not supported",
+                    !elem.trueValue());
+            builder.append(elem);
+        } else if (toBucketSchema &&
+                   fieldName == IndexDescriptor::kExpireAfterSecondsFieldName) {
+            uasserted(ErrorCodes::CannotCreateIndex,
+                      "time-series TTL indexes are not supported; use collection-level "
+                      "expireAfterSeconds instead");
         } else {
             builder.append(elem);
         }

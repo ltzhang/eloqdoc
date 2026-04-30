@@ -113,6 +113,30 @@ TEST(TimeSeriesIndexSchema, RejectsTextIndexes) {
         ErrorCodes::CannotCreateIndex);
 }
 
+TEST(TimeSeriesIndexSchema, RejectsUnsupportedIndexOptions) {
+    ASSERT_THROWS_CODE(
+        translateIndexSpecToBucketSchema(
+            NamespaceString("db.system.buckets.metrics"),
+            makeOptions(),
+            fromjson("{ns: 'db.metrics', key: {temp: 1}, name: 'temp_unique', unique: true}")),
+        AssertionException,
+        ErrorCodes::CannotCreateIndex);
+    ASSERT_THROWS_CODE(
+        translateIndexSpecToBucketSchema(
+            NamespaceString("db.system.buckets.metrics"),
+            makeOptions(),
+            fromjson("{ns: 'db.metrics', key: {temp: 1}, name: 'temp_sparse', sparse: true}")),
+        AssertionException,
+        ErrorCodes::CannotCreateIndex);
+    ASSERT_THROWS_CODE(
+        translateIndexSpecToBucketSchema(
+            NamespaceString("db.system.buckets.metrics"),
+            makeOptions(),
+            fromjson("{ns: 'db.metrics', key: {t: 1}, name: 't_ttl', expireAfterSeconds: 3600}")),
+        AssertionException,
+        ErrorCodes::CannotCreateIndex);
+}
+
 }  // namespace
 }  // namespace timeseries
 }  // namespace mongo

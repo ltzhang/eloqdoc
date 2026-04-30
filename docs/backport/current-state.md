@@ -380,6 +380,8 @@ Implemented:
   projection semantics are not translated to bucket schema yet.
 - Text time-series index requests are rejected with `CannotCreateIndex`; text key and weight
   semantics are not translated to bucket schema yet.
+- Unique, sparse, and TTL time-series index requests are rejected with `CannotCreateIndex`; use
+  collection-level `expireAfterSeconds` for time-series TTL behavior.
 - `listCollections` hides backing `system.buckets.<collection>` collections.
 
 Bucket layout:
@@ -459,6 +461,8 @@ Important differences from MongoDB:
 - Partial time-series indexes are not implemented and are rejected at index-creation time.
 - Wildcard time-series indexes are not implemented and are rejected at index-creation time.
 - Text time-series indexes are not implemented and are rejected at index-creation time.
+- Unique, sparse, and TTL time-series indexes are not implemented and are rejected at
+  index-creation time.
 - Sharded time-series collection semantics are not implemented.
 - Explain output may expose `system.buckets.<collection>` rather than rewriting everything back to
   the logical namespace.
@@ -510,9 +514,10 @@ The following are not implemented in this branch, or exist only as parser/catalo
 - Partial time-series indexes.
 - Wildcard time-series indexes.
 - Text time-series indexes.
+- Unique, sparse, and TTL time-series indexes.
 - Full time-series parity, including compression, clustered bucket storage, geospatial
-  indexes, partial indexes, wildcard indexes, text indexes, advanced time-series aggregation
-  rewrites, and sharded time-series.
+  indexes, partial indexes, wildcard indexes, text indexes, unique/sparse/TTL indexes, advanced
+  time-series aggregation rewrites, and sharded time-series.
 
 ## Practical Guidance For Users
 
@@ -532,8 +537,8 @@ Avoid assuming full MongoDB parity for:
 - Very large analytic windows or interpolation workloads.
 - Exact date arithmetic across DST/month/quarter/year boundaries.
 - Time-series workloads that rely on compression, clustered bucket storage, geospatial
-  indexes, partial indexes, wildcard indexes, text indexes, sharded time-series, advanced
-  aggregation rewrites, or exact MongoDB retryable-write semantics.
+  indexes, partial indexes, wildcard indexes, text indexes, unique/sparse/TTL indexes, sharded
+  time-series, advanced aggregation rewrites, or exact MongoDB retryable-write semantics.
 - Workloads depending on exact MongoDB retryable-write or write-concern edge cases.
 
 When in doubt, check the focused task spec under `docs/backport/tasks/` and add an EloqDoc-specific
