@@ -149,6 +149,8 @@ Implemented behavior:
   key/weight semantics are not translated to bucket schema yet.
 - `createIndexes` rejects unique, sparse, and TTL index options on time-series indexes with
   `CannotCreateIndex`; use collection-level `expireAfterSeconds` for time-series TTL behavior.
+- `collMod` accepts only one-way `timeseries.granularity` promotion; other nested time-series
+  options are rejected instead of being silently ignored.
 - `listIndexes` on the logical collection translates bucket index specs back to logical names.
 - `listCollections` hides backing `system.buckets.*` collections.
 - Time-series option parsing enforces mutual exclusion between `granularity` and custom

@@ -22,6 +22,15 @@
     assert.commandFailedWithCode(
         testDB.runCommand({collMod: "metrics", timeseries: {granularity: "weeks"}}),
         ErrorCodes.InvalidOptions);
+    assert.commandFailedWithCode(
+        testDB.runCommand({collMod: "metrics", timeseries: {granularity: "hours", timeField: "ts"}}),
+        ErrorCodes.InvalidOptions);
+    assert.commandFailedWithCode(
+        testDB.runCommand({collMod: "metrics", timeseries: {granularity: "hours", metaField: "m"}}),
+        ErrorCodes.InvalidOptions);
+    assert.commandFailedWithCode(
+        testDB.runCommand({collMod: "metrics", timeseries: {granularity: "hours", bucketMaxSpanSeconds: 3600}}),
+        ErrorCodes.InvalidOptions);
 
     assert.commandWorked(testDB.createCollection("ordinary"));
     assert.commandFailedWithCode(

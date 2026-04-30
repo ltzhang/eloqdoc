@@ -369,7 +369,7 @@ Implemented:
 - Logical `updateOne`, `updateMany`, `deleteOne`, and `deleteMany` are supported by unpacking
   matching buckets, filtering/updating measurements, and repacking survivors.
 - `collMod` supports one-way granularity promotion for time-series collections that do not use
-  custom bucket span/rounding.
+  custom bucket span/rounding, and rejects other nested time-series options.
 - `createIndexes` and `listIndexes` on logical time-series collections translate between logical
   user key patterns and bucket key patterns.
 - Logical geospatial time-series index requests are rejected with `CannotCreateIndex`; EloqDoc does

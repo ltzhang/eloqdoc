@@ -255,6 +255,14 @@ StatusWith<CollModRequest> parseCollModRequest(OperationContext* opCtx,
             if (e.type() != mongo::Object) {
                 return Status(ErrorCodes::TypeMismatch, "'timeseries' has to be a document.");
             }
+            for (auto&& timeseriesElem : e.Obj()) {
+                if (timeseriesElem.fieldNameStringData() != "granularity") {
+                    return Status(ErrorCodes::InvalidOptions,
+                                  str::stream()
+                                      << "unsupported time-series collMod option: timeseries."
+                                      << timeseriesElem.fieldNameStringData());
+                }
+            }
             auto oldOptions = coll->getCatalogEntry()->getCollectionOptions(opCtx);
             if (!oldOptions.timeseries) {
                 return Status(ErrorCodes::InvalidOptions,
