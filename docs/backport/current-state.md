@@ -415,6 +415,8 @@ Query pruning:
   it only computes count and time/measurement/meta min/max from bucket fields.
 - One or more leading exact meta-only `$match` stages can be combined with a supported bucket-level
   `$group` without unpacking.
+- A single-stage `$count`, or exact meta-only `$match` stages followed by `$count`, can be answered
+  from bucket `control.count` without unpacking.
 - The original measurement-level predicate remains after unpacking, so bucket pruning is a
   performance optimization rather than the source of correctness.
 

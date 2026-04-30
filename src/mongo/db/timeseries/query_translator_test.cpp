@@ -324,6 +324,27 @@ TEST(TimeSeriesQueryTranslator, RewritesMetaFieldGroupBoundsWithoutUnpack) {
                       pipeline[0]);
 }
 
+TEST(TimeSeriesQueryTranslator, RewritesWholeCollectionCountWithoutUnpack) {
+    const auto pipeline = makeBucketPipeline(makeOptions(), {fromjson("{$count: 'n'}")});
+
+    ASSERT_EQUALS(2U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: null, n: {$sum: '$control.count'}}}"),
+                      pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, n: 1}}"), pipeline[1]);
+}
+
+TEST(TimeSeriesQueryTranslator, RewritesMetaMatchedCountWithoutUnpack) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(),
+                           {fromjson("{$match: {'tags.host': 'a'}}"), fromjson("{$count: 'n'}")});
+
+    ASSERT_EQUALS(3U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {'meta.host': 'a'}}"), pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: null, n: {$sum: '$control.count'}}}"),
+                      pipeline[1]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, n: 1}}"), pipeline[2]);
+}
+
 TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementEqualityPredicate) {
     const auto pipeline =
         makeBucketPipeline(makeOptions(), {BSON("$match" << BSON("v" << BSON("$eq" << 7)))});

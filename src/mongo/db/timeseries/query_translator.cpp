@@ -663,6 +663,25 @@ bool appendWholeCollectionGroupRewrite(const CollectionOptions& options,
     return true;
 }
 
+bool appendCountRewrite(const BSONObj& stage, std::vector<BSONObj>* translated) {
+    const auto firstElem = stage.firstElement();
+    if (firstElem.fieldNameStringData() != "$count" || firstElem.type() != mongo::String) {
+        return false;
+    }
+
+    const auto countField = firstElem.String();
+    if (countField.empty() || countField.find('.') != std::string::npos ||
+        countField[0] == '$') {
+        return false;
+    }
+
+    translated->push_back(
+        BSON("$group" << BSON("_id" << BSONNULL << countField << BSON("$sum"
+                                                                       << "$control.count"))));
+    translated->push_back(BSON("$project" << BSON("_id" << 0 << countField << 1)));
+    return true;
+}
+
 }  // namespace
 
 std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
@@ -683,8 +702,13 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
         return translated;
     }
 
+    if (userPipeline.size() == 1 && appendCountRewrite(userPipeline.front(), &translated)) {
+        return translated;
+    }
+
     if (userPipeline.size() >= 2 &&
-        appendWholeCollectionGroupRewrite(options, userPipeline.back(), &translated)) {
+        (appendWholeCollectionGroupRewrite(options, userPipeline.back(), &translated) ||
+         appendCountRewrite(userPipeline.back(), &translated))) {
         std::vector<BSONObj> exactMetaMatches;
         exactMetaMatches.reserve(userPipeline.size() - 1);
         bool hasOnlyExactMetaMatches = true;
