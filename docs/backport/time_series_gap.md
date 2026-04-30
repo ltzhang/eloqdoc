@@ -69,6 +69,11 @@ Implemented bucket-level pruning:
 - `$or` is pushed down only when every branch can be translated safely.
 - Multiple leading `$match` stages can each contribute bucket-level pushdown before unpack.
 - Leading `$sort` on time/meta paths can be pushed before unpack in conservative bucket form.
+- A leading `$limit` can be pushed before unpack when it is the first pipeline stage, while the
+  original limit is preserved after unpack for correctness.
+- A leading inclusion `$project` that references only the meta field can be pushed before unpack as
+  a bucket projection over `control.count` and `meta`, while the original projection is preserved
+  after unpack.
 
 The original user pipeline stages remain after unpacking. Bucket pushdown is therefore a
 performance optimization and not the source of query correctness.
@@ -133,8 +138,7 @@ Remaining performance differences:
 - `$group` rewrites that answer min/max/count from `control.min` / `control.max` without unpacking
   are not implemented.
 - Last-point and DISTINCT_SCAN style optimizations are not implemented.
-- `$limit` pushdown is not implemented.
-- Meta-only `$project` / `$addFields` pushdown is not implemented.
+- Meta-only `$addFields` pushdown is not implemented.
 - Broader sort and index-aware time-series planning remains limited.
 
 ---
@@ -147,6 +151,14 @@ Focused C++ validation has been run for the core time-series helper paths:
 - `insert_router_test`
 - `bucket_mutation_test`
 - `collection_options_test`
+
+The May 1, 2026 Gap 12 `$limit` and meta-only `$project` pushdown changes were validated with:
+
+- `query_translator_test` (15 tests, 0 failures)
+- `insert_router_test` (2 tests, 0 failures)
+- `bucket_mutation_test` (5 tests, 0 failures across bucket catalog and mutation suites)
+- `collection_options_test` (35 tests, 0 failures)
+- `install-core` build
 
 The tree also contains focused JS tests under `tests/jstests/eloq_basic/timeseries/`. Local JS
 runtime validation is currently limited by server fixture/startup constraints in this work
