@@ -76,9 +76,9 @@ Implemented bucket-level pruning:
   original projection is preserved after unpack.
 - A leading meta-only `$addFields` / `$set` with literal values can be pushed before unpack as a
   bucket update over `meta` paths, while the original stage is preserved after unpack.
-- A single-stage whole-collection `$group` can avoid unpacking when it only computes `$sum: 1`,
-  `$min: "$<timeField>"`, and `$max: "$<timeField>"`, rewriting those accumulators to
-  `control.count`, `control.min.<timeField>`, and `control.max.<timeField>`.
+- A single-stage whole-collection `$group` can avoid unpacking when it only computes `$sum: 1`
+  and `$min` / `$max` over the time field or scalar measurement fields, rewriting those
+  accumulators to `control.count`, `control.min.<field>`, and `control.max.<field>`.
 
 The original user pipeline stages remain after unpacking. Bucket pushdown is therefore a
 performance optimization and not the source of query correctness.
@@ -140,8 +140,8 @@ Remaining functional or semantic differences:
 
 Remaining performance differences:
 
-- Broader `$group` rewrites, including grouped aggregations and measurement/meta accumulators, are
-  not implemented.
+- Broader `$group` rewrites, including grouped aggregations, meta-field accumulators, computed
+  expressions, and non-min/max measurement accumulators, are not implemented.
 - Last-point and DISTINCT_SCAN style optimizations are not implemented.
 - More general `$addFields` / `$set` pushdown, including computed expressions and measurement
   fields, is not implemented.
@@ -159,10 +159,10 @@ Focused C++ validation has been run for the core time-series helper paths:
 - `collection_options_test`
 
 The May 1, 2026 Gap 12 `$limit`, simple inclusion `$project`, meta-only `$addFields` / `$set`, and
-whole-collection time/count `$group` changes were validated with:
+whole-collection time/count/measurement-bound `$group` changes were validated with:
 
 - `document_source_internal_unpack_bucket_test` (4 tests, 0 failures)
-- `query_translator_test` (23 tests, 0 failures)
+- `query_translator_test` (25 tests, 0 failures)
 - `insert_router_test` (2 tests, 0 failures)
 - `bucket_mutation_test` (5 tests, 0 failures across bucket catalog and mutation suites)
 - `collection_options_test` (35 tests, 0 failures)

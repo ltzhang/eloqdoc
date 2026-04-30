@@ -510,6 +510,27 @@ bool appendWholeCollectionGroupRewrite(const CollectionOptions& options,
             continue;
         }
 
+        if ((opName == "$min" || opName == "$max") && op.type() == mongo::String) {
+            const StringData expression(op.String());
+            if (!expression.startsWith("$") || expression.startsWith("$$")) {
+                return false;
+            }
+
+            const auto logicalField = expression.substr(1);
+            std::string metaPath;
+            if (logicalField == "_id" ||
+                translateMetaPath(logicalField, tsOptions.metaField, &metaPath)) {
+                return false;
+            }
+
+            const auto controlField = opName == "$min" ? "min" : "max";
+            const std::string inputPath =
+                str::stream() << "$" << makeFieldControlPath(controlField, logicalField);
+            bucketGroup.append(outputField, BSON(opName << inputPath));
+            hasAccumulator = true;
+            continue;
+        }
+
         return false;
     }
 
