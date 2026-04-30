@@ -536,8 +536,14 @@ bool appendWholeCollectionGroupRewrite(const CollectionOptions& options,
 
             const auto logicalField = expression.substr(1);
             std::string metaPath;
-            if (logicalField == "_id" ||
-                translateMetaPath(logicalField, tsOptions.metaField, &metaPath)) {
+            if (translateMetaPath(logicalField, tsOptions.metaField, &metaPath)) {
+                const std::string inputPath = str::stream() << "$" << metaPath;
+                bucketGroup.append(outputField, BSON(opName << inputPath));
+                hasAccumulator = true;
+                continue;
+            }
+
+            if (logicalField == "_id") {
                 return false;
             }
 

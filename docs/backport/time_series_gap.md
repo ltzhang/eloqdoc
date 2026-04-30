@@ -77,10 +77,10 @@ Implemented bucket-level pruning:
 - A leading meta-only `$addFields` / `$set` with literal values can be pushed before unpack as a
   bucket update over `meta` paths, while the original stage is preserved after unpack.
 - A single-stage whole-collection or meta-grouped `$group` can avoid unpacking when it only
-  computes `$sum: 1` and `$min` / `$max` over the time field or scalar measurement fields,
-  rewriting those accumulators to `control.count`, `control.min.<field>`, and
-  `control.max.<field>`. Supported grouped rewrites are limited to `_id` values that are null or
-  direct meta-field paths.
+  computes `$sum: 1` and `$min` / `$max` over the time field, scalar measurement fields, or meta
+  fields. It rewrites those accumulators to `control.count`, `control.min.<field>`,
+  `control.max.<field>`, and `meta.<field>`. Supported grouped rewrites are limited to `_id`
+  values that are null or direct meta-field paths.
 
 The original user pipeline stages remain after unpacking. Bucket pushdown is therefore a
 performance optimization and not the source of query correctness.
@@ -142,8 +142,8 @@ Remaining functional or semantic differences:
 
 Remaining performance differences:
 
-- Broader `$group` rewrites, including measurement-field grouped aggregations, meta-field
-  accumulators, computed expressions, and non-min/max measurement accumulators, are not implemented.
+- Broader `$group` rewrites, including measurement-field grouped aggregations, computed
+  expressions, and non-min/max measurement accumulators, are not implemented.
 - Last-point and DISTINCT_SCAN style optimizations are not implemented.
 - More general `$addFields` / `$set` pushdown, including computed expressions and measurement
   fields, is not implemented.

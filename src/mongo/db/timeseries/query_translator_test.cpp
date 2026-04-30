@@ -280,15 +280,17 @@ TEST(TimeSeriesQueryTranslator, DoesNotRewriteMeasurementGroupedTimeSeriesGroupB
     ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: '$v', n: {$sum: 1}}}"), pipeline[1]);
 }
 
-TEST(TimeSeriesQueryTranslator, DoesNotRewriteMetaFieldGroupBoundsBeforeUnpack) {
+TEST(TimeSeriesQueryTranslator, RewritesMetaFieldGroupBoundsWithoutUnpack) {
     const auto pipeline = makeBucketPipeline(
         makeOptions(),
-        {fromjson("{$group: {_id: null, minHost: {$min: '$tags.host'}}}")});
+        {fromjson("{$group: {_id: null, minHost: {$min: '$tags.host'}, "
+                  "maxSite: {$max: '$tags.site'}}}")});
 
-    ASSERT_EQUALS(2U, pipeline.size());
-    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
-    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: null, minHost: {$min: '$tags.host'}}}"),
-                      pipeline[1]);
+    ASSERT_EQUALS(1U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: null, "
+                               "minHost: {$min: '$meta.host'}, "
+                               "maxSite: {$max: '$meta.site'}}}"),
+                      pipeline[0]);
 }
 
 TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementEqualityPredicate) {
