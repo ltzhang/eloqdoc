@@ -22,6 +22,7 @@ Status parseTimeseriesOptions(const BSONElement& elem, TimeseriesOptions* out) {
     }
 
     TimeseriesOptions parsed;
+    bool sawGranularity = false;
     BSONForEach(field, elem.Obj()) {
         auto name = field.fieldNameStringData();
         if (name == "timeField") {
@@ -39,6 +40,7 @@ Status parseTimeseriesOptions(const BSONElement& elem, TimeseriesOptions* out) {
                 return {ErrorCodes::TypeMismatch, "'timeseries.granularity' has to be a string."};
             }
             parsed.granularity = field.String();
+            sawGranularity = true;
         } else if (name == "bucketMaxSpanSeconds" || name == "bucketRoundingSeconds") {
             if (!field.isNumber()) {
                 return {ErrorCodes::TypeMismatch,
@@ -68,8 +70,7 @@ Status parseTimeseriesOptions(const BSONElement& elem, TimeseriesOptions* out) {
                 "'timeseries.metaField' must be different from 'timeseries.timeField'."};
     }
 
-    if ((!parsed.granularity.empty()) &&
-        (parsed.bucketMaxSpanSeconds || parsed.bucketRoundingSeconds)) {
+    if (sawGranularity && (parsed.bucketMaxSpanSeconds || parsed.bucketRoundingSeconds)) {
         return {ErrorCodes::InvalidOptions,
                 "'timeseries.granularity' cannot be combined with custom bucket span or rounding "
                 "options."};
@@ -105,7 +106,9 @@ void appendTimeseriesOptions(BSONObjBuilder* builder, const TimeseriesOptions& o
     if (!options.metaField.empty()) {
         ts.append("metaField", options.metaField);
     }
-    ts.append("granularity", options.granularity);
+    if (!options.bucketMaxSpanSeconds && !options.bucketRoundingSeconds) {
+        ts.append("granularity", options.granularity);
+    }
     if (options.bucketMaxSpanSeconds) {
         ts.append("bucketMaxSpanSeconds", *options.bucketMaxSpanSeconds);
     }

@@ -16,6 +16,7 @@
 #include "mongo/db/catalog/collection.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/dbhelpers.h"
+#include "mongo/db/op_observer.h"
 #include "mongo/db/storage/snapshot.h"
 #include "mongo/db/timeseries/bucket_catalog.h"
 #include "mongo/util/mongoutils/str.h"

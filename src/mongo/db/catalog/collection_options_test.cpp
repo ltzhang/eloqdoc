@@ -60,17 +60,17 @@ TEST(CollectionOptions, SimpleRoundTrip) {
 TEST(CollectionOptions, TimeSeriesOptionsRoundTrip) {
     CollectionOptions options;
     ASSERT_OK(options.parse(fromjson("{timeseries: {timeField: 't', metaField: 'tags', "
-                                     "granularity: 'minutes', bucketMaxSpanSeconds: 3600, "
-                                     "bucketRoundingSeconds: 60}, expireAfterSeconds: 3600}")));
+                                     "bucketMaxSpanSeconds: 3600, "
+                                     "bucketRoundingSeconds: 3600}, expireAfterSeconds: 3600}")));
 
     ASSERT_TRUE(options.timeseries);
     ASSERT_EQUALS(std::string("t"), options.timeseries->timeField);
     ASSERT_EQUALS(std::string("tags"), options.timeseries->metaField);
-    ASSERT_EQUALS(std::string("minutes"), options.timeseries->granularity);
+    ASSERT_EQUALS(std::string("seconds"), options.timeseries->granularity);
     ASSERT_TRUE(options.timeseries->bucketMaxSpanSeconds);
     ASSERT_EQUALS(3600LL, *options.timeseries->bucketMaxSpanSeconds);
     ASSERT_TRUE(options.timeseries->bucketRoundingSeconds);
-    ASSERT_EQUALS(60LL, *options.timeseries->bucketRoundingSeconds);
+    ASSERT_EQUALS(3600LL, *options.timeseries->bucketRoundingSeconds);
     ASSERT_TRUE(options.expireAfterSeconds);
     ASSERT_EQUALS(3600LL, *options.expireAfterSeconds);
     checkRoundTrip(options);

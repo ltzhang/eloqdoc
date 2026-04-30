@@ -44,7 +44,9 @@ TEST(TimeSeriesQueryTranslator, AddsBucketMatchForSimpleTimeAndMetaPredicates) {
     ASSERT_BSONOBJ_EQ(
         BSON("$match" << BSON("control.max.t" << BSON("$gte" << start) << "control.min.t"
                                               << BSON("$lt" << end) << "meta.host"
-                                              << "a")),
+                                              << "a"
+                                              << "control.min.v" << BSON("$lte" << 1)
+                                              << "control.max.v" << BSON("$gte" << 1))),
         pipeline[0]);
     ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
     ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("t" << BSON("$gte" << start << "$lt" << end)
@@ -80,11 +82,12 @@ TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementEqualityPredicate) 
 }
 
 TEST(TimeSeriesQueryTranslator, KeepsUnpackFirstWhenNoBucketPredicateCanBeBuilt) {
-    const auto pipeline = makeBucketPipeline(makeOptions(), {fromjson("{$match: {v: 1}}")});
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(), {fromjson("{$match: {v: {$ne: 1}}}")});
 
     ASSERT_EQUALS(2U, pipeline.size());
     ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
-    ASSERT_BSONOBJ_EQ(fromjson("{$match: {v: 1}}"), pipeline[1]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {v: {$ne: 1}}}"), pipeline[1]);
 }
 
 TEST(TimeSeriesQueryTranslator, AddsBucketMatchForAndAndOrPredicates) {
@@ -101,7 +104,10 @@ TEST(TimeSeriesQueryTranslator, AddsBucketMatchForAndAndOrPredicates) {
 
     ASSERT_EQUALS(3U, pipeline.size());
     ASSERT_BSONOBJ_EQ(
-        BSON("$match" << BSON("$and" << BSON_ARRAY(BSON("control.max.t" << BSON("$gte" << start)))
+        BSON("$match" << BSON("$and" << BSON_ARRAY(BSON("control.max.t" << BSON("$gte" << start))
+                                                   << BSON("control.min.v" << BSON("$lte" << 1)
+                                                                           << "control.max.v"
+                                                                           << BSON("$gte" << 1)))
                              << "$or" << BSON_ARRAY(BSON("meta.host" << "a")
                                                     << BSON("control.min.t" << BSON("$lt" << end))))),
         pipeline[0]);
@@ -114,7 +120,7 @@ TEST(TimeSeriesQueryTranslator, DoesNotAddBucketOrWhenAnyBranchCannotBeTranslate
     const auto pipeline = makeBucketPipeline(
         makeOptions(),
         {BSON("$match" << BSON("$or" << BSON_ARRAY(BSON("t" << BSON("$gte" << start))
-                                                   << BSON("v" << 1))))});
+                                                   << BSON("v" << BSON("$ne" << 1)))))});
 
     ASSERT_EQUALS(2U, pipeline.size());
     ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
@@ -183,8 +189,9 @@ TEST(TimeSeriesQueryTranslator, BucketAggregationRequestPreservesOptions) {
     ASSERT_EQUALS(123U, bucketRequest.getMaxTimeMS());
     ASSERT_BSONOBJ_EQ(readConcern, bucketRequest.getReadConcern());
     ASSERT_BSONOBJ_EQ(readPref, bucketRequest.getUnwrappedReadPref());
+    ASSERT_EQUALS(std::string("$match"), bucketRequest.getPipeline()[0].firstElementFieldName());
     ASSERT_EQUALS(std::string("$_internalUnpackBucket"),
-                  bucketRequest.getPipeline()[0].firstElementFieldName());
+                  bucketRequest.getPipeline()[1].firstElementFieldName());
 }
 
 }  // namespace
