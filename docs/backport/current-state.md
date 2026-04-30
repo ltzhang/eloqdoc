@@ -402,6 +402,10 @@ Query pruning:
 - Multiple leading `$match` stages can contribute bucket-level predicates.
 - Leading `$sort` on time/meta paths may be pushed before unpacking while preserving the original
   user sort after unpack.
+- A leading `$limit` can be pushed before unpacking when it is the first stage, with the original
+  limit still applied after unpack.
+- A leading inclusion `$project` over only the meta field can be pushed before unpacking as a bucket
+  projection that keeps `control.count` and `meta`.
 - The original measurement-level predicate remains after unpacking, so bucket pruning is a
   performance optimization rather than the source of correctness.
 
@@ -425,7 +429,7 @@ Important differences from MongoDB:
 - TTL is bucket-level only; EloqDoc deletes entire expired buckets and does not delete individual
   expired measurements from otherwise-live buckets.
 - Advanced MongoDB optimizer rewrites such as `$group` min/max/count from bucket control fields,
-  last-point DISTINCT_SCAN, `$limit` pushdown, and meta-only `$project` / `$addFields` pushdown are
+  last-point DISTINCT_SCAN, meta-only `$addFields` pushdown, and broader index-aware planning are
   not implemented.
 
 ## Analyze Command
