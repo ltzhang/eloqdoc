@@ -247,6 +247,9 @@ bool translateMetaPath(StringData field, StringData metaField, std::string* out)
 
 BSONObj makeBucketMatchPredicate(const CollectionOptions& options, const BSONObj& userMatch);
 
+BSONObj makeExactBucketMetaMatchPredicate(const CollectionOptions& options,
+                                          const BSONObj& userMatch);
+
 bool appendLogicalPredicate(BSONObjBuilder* builder,
                             const CollectionOptions& options,
                             const BSONElement& predicate) {
@@ -317,6 +320,62 @@ BSONObj makeBucketMatchPredicate(const CollectionOptions& options, const BSONObj
 
         hasBucketPredicate =
             appendMeasurementPredicate(&bucketMatch, field, predicate) || hasBucketPredicate;
+    }
+
+    if (!hasBucketPredicate) {
+        return BSONObj();
+    }
+
+    return bucketMatch.obj();
+}
+
+BSONObj makeExactBucketMetaMatchPredicate(const CollectionOptions& options,
+                                          const BSONObj& userMatch) {
+    invariant(options.timeseries);
+    const auto& tsOptions = *options.timeseries;
+
+    BSONObjBuilder bucketMatch;
+    bool hasBucketPredicate = false;
+
+    BSONForEach(predicate, userMatch) {
+        const auto field = predicate.fieldNameStringData();
+        if (field == "$and" || field == "$or") {
+            if (predicate.type() != mongo::Array) {
+                return BSONObj();
+            }
+
+            BSONArrayBuilder translatedChildren;
+            bool hasChildPredicate = false;
+            BSONForEach(child, predicate.Obj()) {
+                if (child.type() != mongo::Object) {
+                    return BSONObj();
+                }
+
+                const auto translatedChild = makeExactBucketMetaMatchPredicate(options, child.Obj());
+                if (translatedChild.isEmpty()) {
+                    return BSONObj();
+                }
+
+                translatedChildren.append(translatedChild);
+                hasChildPredicate = true;
+            }
+
+            if (!hasChildPredicate) {
+                return BSONObj();
+            }
+
+            bucketMatch.append(field, translatedChildren.arr());
+            hasBucketPredicate = true;
+            continue;
+        }
+
+        std::string metaPath;
+        if (!translateMetaPath(field, tsOptions.metaField, &metaPath)) {
+            return BSONObj();
+        }
+
+        bucketMatch.appendAs(predicate, metaPath);
+        hasBucketPredicate = true;
     }
 
     if (!hasBucketPredicate) {
@@ -622,6 +681,18 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
     if (userPipeline.size() == 1 &&
         appendWholeCollectionGroupRewrite(options, userPipeline.front(), &translated)) {
         return translated;
+    }
+
+    if (userPipeline.size() == 2) {
+        const auto firstElem = userPipeline.front().firstElement();
+        if (firstElem.fieldNameStringData() == "$match" && firstElem.type() == mongo::Object) {
+            const auto bucketMatch = makeExactBucketMetaMatchPredicate(options, firstElem.Obj());
+            if (!bucketMatch.isEmpty() &&
+                appendWholeCollectionGroupRewrite(options, userPipeline.back(), &translated)) {
+                translated.insert(translated.begin(), BSON("$match" << bucketMatch));
+                return translated;
+            }
+        }
     }
 
     bool lastPushdownWasSort = false;

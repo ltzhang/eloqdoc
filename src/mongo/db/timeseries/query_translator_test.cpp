@@ -272,6 +272,19 @@ TEST(TimeSeriesQueryTranslator, RewritesMetaGroupedCountAndMeasurementBoundsWith
                       pipeline[0]);
 }
 
+TEST(TimeSeriesQueryTranslator, RewritesMetaMatchedGroupWithoutUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {fromjson("{$match: {'tags.host': 'a'}}"),
+         fromjson("{$group: {_id: '$tags.host', n: {$sum: 1}, minV: {$min: '$v'}}}")});
+
+    ASSERT_EQUALS(2U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {'meta.host': 'a'}}"), pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: '$meta.host', n: {$sum: '$control.count'}, "
+                               "minV: {$min: '$control.min.v'}}}"),
+                      pipeline[1]);
+}
+
 TEST(TimeSeriesQueryTranslator, DoesNotRewriteMeasurementGroupedTimeSeriesGroupBeforeUnpack) {
     const auto pipeline = makeBucketPipeline(
         makeOptions(),

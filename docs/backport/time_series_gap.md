@@ -84,6 +84,9 @@ Implemented bucket-level pruning:
   fields. It rewrites those accumulators to `control.count`, `control.min.<field>`,
   `control.max.<field>`, and `meta.<field>`. Supported grouped rewrites are limited to `_id`
   values that are null or direct meta-field paths.
+- A leading exact meta-only `$match` can be combined with a supported single-stage `$group` without
+  unpacking. Measurement and time predicates remain unpacked for grouped queries unless the original
+  measurement-level pipeline is preserved.
 
 The original user pipeline stages remain after unpacking. Bucket pushdown is therefore a
 performance optimization and not the source of query correctness.
@@ -164,11 +167,11 @@ Focused C++ validation has been run for the core time-series helper paths:
 - `collection_options_test`
 
 The May 1, 2026 Gap 12 `$limit`, sort-plus-limit, simple inclusion `$project`, meta-only
-`$addFields` / `$set`, numeric measurement `$in`, and whole-collection/meta-grouped
-time/count/measurement-bound `$group` changes were validated with:
+`$addFields` / `$set`, numeric measurement `$in`, exact meta-match grouped aggregation, and
+whole-collection/meta-grouped time/count/measurement-bound `$group` changes were validated with:
 
 - `document_source_internal_unpack_bucket_test` (4 tests, 0 failures)
-- `query_translator_test` (28 tests, 0 failures)
+- `query_translator_test` (29 tests, 0 failures)
 - `insert_router_test` (2 tests, 0 failures)
 - `bucket_mutation_test` (5 tests, 0 failures across bucket catalog and mutation suites)
 - `collection_options_test` (35 tests, 0 failures)
