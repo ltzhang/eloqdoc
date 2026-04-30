@@ -63,6 +63,7 @@
 #include "mongo/db/query/get_executor.h"
 #include "mongo/db/query/plan_summary_stats.h"
 #include "mongo/db/query/query_knobs.h"
+#include "mongo/db/query/collation/collator_factory_interface.h"
 #include "mongo/db/repl/repl_client_info.h"
 #include "mongo/db/repl/replication_coordinator.h"
 #include "mongo/db/retryable_writes_stats.h"
@@ -76,6 +77,7 @@
 #include "mongo/db/timeseries/bucket_mutation.h"
 #include "mongo/db/timeseries/insert_router.h"
 #include "mongo/db/timeseries/timeseries_namespace.h"
+#include "mongo/db/update/update_driver.h"
 #include "mongo/db/write_concern.h"
 #include "mongo/db/pipeline/expression_context.h"
 #include "mongo/rpc/get_status_from_command_result.h"
@@ -862,6 +864,180 @@ static SingleWriteResult performSingleUpdateOp(OperationContext* opCtx,
     return result;
 }
 
+boost::optional<CollectionOptions> getTimeSeriesOptionsForWrite(OperationContext* opCtx,
+                                                                const NamespaceString& ns) {
+    AutoGetCollection collection(opCtx, ns, MODE_IS);
+    if (!collection.getCollection()) {
+        return boost::none;
+    }
+
+    auto options = collection.getCollection()->getCatalogEntry()->getCollectionOptions(opCtx);
+    if (!options.timeseries) {
+        return boost::none;
+    }
+    return options;
+}
+
+SingleWriteResult performSingleTimeSeriesUpdateOp(OperationContext* opCtx,
+                                                  const NamespaceString& logicalNss,
+                                                  const CollectionOptions& options,
+                                                  StmtId stmtId,
+                                                  const write_ops::WriteCommandBase& commandBase,
+                                                  const write_ops::UpdateOpEntry& op) {
+    auto session = OperationContextSession::get(opCtx);
+    uassert(ErrorCodes::InvalidOptions,
+            "Cannot use (or request) retryable writes with multi=true",
+            (session && session->inMultiDocumentTransaction()) || !opCtx->getTxnNumber() ||
+                !op.getMulti());
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series updates do not support upsert",
+            !op.getUpsert());
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series updates do not support hint",
+            write_ops::hintOf(op).isEmpty());
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series updates do not support collation",
+            write_ops::collationOf(op).isEmpty());
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series updates do not support arrayFilters",
+            write_ops::arrayFiltersOf(op).empty());
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series updates do not support command let",
+            write_ops::letOf(commandBase).isEmpty());
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series updates do not support runtime constants",
+            write_ops::runtimeConstantsOf(commandBase).isEmpty());
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series updates do not support pipeline updates",
+            !op.getU().isPipeline());
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series updates do not support replacement updates",
+            !UpdateDriver::isDocReplacement(op.getU().getUpdate()));
+
+    globalOpCounters.gotUpdate();
+    auto& curOp = *CurOp::get(opCtx);
+    {
+        stdx::lock_guard<Client> lk(*opCtx->getClient());
+        curOp.setNS_inlock(logicalNss.ns());
+        curOp.setNetworkOp_inlock(dbUpdate);
+        curOp.setLogicalOp_inlock(LogicalOp::opUpdate);
+        curOp.setOpDescription_inlock(op.toBSON());
+        curOp.ensureStarted();
+    }
+
+    UpdateLifecycleImpl updateLifecycle(logicalNss);
+    UpdateRequest request(logicalNss);
+    request.setLifecycle(&updateLifecycle);
+    request.setQuery(op.getQ());
+    request.setUpdateModification(op.getU());
+    request.setMulti(op.getMulti());
+    request.setUpsert(false);
+    request.setStmtId(stmtId);
+
+    ParsedUpdate parsedUpdate(opCtx, &request);
+    uassertStatusOK(parsedUpdate.parseRequest());
+    auto* driver = parsedUpdate.getDriver();
+    uassert(ErrorCodes::InvalidOptions,
+            "time-series updates do not support positional update operators",
+            !driver->needMatchDetails());
+    driver->setLogOp(false);
+
+    boost::intrusive_ptr<ExpressionContext> expCtx(new ExpressionContext(opCtx, nullptr));
+    auto swMatcher = MatchExpressionParser::parse(op.getQ(), expCtx);
+    uassertStatusOK(swMatcher.getStatus());
+    auto matcher = std::move(swMatcher.getValue());
+
+    const auto bucketNss = timeseries::makeBucketNamespace(logicalNss);
+    AutoGetCollection bucketCollection(opCtx, bucketNss, MODE_IX, MODE_IX);
+    uassert(ErrorCodes::NamespaceNotFound,
+            str::stream() << "missing time-series bucket collection " << bucketNss.ns(),
+            bucketCollection.getCollection());
+    assertCanWrite_inlock(opCtx, bucketNss);
+
+    std::vector<std::pair<RecordId, BSONObj>> candidateBuckets;
+    {
+        auto cursor = bucketCollection.getCollection()->getCursor(opCtx);
+        while (auto record = cursor->next()) {
+            candidateBuckets.emplace_back(record->id, record->data.releaseToBson().getOwned());
+        }
+    }
+
+    FieldRef idFieldRef("_id");
+    FieldRefSet immutablePaths;
+    immutablePaths.keepShortest(&idFieldRef);
+
+    long long matched = 0;
+    long long modified = 0;
+    for (const auto& candidate : candidateBuckets) {
+        const auto& oldBucket = candidate.second;
+        auto swUpdateResult = timeseries::updateMatchingMeasurementsInBucket(
+            *options.timeseries,
+            oldBucket,
+            [&matcher](const BSONObj& measurement) { return matcher->matchesBSON(measurement); },
+            [&](const BSONObj& measurement) -> StatusWith<BSONObj> {
+                mutablebson::Document doc(measurement, mutablebson::Document::kInPlaceDisabled);
+                bool docWasModified = false;
+                auto status =
+                    driver->update(StringData(), &doc, true, immutablePaths, nullptr, &docWasModified);
+                if (!status.isOK()) {
+                    return status;
+                }
+                auto updated = doc.getObject().getOwned();
+                if (options.timeseries->hasMetaField()) {
+                    auto oldMeta = measurement.getField(options.timeseries->metaField);
+                    auto newMeta = updated.getField(options.timeseries->metaField);
+                    uassert(ErrorCodes::InvalidOptions,
+                            "time-series updates do not support modifying the meta field",
+                            oldMeta.eoo() == newMeta.eoo() &&
+                                (oldMeta.eoo() || oldMeta.woCompare(newMeta, false) == 0));
+                }
+                uassert(ErrorCodes::TypeMismatch,
+                        str::stream() << "time-series measurement time field '"
+                                      << options.timeseries->timeField << "' must remain a Date",
+                        updated.getField(options.timeseries->timeField).type() == mongo::Date);
+                return updated;
+            },
+            op.getMulti());
+        uassertStatusOK(swUpdateResult.getStatus());
+        auto updateResult = swUpdateResult.getValue();
+        if (updateResult.matched == 0) {
+            continue;
+        }
+
+        matched += updateResult.matched;
+        modified += updateResult.modified;
+        if (updateResult.replacementBucket) {
+            WriteUnitOfWork wuow(opCtx);
+            OplogUpdateEntryArgs args;
+            bucketCollection.getCollection()->updateDocument(
+                opCtx,
+                candidate.first,
+                Snapshotted<BSONObj>(opCtx->recoveryUnit()->getSnapshotId(), oldBucket),
+                *updateResult.replacementBucket,
+                true,
+                true,
+                &CurOp::get(opCtx)->debug(),
+                &args);
+            wuow.commit();
+            timeseries::BucketCatalog::get().closeBucketById(logicalNss, oldBucket["_id"].OID());
+        }
+
+        if (!op.getMulti()) {
+            break;
+        }
+    }
+
+    UpdateResult res(matched > 0, true, modified, matched, BSONObj());
+    LastError::get(opCtx->getClient()).recordUpdate(res.existing, res.numMatched, res.upserted);
+    curOp.debug().additiveMetrics.nMatched = matched;
+    curOp.debug().additiveMetrics.nModified = modified;
+
+    SingleWriteResult result;
+    result.setN(matched);
+    result.setNModified(modified);
+    return result;
+}
+
 WriteResult performUpdates(OperationContext* opCtx, const write_ops::Update& wholeOp) {
     // EloqDoc enables command level transaction.
     //
@@ -871,7 +1047,8 @@ WriteResult performUpdates(OperationContext* opCtx, const write_ops::Update& who
     // invariant(!opCtx->lockState()->inAWriteUnitOfWork() ||
     //           (session && session->inActiveOrKilledMultiDocumentTransaction()));
     uassertStatusOK(userAllowedWriteNS(wholeOp.getNamespace()));
-    assertNotTimeSeriesCollection(opCtx, wholeOp.getNamespace(), "update");
+    const auto timeseriesOptions =
+        getTimeSeriesOptionsForWrite(opCtx, wholeOp.getNamespace());
 
     DisableDocumentValidationIfTrue docValidationDisabler(
         opCtx, wholeOp.getWriteCommandBase().getBypassDocumentValidation());
@@ -909,9 +1086,20 @@ WriteResult performUpdates(OperationContext* opCtx, const write_ops::Update& who
         ON_BLOCK_EXIT([&] { finishCurOp(opCtx, &curOp); });
         try {
             lastOpFixer.startingOp();
-            out.results.emplace_back(
-                performSingleUpdateOp(
-                    opCtx, wholeOp.getNamespace(), stmtId, wholeOp.getWriteCommandBase(), singleOp));
+            if (timeseriesOptions) {
+                out.results.emplace_back(performSingleTimeSeriesUpdateOp(opCtx,
+                                                                         wholeOp.getNamespace(),
+                                                                         *timeseriesOptions,
+                                                                         stmtId,
+                                                                         wholeOp.getWriteCommandBase(),
+                                                                         singleOp));
+            } else {
+                out.results.emplace_back(performSingleUpdateOp(opCtx,
+                                                               wholeOp.getNamespace(),
+                                                               stmtId,
+                                                               wholeOp.getWriteCommandBase(),
+                                                               singleOp));
+            }
             lastOpFixer.finishedOpSuccessfully();
         } catch (const DBException& ex) {
             const bool canContinue =
@@ -1011,20 +1199,6 @@ static SingleWriteResult performSingleDeleteOp(OperationContext* opCtx,
     SingleWriteResult result;
     result.setN(n);
     return result;
-}
-
-boost::optional<CollectionOptions> getTimeSeriesOptionsForWrite(OperationContext* opCtx,
-                                                                const NamespaceString& ns) {
-    AutoGetCollection collection(opCtx, ns, MODE_IS);
-    if (!collection.getCollection()) {
-        return boost::none;
-    }
-
-    auto options = collection.getCollection()->getCatalogEntry()->getCollectionOptions(opCtx);
-    if (!options.timeseries) {
-        return boost::none;
-    }
-    return options;
 }
 
 SingleWriteResult performSingleTimeSeriesDeleteOp(OperationContext* opCtx,

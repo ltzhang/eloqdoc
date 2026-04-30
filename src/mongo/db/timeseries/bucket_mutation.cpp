@@ -204,5 +204,48 @@ StatusWith<BucketDeleteResult> deleteMatchingMeasurementsFromBucket(
     return result;
 }
 
+StatusWith<BucketUpdateResult> updateMatchingMeasurementsInBucket(
+    const TimeseriesOptions& options,
+    const BSONObj& bucket,
+    const std::function<bool(const BSONObj&)>& shouldUpdate,
+    const std::function<StatusWith<BSONObj>(const BSONObj&)>& updateMeasurement,
+    bool multi) {
+    auto swMeasurements = unpackBucketMeasurements(options, bucket);
+    if (!swMeasurements.isOK()) {
+        return swMeasurements.getStatus();
+    }
+
+    BucketUpdateResult result;
+    bool updatedOne = false;
+    for (const auto& measurement : swMeasurements.getValue()) {
+        if ((!updatedOne || multi) && shouldUpdate(measurement)) {
+            ++result.matched;
+            updatedOne = true;
+            auto swUpdated = updateMeasurement(measurement);
+            if (!swUpdated.isOK()) {
+                return swUpdated.getStatus();
+            }
+            auto updated = swUpdated.getValue().getOwned();
+            if (measurement.woCompare(updated) != 0) {
+                ++result.modified;
+            }
+            result.measurements.push_back(updated);
+            continue;
+        }
+        result.measurements.push_back(measurement.getOwned());
+    }
+
+    if (result.matched == 0 || result.modified == 0) {
+        return result;
+    }
+
+    auto swReplacement = makeBucketFromMeasurements(options, bucket, result.measurements);
+    if (!swReplacement.isOK()) {
+        return swReplacement.getStatus();
+    }
+    result.replacementBucket = swReplacement.getValue();
+    return result;
+}
+
 }  // namespace timeseries
 }  // namespace mongo

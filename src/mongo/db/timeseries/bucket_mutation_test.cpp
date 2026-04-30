@@ -88,6 +88,43 @@ TEST(TimeSeriesBucketMutation, SingleDeleteOnlyRemovesFirstMatchingMeasurement) 
     ASSERT_EQUALS(2, result.replacementBucket->getObjectField("control").getIntField("count"));
 }
 
+TEST(TimeSeriesBucketMutation, UpdatesMatchingMeasurementsAndRebuildsControl) {
+    auto result = unittest::assertGet(updateMatchingMeasurementsInBucket(
+        makeOptions(),
+        makeBucket(),
+        [](const BSONObj& measurement) { return measurement["temp"].numberInt() >= 20; },
+        [](const BSONObj& measurement) -> StatusWith<BSONObj> {
+            BSONObjBuilder builder;
+            BSONForEach(elem, measurement) {
+                if (elem.fieldNameStringData() == "temp") {
+                    builder.append("temp", elem.numberInt() + 5);
+                } else {
+                    builder.append(elem);
+                }
+            }
+            return builder.obj();
+        },
+        true));
+
+    ASSERT_EQUALS(2, result.matched);
+    ASSERT_EQUALS(2, result.modified);
+    ASSERT_EQUALS(3U, result.measurements.size());
+    ASSERT_TRUE(result.replacementBucket);
+    ASSERT_BSONOBJ_EQ(BSON("version" << 1 << "min"
+                                      << BSON("t" << Date_t::fromMillisSinceEpoch(1767225600000LL)
+                                                  << "temp" << 10)
+                                      << "max"
+                                      << BSON("t" << Date_t::fromMillisSinceEpoch(1767225720000LL)
+                                                  << "temp" << 35)
+                                      << "count" << 3LL),
+                      result.replacementBucket->getObjectField("control"));
+    ASSERT_BSONOBJ_EQ(BSON("t" << BSON("0" << Date_t::fromMillisSinceEpoch(1767225600000LL) << "1"
+                                            << Date_t::fromMillisSinceEpoch(1767225660000LL) << "2"
+                                            << Date_t::fromMillisSinceEpoch(1767225720000LL))
+                               << "temp" << BSON("0" << 10 << "1" << 25 << "2" << 35)),
+                      result.replacementBucket->getObjectField("data"));
+}
+
 TEST(TimeSeriesBucketCatalog, CloseBucketByIdInvalidatesAnyKeyForNamespace) {
     const NamespaceString ns("test.metrics");
     const OID id("0000000000000000000000aa");
