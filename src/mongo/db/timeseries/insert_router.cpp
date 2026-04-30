@@ -110,6 +110,10 @@ int compareForMinMax(const BSONElement& lhs, const BSONElement& rhs) {
     return lhs.woCompare(rhs, false);
 }
 
+bool shouldStoreAsBucketColumn(const TimeseriesOptions& options, StringData fieldName) {
+    return fieldName != "_id" && (!options.hasMetaField() || fieldName != options.metaField);
+}
+
 BSONObj makeNewBucketDocument(const TimeseriesOptions& options,
                               const OID& bucketId,
                               const BSONObj& measurement,
@@ -123,7 +127,7 @@ BSONObj makeNewBucketDocument(const TimeseriesOptions& options,
         {
             BSONObjBuilder min(control.subobjStart("min"));
             BSONForEach(elem, measurement) {
-                if (elem.fieldNameStringData() == "_id") {
+                if (!shouldStoreAsBucketColumn(options, elem.fieldNameStringData())) {
                     continue;
                 }
                 appendForControl(&min, elem);
@@ -133,7 +137,7 @@ BSONObj makeNewBucketDocument(const TimeseriesOptions& options,
         {
             BSONObjBuilder max(control.subobjStart("max"));
             BSONForEach(elem, measurement) {
-                if (elem.fieldNameStringData() == "_id") {
+                if (!shouldStoreAsBucketColumn(options, elem.fieldNameStringData())) {
                     continue;
                 }
                 appendForControl(&max, elem);
@@ -151,7 +155,7 @@ BSONObj makeNewBucketDocument(const TimeseriesOptions& options,
     {
         BSONObjBuilder data(builder.subobjStart("data"));
         BSONForEach(elem, measurement) {
-            if (elem.fieldNameStringData() == "_id") {
+            if (!shouldStoreAsBucketColumn(options, elem.fieldNameStringData())) {
                 continue;
             }
             BSONObjBuilder column(data.subobjStart(elem.fieldName()));
@@ -164,7 +168,8 @@ BSONObj makeNewBucketDocument(const TimeseriesOptions& options,
     return builder.obj();
 }
 
-BSONObj makeReplacementBucketDocument(const BSONObj& oldBucket,
+BSONObj makeReplacementBucketDocument(const TimeseriesOptions& options,
+                                      const BSONObj& oldBucket,
                                       const BSONObj& measurement) {
     const auto oldControl = oldBucket.getObjectField("control");
     const auto oldMin = oldControl.getObjectField("min");
@@ -190,7 +195,8 @@ BSONObj makeReplacementBucketDocument(const BSONObj& oldBucket,
                 }
             }
             BSONForEach(incoming, measurement) {
-                if (incoming.fieldNameStringData() == "_id" || oldMin.hasField(incoming.fieldName())) {
+                if (!shouldStoreAsBucketColumn(options, incoming.fieldNameStringData()) ||
+                    oldMin.hasField(incoming.fieldName())) {
                     continue;
                 }
                 appendForControl(&min, incoming);
@@ -208,7 +214,8 @@ BSONObj makeReplacementBucketDocument(const BSONObj& oldBucket,
                 }
             }
             BSONForEach(incoming, measurement) {
-                if (incoming.fieldNameStringData() == "_id" || oldMax.hasField(incoming.fieldName())) {
+                if (!shouldStoreAsBucketColumn(options, incoming.fieldNameStringData()) ||
+                    oldMax.hasField(incoming.fieldName())) {
                     continue;
                 }
                 appendForControl(&max, incoming);
@@ -239,7 +246,8 @@ BSONObj makeReplacementBucketDocument(const BSONObj& oldBucket,
             column.doneFast();
         }
         BSONForEach(incoming, measurement) {
-            if (incoming.fieldNameStringData() == "_id" || oldData.hasField(incoming.fieldName())) {
+            if (!shouldStoreAsBucketColumn(options, incoming.fieldNameStringData()) ||
+                oldData.hasField(incoming.fieldName())) {
                 continue;
             }
             BSONObjBuilder column(data.subobjStart(incoming.fieldName()));
@@ -348,7 +356,7 @@ Status updateBucket(OperationContext* opCtx,
                     const BSONObj& oldBucket,
                     const RecordId& recordId,
                     const BSONObj& measurement) {
-    const auto replacement = makeReplacementBucketDocument(oldBucket, measurement);
+    const auto replacement = makeReplacementBucketDocument(options, oldBucket, measurement);
     OplogUpdateEntryArgs args;
     bucketCollection->updateDocument(opCtx,
                                      recordId,

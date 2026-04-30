@@ -25,8 +25,11 @@
     assert.eq(ISODate("2025-01-01T00:00:05Z"), hostABucket.control.max.t, tojson(hostABucket));
     assert.eq(1, hostABucket.control.min.v, tojson(hostABucket));
     assert.eq(2, hostABucket.control.max.v, tojson(hostABucket));
+    assert(!hostABucket.control.min.hasOwnProperty("tags"), tojson(hostABucket));
+    assert(!hostABucket.control.max.hasOwnProperty("tags"), tojson(hostABucket));
     assert.eq(ISODate("2025-01-01T00:00:01Z"), hostABucket.data.t["0"], tojson(hostABucket));
     assert.eq(ISODate("2025-01-01T00:00:05Z"), hostABucket.data.t["1"], tojson(hostABucket));
     assert.eq(1, hostABucket.data.v["0"], tojson(hostABucket));
     assert.eq(2, hostABucket.data.v["1"], tojson(hostABucket));
+    assert(!hostABucket.data.hasOwnProperty("tags"), tojson(hostABucket));
 })();
