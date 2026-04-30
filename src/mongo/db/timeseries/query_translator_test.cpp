@@ -368,6 +368,29 @@ TEST(TimeSeriesQueryTranslator, AddsBucketMatchForTimeInPredicate) {
     ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
 }
 
+TEST(TimeSeriesQueryTranslator, AddsBucketMatchForMeasurementInPredicate) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(), {fromjson("{$match: {v: {$in: [7, 11]}}}")});
+
+    ASSERT_EQUALS(3U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(
+        fromjson("{$match: {$or: ["
+                 "{'control.min.v': {$lte: 7}, 'control.max.v': {$gte: 7}}, "
+                 "{'control.min.v': {$lte: 11}, 'control.max.v': {$gte: 11}}]}}"),
+        pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {v: {$in: [7, 11]}}}"), pipeline[2]);
+}
+
+TEST(TimeSeriesQueryTranslator, DoesNotAddBucketMatchForMixedTypeMeasurementInPredicate) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(), {fromjson("{$match: {v: {$in: [7, 'hot']}}}")});
+
+    ASSERT_EQUALS(2U, pipeline.size());
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {v: {$in: [7, 'hot']}}}"), pipeline[1]);
+}
+
 TEST(TimeSeriesQueryTranslator, BucketAggregationRequestPreservesOptions) {
     AggregationRequest request(NamespaceString("db.metrics"), {fromjson("{$match: {v: 1}}")});
     const auto collation = BSON("locale" << "simple");

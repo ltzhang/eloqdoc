@@ -394,9 +394,10 @@ Query pruning:
 - Conservative bucket-level `$match` stages may be inserted before unpacking.
 - Time predicates are translated to `control.min` / `control.max` overlap checks.
 - Meta predicates are translated to `meta` paths.
-- Supported measurement equality/range predicates are translated to conservative `control.min` /
-  `control.max` checks.
-- Date `$in` on the time field translates to bucket-level equality-range disjunctions.
+- Supported measurement equality/range predicates and numeric `$in` predicates are translated to
+  conservative `control.min` / `control.max` checks.
+- Date `$in` on the time field and numeric `$in` on measurement fields translate to bucket-level
+  equality-range disjunctions.
 - `$and` keeps translatable children.
 - `$or` is pushed down only when every branch has a bucket-level translation.
 - Multiple leading `$match` stages can contribute bucket-level predicates.

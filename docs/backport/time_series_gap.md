@@ -62,9 +62,11 @@ Implemented bucket-level pruning:
 
 - Time predicates become `control.min` / `control.max` overlap predicates.
 - Meta predicates become `meta` path predicates.
-- Measurement equality and range predicates become conservative `control.min` / `control.max`
-  predicates.
+- Measurement equality, range, and numeric `$in` predicates become conservative `control.min` /
+  `control.max` predicates.
 - Time `$in` becomes a bucket-level equality-range disjunction.
+- Numeric measurement `$in` becomes a bucket-level equality-range disjunction. Mixed-type
+  measurement `$in` remains unpack-only.
 - `$and` keeps translatable children.
 - `$or` is pushed down only when every branch can be translated safely.
 - Multiple leading `$match` stages can each contribute bucket-level pushdown before unpack.
