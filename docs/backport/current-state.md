@@ -350,7 +350,9 @@ storage subsystem.
 
 ## Time-Series Collections
 
-Basic time-series support is implemented as a Tier 2 MVP.
+Time-series support is implemented as a Tier 2-compatible feature set with conservative bucket
+packing, logical reads/writes, index translation, and targeted bucket-level query pruning. Full
+MongoDB time-series parity is still not claimed.
 
 Implemented:
 
@@ -359,31 +361,57 @@ Implemented:
 - Collection-level `expireAfterSeconds` is accepted for time-series collections.
 - `system.buckets.<collection>` is created as the physical bucket collection.
 - Missing bucket collections can be repaired on first use.
-- Inserts into the logical namespace route into bucket documents.
+- Inserts into the logical namespace route into reusable columnar bucket documents.
 - `$_internalUnpackBucket` unpacks bucket documents into measurement documents.
 - `find` and `aggregate` on the logical namespace translate to aggregation on the bucket
   collection with `$_internalUnpackBucket`.
 - Bucket-level TTL deletes buckets whose `control.max.<timeField>` is expired.
-- Updates and deletes on logical time-series collections are explicitly rejected.
+- Logical `updateOne`, `updateMany`, `deleteOne`, and `deleteMany` are supported by unpacking
+  matching buckets, filtering/updating measurements, and repacking survivors.
+- `collMod` supports one-way granularity promotion for time-series collections that do not use
+  custom bucket span/rounding.
+- `createIndexes` and `listIndexes` on logical time-series collections translate between logical
+  user key patterns and bucket key patterns.
+- `listCollections` hides backing `system.buckets.<collection>` collections.
 
 Bucket layout:
 
 - Bucket collections are ordinary collections, not clustered collections.
 - Buckets store `control`, optional `meta`, and columnar `data` fields.
-- Current packing is conservative and favors correctness over storage efficiency. It does not
-  implement MongoDB's mature bucket reopening and high-density packing behavior.
-- `bucketRoundingSeconds`, when supplied, drives insert-time bucket rounding.
+- Inserts reuse cached open buckets and can reopen existing bucket documents after process restart.
+- Buckets close when the measurement is outside the configured time span, the bucket reaches 1,000
+  measurements, or the resulting bucket document would exceed the approximate 12 MB threshold.
+- `control.min` and `control.max` track scalar measurement fields. `_id` and the configured
+  `metaField` are not stored as bucket data columns and are not tracked in control min/max.
+- Current packing is conservative and favors correctness over MongoDB's mature high-density bucket
+  compression behavior.
+- `bucketRoundingSeconds`, when supplied, drives insert-time bucket rounding. Without custom
+  rounding, MongoDB-like default rounding/span windows are used for `seconds`, `minutes`, and
+  `hours` granularity.
 
 Query pruning:
 
-- A conservative bucket-level `$match` may be inserted before unpacking.
+- Conservative bucket-level `$match` stages may be inserted before unpacking.
 - Time predicates are translated to `control.min` / `control.max` overlap checks.
 - Meta predicates are translated to `meta` paths.
+- Supported measurement equality/range predicates are translated to conservative `control.min` /
+  `control.max` checks.
 - Date `$in` on the time field translates to bucket-level equality-range disjunctions.
 - `$and` keeps translatable children.
 - `$or` is pushed down only when every branch has a bucket-level translation.
+- Multiple leading `$match` stages can contribute bucket-level predicates.
+- Leading `$sort` on time/meta paths may be pushed before unpacking while preserving the original
+  user sort after unpack.
 - The original measurement-level predicate remains after unpacking, so bucket pruning is a
   performance optimization rather than the source of correctness.
+
+Update/delete restrictions:
+
+- Time-series updates reject upsert, hint, collation, array filters, command `let`, runtime
+  constants, pipeline updates, replacement updates, and positional update operators.
+- Time-series updates cannot modify the configured meta field and must leave the time field as a
+  Date.
+- Time-series deletes reject hint, collation, command `let`, and runtime constants.
 
 Important differences from MongoDB:
 
@@ -391,14 +419,14 @@ Important differences from MongoDB:
   view-based catalog model.
 - Bucket collections are ordinary collections; clustered bucket storage is deferred.
 - Bucket compression is not implemented.
-- Bucket reopening after restart is not implemented.
-- Measurement-level updates/deletes are not implemented.
-- Secondary indexes on logical time-series fields, geospatial bucket indexes, and sharded
-  time-series are not implemented.
+- Geospatial bucket indexes and sharded time-series are not implemented.
 - Explain output may expose `system.buckets.<collection>` rather than rewriting everything back to
   the logical namespace.
 - TTL is bucket-level only; EloqDoc deletes entire expired buckets and does not delete individual
   expired measurements from otherwise-live buckets.
+- Advanced MongoDB optimizer rewrites such as `$group` min/max/count from bucket control fields,
+  last-point DISTINCT_SCAN, `$limit` pushdown, and meta-only `$project` / `$addFields` pushdown are
+  not implemented.
 
 ## Analyze Command
 
@@ -438,8 +466,8 @@ The following are not implemented in this branch, or exist only as parser/catalo
 - MongoDB replica-set coordination semantics.
 - Oplog-dependent features that do not map directly to Data Substrate.
 - Geospatial bucket indexes for time-series.
-- Full time-series parity, including compression, efficient packing/reopening, logical secondary
-  indexes, updates/deletes, and sharded time-series.
+- Full time-series parity, including compression, clustered bucket storage, geospatial bucket
+  indexes, advanced time-series aggregation rewrites, and sharded time-series.
 
 ## Practical Guidance For Users
 
@@ -448,7 +476,8 @@ Use the current branch for:
 - Modern driver compatibility where command envelopes previously caused hard failures.
 - Applications using common 5.0-7.0 aggregation expressions and stages.
 - Basic `bulkWrite`, `$merge`, `$unionWith`, window analytics, `$fill`, and `$densify` workflows.
-- Basic time-series ingestion and querying where update/delete/index parity is not required.
+- Basic time-series ingestion, querying, updates/deletes, and logical secondary indexes within the
+  documented restrictions.
 - Hidden indexes and simple wildcard index use cases.
 
 Avoid assuming full MongoDB parity for:
@@ -457,8 +486,9 @@ Avoid assuming full MongoDB parity for:
 - Sharding/replication behavior.
 - Very large analytic windows or interpolation workloads.
 - Exact date arithmetic across DST/month/quarter/year boundaries.
-- Time-series workloads that rely on compression, reopening, secondary indexes, or per-measurement
-  update/delete semantics.
+- Time-series workloads that rely on compression, clustered bucket storage, geospatial bucket
+  indexes, sharded time-series, advanced aggregation rewrites, or exact MongoDB retryable-write
+  semantics.
 - Workloads depending on exact MongoDB retryable-write or write-concern edge cases.
 
 When in doubt, check the focused task spec under `docs/backport/tasks/` and add an EloqDoc-specific

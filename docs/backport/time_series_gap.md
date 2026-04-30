@@ -1,192 +1,154 @@
 # Time Series Gap Analysis: EloqDoc vs MongoDB
 
-This document compares EloqDoc's current time series implementation against MongoDB's reference
-implementation and identifies the functional gaps. Storage sharding is handled transparently by
-EloqDoc's DataSubstrate, so the analysis focuses purely on the user-visible API surface.
+This document tracks the user-visible time-series API gaps that were identified during the
+MongoDB data API backport work. Storage sharding is handled transparently by EloqDoc's Data
+Substrate, so this analysis focuses on collection behavior, query/write semantics, and bucket
+layout visible through the MongoDB API.
+
+As of May 1, 2026, the original correctness and API-completeness gaps have been implemented on
+`dev`. The remaining differences are mostly advanced MongoDB time-series parity and optimizer
+coverage.
 
 ---
 
-## Gap 1 — Write path: every measurement becomes its own bucket (CRITICAL)
+## Implementation Status Summary
 
-**What EloqDoc does:**
-`getOrCreateBucket()` in `src/mongo/db/timeseries/bucket_catalog.cpp` generates a new OID
-whenever `count > 0`, then `routeInsert()` in `src/mongo/db/timeseries/insert_router.cpp` issues
-a fresh `INSERT` for every measurement. Result: 1000 measurements → 1000 bucket documents, each
-with `control.count=1`.
-
-**What MongoDB does:**
-It `UPDATE`s an open bucket document to append the measurement's values into `data.<field>` arrays,
-incrementing `control.count` and updating `control.min`/`control.max`. A new bucket is created only
-when the current one is full (1000 measurements, ~16 MB, or time span exhausted).
-
-**Why it matters:**
-The bucket format is supposed to be columnar and compact. Running 1:1 defeats the entire
-purpose — storage is 10–100× larger, query scans touch orders of magnitude more documents, and
-the unpack stage emits one measurement per bucket.
-
-**Fix required:**
-The insert path needs to:
-1. Query `system.buckets.*` for an open bucket matching
-   `{meta: X, "control.min.<timeField>": {$lte: roundedMax}}` that still has room.
-2. If found, `UPDATE` it: append values to `data.<field>` arrays, increment `control.count`,
-   update `control.min`/`control.max`.
-3. If not found, `INSERT` a new bucket document.
+| # | Original gap | Current status |
+|---|--------------|----------------|
+| 1 | Every measurement became its own bucket | Implemented. Inserts append to reusable bucket documents and create a new bucket only when no suitable bucket exists. |
+| 2 | Granularity rounding constants were wrong | Implemented. Default rounding/span values follow MongoDB's seconds/minutes/hours windows. |
+| 3 | Missing bucket close conditions | Implemented. Buckets close on time span, 1,000 measurements, and approximate 12 MB bucket size. |
+| 4 | `control.min`/`control.max` only tracked time | Implemented. Scalar measurement fields are tracked; `_id` and the meta field are excluded from bucket data/control. |
+| 5 | Measurement-field bucket predicate pushdown absent | Implemented for conservative equality/range predicates, `$and`, `$or`, and time `$in`. |
+| 6 | Updates and deletes unsupported | Implemented for logical time-series namespaces through unpack/filter/repack behavior. |
+| 7 | `collMod` granularity changes unsupported | Implemented for one-way granularity promotion. |
+| 8 | Secondary indexes on time-series collections unsupported | Implemented with logical-to-bucket index spec translation and reverse translation for `listIndexes`. |
+| 9 | `system.buckets.*` visible in `listCollections` | Implemented. Bucket collections are hidden from normal listing output. |
+| 10 | Missing time-series option mutual-exclusion validation | Implemented. Granularity and custom span/rounding are mutually exclusive; custom span and rounding must match. |
+| 11 | No bucket reopening after process restart | Implemented. Insert routing scans existing bucket documents when the in-memory bucket catalog has no usable entry. |
+| 12 | Pipeline pushdown optimizations absent | Partially implemented. Conservative bucket pushdowns exist; advanced MongoDB optimizer rewrites remain deferred. |
 
 ---
 
-## Gap 2 — Granularity rounding constants are wrong (IMPORTANT)
+## Implemented Behavior
 
-**What EloqDoc does** (`src/mongo/db/timeseries/insert_router.cpp`):
+### Insert And Bucket Routing
 
-| Granularity | EloqDoc rounding |
-|-------------|-----------------|
-| seconds     | 1 s             |
-| minutes     | 60 s            |
-| hours       | 3 600 s         |
+Logical time-series inserts route into `system.buckets.<collection>` through
+`src/mongo/db/timeseries/insert_router.cpp`.
 
-**What MongoDB uses:**
+Implemented behavior:
 
-| Granularity | Rounding (bucketRoundingSeconds) | Max span (bucketMaxSpanSeconds) |
-|-------------|----------------------------------|----------------------------------|
-| seconds     | 60 s (1 minute boundary)         | 3 600 s (1 hour)                 |
-| minutes     | 3 600 s (1 hour boundary)        | 86 400 s (1 day)                 |
-| hours       | 86 400 s (1 day boundary)        | 2 592 000 s (30 days)            |
+- Reuses cached open buckets when possible.
+- Reopens existing on-disk buckets by scanning the bucket collection when the in-memory catalog is
+  empty or stale.
+- Appends measurements into columnar `data.<field>.<index>` bucket columns.
+- Maintains `control.count`.
+- Maintains `control.min` and `control.max` for scalar measurement fields.
+- Excludes `_id` and the configured `metaField` from bucket columns and control min/max.
+- Uses MongoDB-like default bucket rounding/span windows:
+  - `seconds`: 60 second rounding, 3,600 second max span.
+  - `minutes`: 3,600 second rounding, 86,400 second max span.
+  - `hours`: 86,400 second rounding, 2,592,000 second max span.
+- Starts a new bucket when the existing bucket would exceed time span, 1,000 measurements, or the
+  approximate 12 MB bucket size limit.
 
-EloqDoc's rounding is 60× too fine at every level. For "seconds" granularity, EloqDoc creates
-distinct bucket time windows every 1 second; MongoDB does so every 1 minute. This produces far more
-bucket keys and prevents consolidation of measurements within the same minute.
+### Query Translation And Unpack
 
----
+Logical `find` and `aggregate` on a time-series collection run against the bucket collection with
+`$_internalUnpackBucket` inserted by `src/mongo/db/timeseries/query_translator.cpp`.
 
-## Gap 3 — No bucket closing conditions (IMPORTANT)
+Implemented bucket-level pruning:
 
-MongoDB closes a bucket and opens a new one when any of these triggers fire:
-- New measurement's timestamp exceeds `control.min.<timeField> + bucketMaxSpanSeconds`.
-- Bucket reaches 1 000 measurements.
-- Bucket document would exceed ~12 MB.
+- Time predicates become `control.min` / `control.max` overlap predicates.
+- Meta predicates become `meta` path predicates.
+- Measurement equality and range predicates become conservative `control.min` / `control.max`
+  predicates.
+- Time `$in` becomes a bucket-level equality-range disjunction.
+- `$and` keeps translatable children.
+- `$or` is pushed down only when every branch can be translated safely.
+- Multiple leading `$match` stages can each contribute bucket-level pushdown before unpack.
+- Leading `$sort` on time/meta paths can be pushed before unpack in conservative bucket form.
 
-EloqDoc has none of this logic. Since gap 1 means every measurement is its own bucket today, this
-is currently moot, but once gap 1 is fixed, missing close conditions will allow unbounded bucket
-growth.
+The original user pipeline stages remain after unpacking. Bucket pushdown is therefore a
+performance optimization and not the source of query correctness.
 
----
+### Updates And Deletes
 
-## Gap 4 — `control.min`/`control.max` only track the time field (IMPORTANT)
+Logical time-series updates and deletes are handled in `src/mongo/db/ops/write_ops_exec.cpp` with
+helpers in `src/mongo/db/timeseries/bucket_mutation.cpp`.
 
-**What EloqDoc does** (`src/mongo/db/timeseries/insert_router.cpp`):
-`control.min` and `control.max` contain only `{<timeField>: <value>}`.
+Implemented behavior:
 
-**What MongoDB does:**
-`control.min` and `control.max` track the minimum and maximum of *every* scalar measurement field
-in the bucket. For a measurement `{t: ..., temp: 22.5, host: "a"}` the bucket's control block
-records `{min: {t: ..., temp: 22.5}, max: {t: ..., temp: 22.5}}`.
+- `updateOne`, `updateMany`, `deleteOne`, and `deleteMany` operate on the logical namespace.
+- Matching bucket documents are unpacked into measurements, filtered with the user predicate, and
+  repacked.
+- Empty buckets are deleted.
+- Non-empty buckets are replaced with rebuilt `control` and `data` sections.
+- The bucket catalog is invalidated for mutated buckets.
 
-**Why it matters:**
-Without full control.min/max, bucket-level predicate pushdown in `query_translator.cpp` can only
-prune on time. A query like `{temp: {$gt: 30}}` must unpack every bucket. This also blocks gap 5.
+Intentional update/delete restrictions:
 
----
+- Time-series updates reject upsert, hint, collation, array filters, command `let`, runtime
+  constants, pipeline updates, replacement updates, and positional update operators.
+- Updates cannot modify the configured meta field.
+- Updates must leave the time field as a Date.
+- Time-series deletes reject hint, collation, command `let`, and runtime constants.
 
-## Gap 5 — Query pushdown only covers time and meta, not measurement fields (MODERATE)
+### Collection And Index Surface
 
-**What EloqDoc does** (`src/mongo/db/timeseries/query_translator.cpp`):
-Translates predicates on `timeField` → `control.min/max.<timeField>` and
-`metaField` → `meta.*`. All other predicates are dropped; no bucket-level filter is generated,
-so those fields require a full bucket scan.
+Implemented behavior:
 
-**What MongoDB does:**
-For any measurement field `f` with a range predicate like `{f: {$gt: V}}`, MongoDB adds
-`{"control.max.f": {$gt: V}}` to the bucket match (a bucket can only be skipped if its max value
-for `f` is ≤ V). Requires gap 4 to be filled first.
-
----
-
-## Gap 6 — Updates and deletes not supported (MISSING)
-
-`updateOne`, `updateMany`, `deleteOne`, `deleteMany` against the logical timeseries namespace are
-not intercepted. MongoDB (5.1+) supports these by unpacking matching bucket(s), filtering
-measurements, repacking survivors back into the bucket, and deleting the bucket if it becomes
-empty.
-
----
-
-## Gap 7 — `collMod` for granularity changes not implemented (MISSING)
-
-`db.runCommand({collMod: "coll", timeseries: {granularity: "minutes"}})` is not handled. MongoDB
-allows one-way granularity promotion (seconds → minutes → hours), which widens the bucket time
-window for new inserts without rewriting existing buckets. Existing buckets are left as-is.
+- `createCollection` accepts `timeseries` options and creates the backing bucket collection.
+- Missing bucket collections are repaired on first use.
+- `collMod` supports one-way granularity promotion for non-custom-bucket time-series collections.
+- `createIndexes` on a logical time-series collection translates user-visible keys to bucket
+  schema keys.
+- `listIndexes` on the logical collection translates bucket index specs back to logical names.
+- `listCollections` hides backing `system.buckets.*` collections.
+- Time-series option parsing enforces mutual exclusion between `granularity` and custom
+  `bucketMaxSpanSeconds` / `bucketRoundingSeconds`.
 
 ---
 
-## Gap 8 — No secondary indexes on timeseries collections (MISSING)
+## Remaining Differences From MongoDB
 
-`db.ts.createIndex({host: 1, t: 1})` is not intercepted or translated. MongoDB transparently maps
-user-visible index specs to the underlying `system.buckets.*` collection's schema:
-- `metaField` path → `meta.*`
-- `timeField` → `data.<timeField>`
-- measurement field `f` → `data.f`
+The original gap list is mostly closed, but EloqDoc still does not claim full MongoDB
+time-series parity.
 
-`listIndexes` on the logical collection returns the translated-back user schema, hiding internal
-bucket schema details.
+Remaining functional or semantic differences:
 
----
+- Bucket collections are ordinary collections, not MongoDB clustered bucket collections.
+- Bucket compression is not implemented.
+- TTL is bucket-level only: EloqDoc deletes expired buckets and does not remove individual expired
+  measurements from otherwise-live buckets.
+- Explain output may expose the physical `system.buckets.<collection>` namespace.
+- Geospatial bucket indexes are not implemented.
+- Sharded time-series collection semantics are not implemented.
+- Retryability, transactions, write concern, and replication edge cases follow EloqDoc/Data
+  Substrate behavior rather than MongoDB replica-set internals.
 
-## Gap 9 — `listCollections` exposes `system.buckets.*` collections (INCOMPLETE)
+Remaining performance differences:
 
-`src/mongo/db/commands/list_collections.cpp` has no filtering for `system.buckets.*` namespaces.
-`db.getCollectionNames()` returns both `metrics` and `system.buckets.metrics`. MongoDB hides the
-bucket collections from `listCollections` output.
-
----
-
-## Gap 10 — Missing mutual-exclusion validation on timeseries options (MINOR)
-
-`src/mongo/db/timeseries/timeseries_options.cpp` accepts `bucketMaxSpanSeconds` and
-`bucketRoundingSeconds` alongside `granularity` without rejecting the combination. MongoDB
-enforces:
-- `granularity` and custom `bucketMaxSpanSeconds`/`bucketRoundingSeconds` are mutually exclusive.
-- When using custom span/rounding (without granularity), `bucketRoundingSeconds` must equal
-  `bucketMaxSpanSeconds`.
+- `$group` rewrites that answer min/max/count from `control.min` / `control.max` without unpacking
+  are not implemented.
+- Last-point and DISTINCT_SCAN style optimizations are not implemented.
+- `$limit` pushdown is not implemented.
+- Meta-only `$project` / `$addFields` pushdown is not implemented.
+- Broader sort and index-aware time-series planning remains limited.
 
 ---
 
-## Gap 11 — No bucket reopening after process restart (MISSING, lower priority)
+## Validation Status
 
-After a process restart the in-memory `BucketCatalog` is empty. Subsequent inserts for a
-`(meta, time)` key that already has an on-disk open bucket will create duplicate buckets instead
-of appending. The fix is query-based reopening: before inserting, query `system.buckets.*` for an
-existing open bucket — the same mechanism needed for gap 1.
+Focused C++ validation has been run for the core time-series helper paths:
 
----
+- `query_translator_test`
+- `insert_router_test`
+- `bucket_mutation_test`
+- `collection_options_test`
 
-## Gap 12 — Pipeline pushdown optimizations absent (PERFORMANCE)
-
-MongoDB has 12+ optimization passes on timeseries aggregation pipelines: sort pushdown before
-unpack, `$group` rewrite to use `control.min`/`control.max` (eliminates unpacking entirely for
-min/max/count queries), last-point DISTINCT_SCAN, `$limit` pushdown, `$project`/`$addFields`
-pushdown for meta-only fields, and others. EloqDoc only prepends a bucket-level time+meta `$match`.
-These are pure performance optimizations; correctness is preserved by the unpack stage regardless.
-
----
-
-## Priority Summary
-
-| # | Gap | Impact |
-|---|-----|--------|
-| 1 | New bucket per measurement instead of UPDATE | Correctness + storage |
-| 2 | Granularity rounding values 60× too fine | Correctness |
-| 3 | No bucket closing (max count / span / size) | Correctness once #1 fixed |
-| 4 | `control.min`/`control.max` only has timeField | Query correctness / perf |
-| 5 | No measurement-field bucket predicate pushdown | Query performance |
-| 6 | No updates/deletes on timeseries collections | API completeness |
-| 7 | No `collMod` for granularity changes | API completeness |
-| 8 | No secondary indexes on timeseries collections | API completeness + perf |
-| 9 | `system.buckets.*` visible in `listCollections` | API correctness |
-| 10 | Missing mutual-exclusion validation on options | Minor validation |
-| 11 | No bucket reopening after process restart | Correctness after restart |
-| 12 | Missing pipeline pushdown optimizations | Performance only |
-
-Gaps 1–3 are the write-path core and should be addressed together. Fix gap 1 (bucket accumulation
-via UPDATE) and gap 2 (rounding constants) first; gap 3 follows naturally once buckets hold
-multiple measurements. Gaps 4–5 are a read-path pair — fix 4 first, then 5. Gaps 6–9 are
-independent API surface features that can be tackled in any order.
+The tree also contains focused JS tests under `tests/jstests/eloq_basic/timeseries/`. Local JS
+runtime validation is currently limited by server fixture/startup constraints in this work
+environment, so the strongest routinely available validation here is focused C++ coverage plus the
+`install-core` build.
