@@ -133,8 +133,7 @@ Status addGeneralServerOptions(moe::OptionSection* options) {
         ->addOptionChaining("net.adaptiveThreadNum",
                             "adaptiveThreadNum",
                             moe::Int,
-                            "set the thread num for adaptive service executor mode")
-        .setDefault(moe::Value(1));
+                            "set the thread num for adaptive service executor mode");
 
 #if MONGO_ENTERPRISE_VERSION
     options->addOptionChaining("security.redactClientLogData",

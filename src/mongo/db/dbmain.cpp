@@ -34,6 +34,12 @@
 #include "mongo/util/text.h"
 
 #include <gflags/gflags.h>
+#include <cstdlib>
+#include <vector>
+
+#if !defined(_WIN32)
+#include <signal.h>
+#endif
 
 #if defined(_WIN32)
 // In Windows, wmain() is an alternate entry point for main(), and receives the same parameters
@@ -48,12 +54,28 @@ int wmain(int argc, wchar_t* argvW[], wchar_t* envpW[]) {
 }
 #else
 int main(int argc, char* argv[], char** envp) {
+#if !defined(_WIN32)
+    sigset_t asyncSignals;
+    sigemptyset(&asyncSignals);
+    sigaddset(&asyncSignals, SIGHUP);
+    sigaddset(&asyncSignals, SIGINT);
+    sigaddset(&asyncSignals, SIGTERM);
+    sigaddset(&asyncSignals, SIGUSR1);
+    sigaddset(&asyncSignals, SIGXCPU);
+    if (pthread_sigmask(SIG_SETMASK, &asyncSignals, 0) != 0) {
+        std::abort();
+    }
+#endif
+
     // When compiled as standalone mode, allow unrecognized flags
     // to be passed through to mongod
     gflags::AllowCommandLineReparsing();
     // Allow all mongod-specific flags to pass through without error
     gflags::SetCommandLineOption("undefok", "*");
-    GFLAGS_NAMESPACE::ParseCommandLineNonHelpFlags(&argc, &argv, false);
+    std::vector<char*> gflagsArgv(argv, argv + argc);
+    char** gflagsArgvData = gflagsArgv.data();
+    int gflagsArgc = argc;
+    GFLAGS_NAMESPACE::ParseCommandLineNonHelpFlags(&gflagsArgc, &gflagsArgvData, false);
     int exitCode = mongo::mongoDbMain(argc, argv, envp);
     mongo::quickExit(exitCode);
 }

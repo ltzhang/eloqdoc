@@ -1031,5 +1031,6 @@ executor:
   fixture:
     class: MongoDFixture
     mongod_options:
+      storageEngine: eloq
       set_parameters:
         enableTestCommands: 1

@@ -33,9 +33,12 @@
 #include "mongo/util/signal_handlers.h"
 
 #include <signal.h>
+#include <string.h>
 #include <time.h>
 
 #if !defined(_WIN32)
+#include <errno.h>
+#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -163,6 +166,35 @@ void eventProcessingThread() {
 // ensure the db and log mutexes aren't held. Because this is run in a different thread, it does
 // not need to be safe to call in signal context.
 sigset_t asyncSignals;
+int asyncSignalPipe[2] = {-1, -1};
+
+void asyncSignalHandler(int actualSignal) {
+    if (asyncSignalPipe[1] == -1) {
+        return;
+    }
+
+    int savedErrno = errno;
+    const auto signalToWrite = static_cast<unsigned char>(actualSignal);
+    const auto ignored = write(asyncSignalPipe[1], &signalToWrite, sizeof(signalToWrite));
+    static_cast<void>(ignored);
+    errno = savedErrno;
+}
+
+bool drainAsyncSignalPipe(int* actualSignal) {
+    if (asyncSignalPipe[0] == -1) {
+        return false;
+    }
+
+    unsigned char signalFromPipe = 0;
+    const auto bytesRead = read(asyncSignalPipe[0], &signalFromPipe, sizeof(signalFromPipe));
+    if (bytesRead == sizeof(signalFromPipe)) {
+        *actualSignal = signalFromPipe;
+        return true;
+    }
+
+    return false;
+}
+
 void signalProcessingThread(LogFileStatus rotate) {
     setThreadName("signalProcessingThread");
 
@@ -171,11 +203,20 @@ void signalProcessingThread(LogFileStatus rotate) {
 
     while (true) {
         int actualSignal = 0;
-        int status = [&] {
-            MONGO_IDLE_THREAD_BLOCK;
-            return sigwait(&asyncSignals, &actualSignal);
-        }();
-        fassert(16781, status == 0);
+        if (!drainAsyncSignalPipe(&actualSignal)) {
+            int status = [&] {
+                MONGO_IDLE_THREAD_BLOCK;
+                timespec timeout;
+                timeout.tv_sec = 1;
+                timeout.tv_nsec = 0;
+                return sigtimedwait(&asyncSignals, nullptr, &timeout);
+            }();
+            if (status == -1) {
+                fassert(16781, errno == EAGAIN || errno == EINTR);
+                continue;
+            }
+            actualSignal = status;
+        }
         switch (actualSignal) {
             case SIGUSR1:
                 // log rotate signal
@@ -218,6 +259,31 @@ void setupSignalHandlers() {
     sigaddset(&asyncSignals, SIGTERM);
     sigaddset(&asyncSignals, SIGUSR1);
     sigaddset(&asyncSignals, SIGXCPU);
+
+    if (asyncSignalPipe[0] == -1) {
+        invariant(pipe(asyncSignalPipe) == 0);
+        invariant(fcntl(asyncSignalPipe[0], F_SETFL, O_NONBLOCK) != -1);
+        invariant(fcntl(asyncSignalPipe[1], F_SETFL, O_NONBLOCK) != -1);
+        invariant(fcntl(asyncSignalPipe[0], F_SETFD, FD_CLOEXEC) != -1);
+        invariant(fcntl(asyncSignalPipe[1], F_SETFD, FD_CLOEXEC) != -1);
+    }
+
+    struct sigaction asyncAction;
+    memset(&asyncAction, 0, sizeof(asyncAction));
+    asyncAction.sa_handler = asyncSignalHandler;
+    sigemptyset(&asyncAction.sa_mask);
+    asyncAction.sa_flags = 0;
+    invariant(sigaction(SIGHUP, &asyncAction, nullptr) == 0);
+    invariant(sigaction(SIGINT, &asyncAction, nullptr) == 0);
+    invariant(sigaction(SIGTERM, &asyncAction, nullptr) == 0);
+    invariant(sigaction(SIGUSR1, &asyncAction, nullptr) == 0);
+    invariant(sigaction(SIGXCPU, &asyncAction, nullptr) == 0);
+
+    // Eloq/brpc startup can create background threads before mongod reaches
+    // startSignalProcessingThread(). Block the async signals now so those
+    // threads inherit the mask and SIGTERM is handled by the sigwait thread
+    // instead of terminating the process directly.
+    invariant(pthread_sigmask(SIG_SETMASK, &asyncSignals, 0) == 0);
 #endif
 }
 
