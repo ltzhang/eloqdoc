@@ -690,7 +690,7 @@ TEST(TimeSeriesQueryTranslator, DoesNotAddBucketMatchForMixedTypeMeasurementInPr
 TEST(TimeSeriesQueryTranslator, BucketAggregationRequestPreservesOptions) {
     AggregationRequest request(NamespaceString("db.metrics"), {fromjson("{$match: {v: 1}}")});
     const auto collation = BSON("locale" << "simple");
-    const auto hint = BSON("v" << 1);
+    const auto hint = BSON("v" << 1 << "tags.sensor" << 1);
     const auto letVariables = BSON("threshold" << 5);
     const auto runtimeConstants = BSON("localNow" << Date_t::fromMillisSinceEpoch(1));
     const auto readConcern = BSON("level" << "local");
@@ -718,7 +718,7 @@ TEST(TimeSeriesQueryTranslator, BucketAggregationRequestPreservesOptions) {
                   bucketRequest.getNamespaceString());
     ASSERT_EQUALS(7, bucketRequest.getBatchSize());
     ASSERT_BSONOBJ_EQ(collation, bucketRequest.getCollation());
-    ASSERT_BSONOBJ_EQ(hint, bucketRequest.getHint());
+    ASSERT_BSONOBJ_EQ(BSON("data.v" << 1 << "meta.sensor" << 1), bucketRequest.getHint());
     ASSERT_BSONOBJ_EQ(letVariables, bucketRequest.getLet());
     ASSERT_BSONOBJ_EQ(runtimeConstants, bucketRequest.getRuntimeConstants());
     ASSERT_EQUALS(std::string("ts-read"), bucketRequest.getComment());
@@ -734,6 +734,16 @@ TEST(TimeSeriesQueryTranslator, BucketAggregationRequestPreservesOptions) {
     ASSERT_EQUALS(std::string("$match"), bucketRequest.getPipeline()[0].firstElementFieldName());
     ASSERT_EQUALS(std::string("$_internalUnpackBucket"),
                   bucketRequest.getPipeline()[1].firstElementFieldName());
+}
+
+TEST(TimeSeriesQueryTranslator, BucketAggregationRequestPreservesNaturalHint) {
+    AggregationRequest request(NamespaceString("db.metrics"), {fromjson("{$match: {v: 1}}")});
+    request.setHint(BSON("$natural" << 1));
+
+    const auto bucketRequest = makeBucketAggregationRequest(
+        NamespaceString("db.system.buckets.metrics"), makeOptions(), request);
+
+    ASSERT_BSONOBJ_EQ(BSON("$natural" << 1), bucketRequest.getHint());
 }
 
 }  // namespace

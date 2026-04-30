@@ -11,6 +11,7 @@
 #include "mongo/db/timeseries/query_translator.h"
 
 #include "mongo/base/string_data.h"
+#include "mongo/db/timeseries/index_schema.h"
 #include "mongo/util/mongoutils/str.h"
 
 #include <set>
@@ -972,6 +973,18 @@ BSONObj makeMetaDistinctGroupRewrite(const CollectionOptions& options,
     return BSON("$group" << bucketGroup.obj());
 }
 
+BSONObj translateHintToBucketSchema(const NamespaceString& bucketNss,
+                                    const CollectionOptions& options,
+                                    const BSONObj& hint) {
+    if (hint.isEmpty() || hint.firstElement().fieldNameStringData() == "$natural"_sd) {
+        return hint;
+    }
+
+    return translateIndexSpecToBucketSchema(bucketNss, options, BSON("key" << hint))["key"]
+        .Obj()
+        .getOwned();
+}
+
 }  // namespace
 
 std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
@@ -1127,7 +1140,7 @@ AggregationRequest makeBucketAggregationRequest(const NamespaceString& bucketNss
                                      makeBucketPipeline(options, request.getPipeline()));
     bucketRequest.setBatchSize(request.getBatchSize());
     bucketRequest.setCollation(request.getCollation());
-    bucketRequest.setHint(request.getHint());
+    bucketRequest.setHint(translateHintToBucketSchema(bucketNss, options, request.getHint()));
     bucketRequest.setLet(request.getLet());
     bucketRequest.setRuntimeConstants(request.getRuntimeConstants());
     bucketRequest.setComment(request.getComment());

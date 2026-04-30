@@ -102,6 +102,8 @@ Implemented bucket-level pruning:
   `meta` path and summing `control.count`.
 - The distinct-command aggregation shape over a direct meta-field path can avoid unpacking,
   including exact meta-only `$match` prefixes.
+- Logical object hints on time-series reads are translated to bucket-schema hints. `$natural` hints
+  pass through unchanged.
 
 The original user pipeline stages remain after unpacking. Bucket pushdown is therefore a
 performance optimization and not the source of query correctness.

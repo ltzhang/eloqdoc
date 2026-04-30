@@ -368,6 +368,8 @@ Implemented:
 - Bucket-level TTL deletes buckets whose `control.max.<timeField>` is expired.
 - Logical `updateOne`, `updateMany`, `deleteOne`, and `deleteMany` are supported by unpacking
   matching buckets, filtering/updating measurements, and repacking survivors.
+- Logical object hints on `find` and `aggregate` time-series reads are translated to bucket-schema
+  hints; `$natural` hints pass through unchanged.
 - `collMod` supports one-way granularity promotion for time-series collections that do not use
   custom bucket span/rounding, and rejects other nested time-series options.
 - `createIndexes`, `listIndexes`, `dropIndexes`, and index-targeted `collMod` on logical
@@ -442,6 +444,8 @@ Query pruning:
   path and summing `control.count`.
 - The distinct-command aggregation shape over a direct meta-field path can be answered without
   unpacking, including exact meta-only `$match` prefixes.
+- Logical object hints are translated to bucket-schema hints before executing against the backing
+  bucket collection; `$natural` hints pass through unchanged.
 - The original measurement-level predicate remains after unpacking, so bucket pruning is a
   performance optimization rather than the source of correctness.
 
