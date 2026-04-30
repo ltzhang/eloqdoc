@@ -257,14 +257,27 @@ TEST(TimeSeriesQueryTranslator, RewritesWholeCollectionGroupMeasurementBoundsWit
         pipeline[0]);
 }
 
-TEST(TimeSeriesQueryTranslator, DoesNotRewriteGroupedTimeSeriesGroupBeforeUnpack) {
+TEST(TimeSeriesQueryTranslator, RewritesMetaGroupedCountAndMeasurementBoundsWithoutUnpack) {
     const auto pipeline = makeBucketPipeline(
         makeOptions(),
-        {fromjson("{$group: {_id: '$tags.host', n: {$sum: 1}}}")});
+        {fromjson(
+            "{$group: {_id: '$tags.host', n: {$sum: 1}, minV: {$min: '$v'}, maxT: {$max: '$t'}}}")});
+
+    ASSERT_EQUALS(1U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: '$meta.host', n: {$sum: '$control.count'}, "
+                               "minV: {$min: '$control.min.v'}, "
+                               "maxT: {$max: '$control.max.t'}}}"),
+                      pipeline[0]);
+}
+
+TEST(TimeSeriesQueryTranslator, DoesNotRewriteMeasurementGroupedTimeSeriesGroupBeforeUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {fromjson("{$group: {_id: '$v', n: {$sum: 1}}}")});
 
     ASSERT_EQUALS(2U, pipeline.size());
     ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
-    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: '$tags.host', n: {$sum: 1}}}"), pipeline[1]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$group: {_id: '$v', n: {$sum: 1}}}"), pipeline[1]);
 }
 
 TEST(TimeSeriesQueryTranslator, DoesNotRewriteMetaFieldGroupBoundsBeforeUnpack) {

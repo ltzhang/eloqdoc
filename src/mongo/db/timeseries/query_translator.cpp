@@ -468,12 +468,30 @@ bool appendWholeCollectionGroupRewrite(const CollectionOptions& options,
 
     const auto groupSpec = firstElem.Obj();
     const auto idElem = groupSpec["_id"];
-    if (idElem.eoo() || idElem.type() != mongo::jstNULL) {
+    if (idElem.eoo()) {
         return false;
     }
 
     BSONObjBuilder bucketGroup;
-    bucketGroup.appendNull("_id");
+    if (idElem.type() == mongo::jstNULL) {
+        bucketGroup.appendNull("_id");
+    } else if (idElem.type() == mongo::String) {
+        const StringData idExpression(idElem.String());
+        if (!idExpression.startsWith("$") || idExpression.startsWith("$$")) {
+            return false;
+        }
+
+        const auto logicalField = idExpression.substr(1);
+        std::string metaPath;
+        if (!translateMetaPath(logicalField, tsOptions.metaField, &metaPath)) {
+            return false;
+        }
+        const std::string bucketIdPath = str::stream() << "$" << metaPath;
+        bucketGroup.append("_id", bucketIdPath);
+    } else {
+        return false;
+    }
+
     bool hasAccumulator = false;
 
     BSONForEach(field, groupSpec) {
