@@ -406,10 +406,12 @@ Query pruning:
 - A leading `$limit` can be pushed before unpacking when it is the first stage or when it
   immediately follows a pushed time/meta bucket sort, with the original limit still applied after
   unpack.
-- A leading simple inclusion `$project` over time, meta, and measurement fields can be pushed before
-  unpacking as a bucket projection that keeps `control.count`, `meta`, and selected `data.<field>`
-  paths. It can also be pushed after leading bucket-level `$match` and time/meta `$sort` pushdowns
-  while retaining fields needed by the preserved post-unpack matches and sorts.
+- A leading simple inclusion or exclusion `$project` over time, meta, and measurement fields can be
+  pushed before unpacking as a bucket projection over `meta` and selected `data.<field>` paths.
+  Inclusion pushdown also retains `control.count`. It can also be pushed after leading bucket-level
+  `$match` and time/meta `$sort` pushdowns. Inclusion pushdown retains fields needed by preserved
+  post-unpack matches and sorts; exclusion pushdown avoids excluding fields needed by those
+  preserved stages.
 - A leading meta-only `$addFields` / `$set` with literal values can be pushed before unpacking as a
   bucket stage over `meta` paths.
 - A single-stage whole-collection or meta-grouped `$group` can be answered without unpacking when

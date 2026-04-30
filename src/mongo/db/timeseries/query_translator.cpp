@@ -464,6 +464,17 @@ void addBucketProjectionField(const TimeseriesOptions& tsOptions,
     }
 }
 
+void addBucketExclusionField(const TimeseriesOptions& tsOptions,
+                             StringData field,
+                             BSONObjBuilder* bucketProject) {
+    std::string metaPath;
+    if (translateMetaPath(field, tsOptions.metaField, &metaPath)) {
+        bucketProject->append(metaPath, 0);
+    } else {
+        bucketProject->append(str::stream() << "data." << field, 0);
+    }
+}
+
 void collectMatchDependencies(const BSONObj& match, std::set<std::string>* fields) {
     BSONForEach(predicate, match) {
         const StringData field = predicate.fieldNameStringData();
@@ -513,6 +524,20 @@ bool isCoveredByProjectedFields(StringData requiredField, const std::set<std::st
     return false;
 }
 
+bool exclusionConflictsWithRequiredField(StringData excludedField, StringData requiredField) {
+    return logicalFieldCovers(excludedField, requiredField) ||
+        logicalFieldCovers(requiredField, excludedField);
+}
+
+bool conflictsWithRequiredFields(StringData excludedField, const std::set<std::string>& required) {
+    for (const auto& requiredField : required) {
+        if (exclusionConflictsWithRequiredField(excludedField, requiredField)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool appendLeadingProjectPushdown(const CollectionOptions& options,
                                   const BSONObj& stage,
                                   const std::set<std::string>& requiredFields,
@@ -527,9 +552,9 @@ bool appendLeadingProjectPushdown(const CollectionOptions& options,
 
     BSONObjBuilder bucketProject;
     bucketProject.append("_id", 0);
-    bucketProject.append("control.count", 1);
     bool hasFieldProjection = false;
     std::set<std::string> projectedFields;
+    boost::optional<bool> isInclusionProjection;
 
     BSONForEach(projection, firstElem.Obj()) {
         const auto field = projection.fieldNameStringData();
@@ -540,12 +565,33 @@ bool appendLeadingProjectPushdown(const CollectionOptions& options,
             continue;
         }
 
-        if (!isTruthyProjectionValue(projection)) {
+        const bool isTruthy = isTruthyProjectionValue(projection);
+        const bool isFalsy = isFalsyProjectionValue(projection);
+        if (!isTruthy && !isFalsy) {
             return false;
         }
 
-        addBucketProjectionField(tsOptions, field, &bucketProject);
-        projectedFields.insert(field.toString());
+        if (!isInclusionProjection) {
+            isInclusionProjection = isTruthy;
+            if (*isInclusionProjection) {
+                bucketProject.append("control.count", 1);
+            }
+        } else if (*isInclusionProjection != isTruthy) {
+            return false;
+        }
+
+        if (*isInclusionProjection) {
+            addBucketProjectionField(tsOptions, field, &bucketProject);
+            projectedFields.insert(field.toString());
+            hasFieldProjection = true;
+            continue;
+        }
+
+        if (conflictsWithRequiredFields(field, requiredFields)) {
+            continue;
+        }
+
+        addBucketExclusionField(tsOptions, field, &bucketProject);
         hasFieldProjection = true;
     }
 
@@ -553,11 +599,13 @@ bool appendLeadingProjectPushdown(const CollectionOptions& options,
         return false;
     }
 
-    for (const auto& field : requiredFields) {
-        if (isCoveredByProjectedFields(field, projectedFields)) {
-            continue;
+    if (*isInclusionProjection) {
+        for (const auto& field : requiredFields) {
+            if (isCoveredByProjectedFields(field, projectedFields)) {
+                continue;
+            }
+            addBucketProjectionField(tsOptions, field, &bucketProject);
         }
-        addBucketProjectionField(tsOptions, field, &bucketProject);
     }
 
     translated->push_back(BSON("$project" << bucketProject.obj()));

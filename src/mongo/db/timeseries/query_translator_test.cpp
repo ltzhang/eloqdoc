@@ -211,6 +211,36 @@ TEST(TimeSeriesQueryTranslator, PushesDownSimpleInclusionProjectBeforeUnpack) {
     ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
 }
 
+TEST(TimeSeriesQueryTranslator, PushesDownSimpleExclusionProjectBeforeUnpack) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(),
+                           {fromjson("{$project: {_id: 0, v: 0, 'tags.site': 0}}"),
+                            fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(4U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, 'data.v': 0, 'meta.site': 0}}"),
+                      pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, v: 0, 'tags.site': 0}}"), pipeline[2]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
+}
+
+TEST(TimeSeriesQueryTranslator, ExclusionProjectPushdownKeepsRequiredSortFields) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(),
+                           {fromjson("{$sort: {t: 1, 'tags.host': -1}}"),
+                            fromjson("{$project: {_id: 0, t: 0, tags: 0, v: 0}}"),
+                            fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(6U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$sort: {'control.min.t': 1, 'meta.host': -1}}"), pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, 'data.v': 0}}"), pipeline[1]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[2].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$sort: {t: 1, 'tags.host': -1}}"), pipeline[3]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, t: 0, tags: 0, v: 0}}"), pipeline[4]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[5]);
+}
+
 TEST(TimeSeriesQueryTranslator, PushesDownProjectAfterLeadingBucketMatchesBeforeUnpack) {
     const auto start = Date_t::fromMillisSinceEpoch(1735689600000LL);
     const auto pipeline =
