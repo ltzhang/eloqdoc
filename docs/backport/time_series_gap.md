@@ -55,8 +55,9 @@ Implemented behavior:
 
 ### Query Translation And Unpack
 
-Logical `find` and `aggregate` on a time-series collection run against the bucket collection with
-`$_internalUnpackBucket` inserted by `src/mongo/db/timeseries/query_translator.cpp`.
+Logical `find`, `aggregate`, `count`, and `distinct` on a time-series collection run against the
+bucket collection with `$_internalUnpackBucket` inserted by
+`src/mongo/db/timeseries/query_translator.cpp` when the query needs measurement-level documents.
 
 Implemented bucket-level pruning:
 

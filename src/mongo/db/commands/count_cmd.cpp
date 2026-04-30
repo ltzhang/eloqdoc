@@ -31,6 +31,7 @@
 #include "mongo/platform/basic.h"
 
 #include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/catalog/collection_catalog_entry.h"
 #include "mongo/db/client.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/commands/run_aggregate.h"
@@ -42,6 +43,8 @@
 #include "mongo/db/query/get_executor.h"
 #include "mongo/db/query/plan_summary_stats.h"
 #include "mongo/db/query/view_response_formatter.h"
+#include "mongo/db/timeseries/query_translator.h"
+#include "mongo/db/timeseries/timeseries_namespace.h"
 #include "mongo/db/views/resolved_view.h"
 #include "mongo/util/log.h"
 
@@ -148,7 +151,6 @@ public:
         }
 
         Collection* const collection = ctx->getCollection();
-
         // Prevent chunks from being cleaned up during yields - this allows us to only check the
         // version on initial entry into count.
         auto rangePreserver = CollectionShardingState::get(opCtx, nss)->getMetadata(opCtx);
@@ -201,6 +203,29 @@ public:
         }
 
         Collection* const collection = ctx->getCollection();
+        if (collection) {
+            auto collectionOptions = collection->getCatalogEntry()->getCollectionOptions(opCtx);
+            if (collectionOptions.timeseries) {
+                auto aggregationCommand = request.getValue().asAggregationCommand();
+                uassertStatusOK(aggregationCommand.getStatus());
+
+                auto aggRequest = uassertStatusOK(
+                    AggregationRequest::parseFromBSON(nss, aggregationCommand.getValue()));
+                auto bucketNss = timeseries::makeBucketNamespace(nss);
+                auto bucketRequest =
+                    timeseries::makeBucketAggregationRequest(bucketNss, collectionOptions, aggRequest);
+                auto bucketCmd = bucketRequest.serializeToCommandObj().toBson();
+
+                ctx.reset();
+                uassertStatusOK(timeseries::ensureBucketCollection(opCtx, nss));
+                BSONObjBuilder aggResultBuilder;
+                uassertStatusOK(
+                    runAggregate(opCtx, bucketNss, bucketRequest, bucketCmd, aggResultBuilder));
+                uassertStatusOK(
+                    ViewResponseFormatter(aggResultBuilder.obj()).appendAsCountResponse(&result));
+                return true;
+            }
+        }
 
         // Prevent chunks from being cleaned up during yields - this allows us to only check the
         // version on initial entry into count.

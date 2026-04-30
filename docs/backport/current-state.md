@@ -363,8 +363,8 @@ Implemented:
 - Missing bucket collections can be repaired on first use.
 - Inserts into the logical namespace route into reusable columnar bucket documents.
 - `$_internalUnpackBucket` unpacks bucket documents into measurement documents.
-- `find` and `aggregate` on the logical namespace translate to aggregation on the bucket
-  collection with `$_internalUnpackBucket`.
+- `find`, `aggregate`, `count`, and `distinct` on the logical namespace translate to aggregation
+  on the bucket collection with `$_internalUnpackBucket` when needed.
 - Bucket-level TTL deletes buckets whose `control.max.<timeField>` is expired.
 - Logical `updateOne`, `updateMany`, `deleteOne`, and `deleteMany` are supported by unpacking
   matching buckets, filtering/updating measurements, and repacking survivors.
