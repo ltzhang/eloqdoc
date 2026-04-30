@@ -85,7 +85,8 @@ Implemented bucket-level pruning:
   unpack as the same bucket-level exclusion projection, with the original `$unset` preserved after
   unpack and required post-unpack match/sort fields retained.
 - A leading meta-only `$addFields` / `$set` with literal values can be pushed before unpack as a
-  bucket update over `meta` paths, while the original stage is preserved after unpack.
+  bucket update over `meta` paths, while the original stage is preserved after unpack. The same
+  pushdown can follow leading bucket-level `$match` and time/meta `$sort` pushdowns.
 - A single-stage whole-collection or meta-grouped `$group` can avoid unpacking when it only
   computes `$sum: 1`, `$min` / `$max` over the time field, scalar measurement fields, or meta
   fields, and `$addToSet` over direct meta-field paths. It rewrites those accumulators to
@@ -183,13 +184,13 @@ Focused C++ validation has been run for the core time-series helper paths:
 
 The May 1, 2026 Gap 12 `$limit`, sort-plus-limit, simple inclusion/exclusion `$project`, simple
 `$unset`, `$project`/`$unset` after leading bucket `$match` and time/meta `$sort` pushdowns,
-meta-only `$addFields` / `$set`, numeric measurement `$in`, exact meta-match grouped aggregation,
-bucket-level `$count`, meta-field `$sortByCount`, meta-field distinct, direct meta-field
-`$addToSet`, and whole-collection/meta-grouped time/count/measurement-bound `$group` changes were
-validated with:
+meta-only `$addFields` / `$set` including after leading bucket `$match` and time/meta `$sort`
+pushdowns, numeric measurement `$in`, exact meta-match grouped aggregation, bucket-level `$count`,
+meta-field `$sortByCount`, meta-field distinct, direct meta-field `$addToSet`, and
+whole-collection/meta-grouped time/count/measurement-bound `$group` changes were validated with:
 
 - `document_source_internal_unpack_bucket_test` (4 tests, 0 failures)
-- `query_translator_test` (47 tests, 0 failures)
+- `query_translator_test` (49 tests, 0 failures)
 - `insert_router_test` (2 tests, 0 failures)
 - `bucket_mutation_test` (5 tests, 0 failures across bucket catalog and mutation suites)
 - `collection_options_test` (35 tests, 0 failures)

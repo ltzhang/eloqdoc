@@ -416,7 +416,8 @@ Query pruning:
   unpacking as the same bucket-level exclusion projection, with the original `$unset` still applied
   after unpacking.
 - A leading meta-only `$addFields` / `$set` with literal values can be pushed before unpacking as a
-  bucket stage over `meta` paths.
+  bucket stage over `meta` paths, including after leading bucket-level `$match` and time/meta
+  `$sort` pushdowns.
 - A single-stage whole-collection or meta-grouped `$group` can be answered without unpacking when
   it only computes count, time/measurement/meta min/max, and direct meta-field `$addToSet` from
   bucket fields.

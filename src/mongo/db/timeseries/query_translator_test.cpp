@@ -329,6 +329,40 @@ TEST(TimeSeriesQueryTranslator, PushesDownMetaOnlySetBeforeUnpack) {
     ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
 }
 
+TEST(TimeSeriesQueryTranslator, PushesDownMetaOnlyAddFieldsAfterLeadingBucketMatch) {
+    const auto start = Date_t::fromMillisSinceEpoch(1735689600000LL);
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(),
+                           {BSON("$match" << BSON("t" << BSON("$gte" << start))),
+                            fromjson("{$addFields: {'tags.site': 'north'}}"),
+                            fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(6U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("control.max.t" << BSON("$gte" << start))),
+                      pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$addFields: {'meta.site': 'north'}}"), pipeline[1]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[2].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(BSON("$match" << BSON("t" << BSON("$gte" << start))), pipeline[3]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$addFields: {'tags.site': 'north'}}"), pipeline[4]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[5]);
+}
+
+TEST(TimeSeriesQueryTranslator, PushesDownMetaOnlySetAfterLeadingBucketSort) {
+    const auto pipeline =
+        makeBucketPipeline(makeOptions(),
+                           {fromjson("{$sort: {t: 1, 'tags.host': -1}}"),
+                            fromjson("{$set: {'tags.site': 'north'}}"),
+                            fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(6U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$sort: {'control.min.t': 1, 'meta.host': -1}}"), pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$set: {'meta.site': 'north'}}"), pipeline[1]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[2].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$sort: {t: 1, 'tags.host': -1}}"), pipeline[3]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$set: {'tags.site': 'north'}}"), pipeline[4]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[5]);
+}
+
 TEST(TimeSeriesQueryTranslator, DoesNotPushDownMeasurementAddFieldsBeforeUnpack) {
     const auto pipeline = makeBucketPipeline(
         makeOptions(), {fromjson("{$addFields: {v: 7}}"), fromjson("{$limit: 5}")});

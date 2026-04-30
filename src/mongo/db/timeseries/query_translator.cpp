@@ -1106,7 +1106,7 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
             break;
         }
 
-        if (translated.empty() && appendLeadingMetaAddFieldsPushdown(options, stage, &translated)) {
+        if (appendLeadingMetaAddFieldsPushdown(options, stage, &translated)) {
             break;
         }
 
