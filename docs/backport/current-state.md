@@ -413,8 +413,8 @@ Query pruning:
   bucket stage over `meta` paths.
 - A single-stage whole-collection or meta-grouped `$group` can be answered without unpacking when
   it only computes count and time/measurement/meta min/max from bucket fields.
-- A leading exact meta-only `$match` can be combined with a supported bucket-level `$group` without
-  unpacking.
+- One or more leading exact meta-only `$match` stages can be combined with a supported bucket-level
+  `$group` without unpacking.
 - The original measurement-level predicate remains after unpacking, so bucket pruning is a
   performance optimization rather than the source of correctness.
 

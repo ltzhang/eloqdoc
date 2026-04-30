@@ -285,6 +285,22 @@ TEST(TimeSeriesQueryTranslator, RewritesMetaMatchedGroupWithoutUnpack) {
                       pipeline[1]);
 }
 
+TEST(TimeSeriesQueryTranslator, RewritesMultipleMetaMatchedGroupWithoutUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {fromjson("{$match: {'tags.host': 'a'}}"),
+         fromjson("{$match: {'tags.site': 'north'}}"),
+         fromjson("{$group: {_id: null, n: {$sum: 1}, maxV: {$max: '$v'}}}")});
+
+    ASSERT_EQUALS(3U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {'meta.host': 'a'}}"), pipeline[0]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$match: {'meta.site': 'north'}}"), pipeline[1]);
+    ASSERT_BSONOBJ_EQ(
+        fromjson("{$group: {_id: null, n: {$sum: '$control.count'}, "
+                 "maxV: {$max: '$control.max.v'}}}"),
+        pipeline[2]);
+}
+
 TEST(TimeSeriesQueryTranslator, DoesNotRewriteMeasurementGroupedTimeSeriesGroupBeforeUnpack) {
     const auto pipeline = makeBucketPipeline(
         makeOptions(),

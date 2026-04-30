@@ -683,16 +683,33 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
         return translated;
     }
 
-    if (userPipeline.size() == 2) {
-        const auto firstElem = userPipeline.front().firstElement();
-        if (firstElem.fieldNameStringData() == "$match" && firstElem.type() == mongo::Object) {
-            const auto bucketMatch = makeExactBucketMetaMatchPredicate(options, firstElem.Obj());
-            if (!bucketMatch.isEmpty() &&
-                appendWholeCollectionGroupRewrite(options, userPipeline.back(), &translated)) {
-                translated.insert(translated.begin(), BSON("$match" << bucketMatch));
-                return translated;
+    if (userPipeline.size() >= 2 &&
+        appendWholeCollectionGroupRewrite(options, userPipeline.back(), &translated)) {
+        std::vector<BSONObj> exactMetaMatches;
+        exactMetaMatches.reserve(userPipeline.size() - 1);
+        bool hasOnlyExactMetaMatches = true;
+        for (size_t i = 0; i + 1 < userPipeline.size(); ++i) {
+            const auto firstElem = userPipeline[i].firstElement();
+            if (firstElem.fieldNameStringData() != "$match" || firstElem.type() != mongo::Object) {
+                hasOnlyExactMetaMatches = false;
+                break;
             }
+
+            const auto bucketMatch = makeExactBucketMetaMatchPredicate(options, firstElem.Obj());
+            if (bucketMatch.isEmpty()) {
+                hasOnlyExactMetaMatches = false;
+                break;
+            }
+
+            exactMetaMatches.push_back(BSON("$match" << bucketMatch));
         }
+
+        if (hasOnlyExactMetaMatches && !exactMetaMatches.empty()) {
+            translated.insert(translated.begin(), exactMetaMatches.begin(), exactMetaMatches.end());
+            return translated;
+        }
+
+        translated.clear();
     }
 
     bool lastPushdownWasSort = false;
