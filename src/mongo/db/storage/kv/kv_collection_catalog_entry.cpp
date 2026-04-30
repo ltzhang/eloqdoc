@@ -390,6 +390,14 @@ void KVCollectionCatalogEntry::updateChangeStreamPreAndPostImages(
     _catalog->putMetaData(opCtx, ns().toString(), md);
 }
 
+void KVCollectionCatalogEntry::updateTimeseriesOptions(
+    OperationContext* opCtx, const timeseries::TimeseriesOptions& options) {
+    MetaData md = _getMetaData(opCtx);
+    invariant(md.options.timeseries);
+    md.options.timeseries = options;
+    _catalog->putMetaData(opCtx, ns().toString(), md);
+}
+
 void KVCollectionCatalogEntry::setIsTemp(OperationContext* opCtx, bool isTemp) {
     MetaData md = _getMetaData(opCtx);
     md.options.temp = isTemp;

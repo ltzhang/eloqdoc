@@ -78,9 +78,23 @@ struct CollModRequest {
     std::string collValidationAction = {};
     std::string collValidationLevel = {};
     BSONElement changeStreamPreAndPostImages = {};
+    BSONElement timeseries = {};
     BSONElement usePowerOf2Sizes = {};
     BSONElement noPadding = {};
 };
+
+int granularityRank(StringData granularity) {
+    if (granularity == "seconds") {
+        return 0;
+    }
+    if (granularity == "minutes") {
+        return 1;
+    }
+    if (granularity == "hours") {
+        return 2;
+    }
+    return -1;
+}
 
 StatusWith<CollModRequest> parseCollModRequest(OperationContext* opCtx,
                                                const NamespaceString& nss,
@@ -237,6 +251,44 @@ StatusWith<CollModRequest> parseCollModRequest(OperationContext* opCtx,
                               "'changeStreamPreAndPostImages.enabled' option must be a bool");
             }
             cmr.changeStreamPreAndPostImages = e;
+        } else if (fieldName == "timeseries" && !isView) {
+            if (e.type() != mongo::Object) {
+                return Status(ErrorCodes::TypeMismatch, "'timeseries' has to be a document.");
+            }
+            auto oldOptions = coll->getCatalogEntry()->getCollectionOptions(opCtx);
+            if (!oldOptions.timeseries) {
+                return Status(ErrorCodes::InvalidOptions,
+                              "'timeseries' option is only supported on time-series collections");
+            }
+            if (oldOptions.timeseries->bucketMaxSpanSeconds ||
+                oldOptions.timeseries->bucketRoundingSeconds) {
+                return Status(
+                    ErrorCodes::InvalidOptions,
+                    "'timeseries.granularity' cannot be modified for collections with custom "
+                    "bucket span or rounding options");
+            }
+
+            auto granularityElem = e.Obj()["granularity"];
+            if (!granularityElem) {
+                return Status(ErrorCodes::InvalidOptions,
+                              "'timeseries.granularity' is required for time-series collMod");
+            }
+            if (granularityElem.type() != mongo::String) {
+                return Status(ErrorCodes::TypeMismatch,
+                              "'timeseries.granularity' has to be a string.");
+            }
+            const auto newRank = granularityRank(granularityElem.valueStringData());
+            if (newRank < 0) {
+                return Status(ErrorCodes::InvalidOptions,
+                              "'timeseries.granularity' must be 'seconds', 'minutes', or 'hours'.");
+            }
+            const auto oldRank = granularityRank(oldOptions.timeseries->granularity);
+            invariant(oldRank >= 0);
+            if (newRank < oldRank) {
+                return Status(ErrorCodes::InvalidOptions,
+                              "time-series granularity can only be increased");
+            }
+            cmr.timeseries = e;
         } else if (fieldName == "pipeline") {
             if (!isView) {
                 return Status(ErrorCodes::InvalidOptions,
@@ -496,6 +548,19 @@ Status _collModInternal(OperationContext* opCtx,
             result->append("changeStreamPreAndPostImages_new",
                            BSON("enabled" << options.enabled));
             coll->getCatalogEntry()->updateChangeStreamPreAndPostImages(opCtx, options);
+        }
+    }
+
+    if (!cmr.timeseries.eoo()) {
+        auto oldOptions = coll->getCatalogEntry()->getCollectionOptions(opCtx);
+        invariant(oldOptions.timeseries);
+        auto newOptions = *oldOptions.timeseries;
+        newOptions.granularity = cmr.timeseries.Obj()["granularity"].String();
+        if (oldOptions.timeseries->granularity != newOptions.granularity) {
+            result->append("timeseries_old",
+                           BSON("granularity" << oldOptions.timeseries->granularity));
+            result->append("timeseries_new", BSON("granularity" << newOptions.granularity));
+            coll->getCatalogEntry()->updateTimeseriesOptions(opCtx, newOptions);
         }
     }
 

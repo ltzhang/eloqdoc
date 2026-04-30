@@ -97,6 +97,9 @@ public:
         OperationContext* opCtx,
         boost::optional<CollectionOptions::ChangeStreamPreAndPostImagesOptions> options) final;
 
+    void updateTimeseriesOptions(OperationContext* opCtx,
+                                 const timeseries::TimeseriesOptions& options) final;
+
     void setIsTemp(OperationContext* opCtx, bool isTemp);
 
     void updateCappedSize(OperationContext*, long long int) final;

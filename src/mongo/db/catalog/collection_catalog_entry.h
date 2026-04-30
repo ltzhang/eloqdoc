@@ -449,6 +449,9 @@ public:
         OperationContext* opCtx,
         boost::optional<CollectionOptions::ChangeStreamPreAndPostImagesOptions> options) {}
 
+    virtual void updateTimeseriesOptions(OperationContext* opCtx,
+                                         const timeseries::TimeseriesOptions& options) {}
+
     /**
      * Updates the 'temp' setting for this collection.
      */
