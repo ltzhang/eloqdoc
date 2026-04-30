@@ -11,6 +11,12 @@
         control: {},
         data: {}
     }));
+    assert.commandFailed(testDB.getCollection("system.buckets.metrics").createIndex({v: 1}));
+    assert.commandFailed(testDB.runCommand({dropIndexes: "system.buckets.metrics", index: "*"}));
+    assert.commandFailed(testDB.runCommand({
+        collMod: "system.buckets.metrics",
+        index: {name: "_id_", hidden: true}
+    }));
 
     assert.commandFailedWithCode(
         testDB.metrics.update({v: 1}, {$set: {v: 2}}),

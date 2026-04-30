@@ -372,6 +372,8 @@ Implemented:
   custom bucket span/rounding, and rejects other nested time-series options.
 - `createIndexes`, `listIndexes`, `dropIndexes`, and index-targeted `collMod` on logical
   time-series collections translate between logical user key patterns and bucket key patterns.
+- Direct `collMod` and `dropIndexes` requests against backing `system.buckets.<collection>`
+  namespaces fail fast; use the logical time-series collection namespace.
 - Logical geospatial time-series index requests are rejected with `CannotCreateIndex`; EloqDoc does
   not silently create incompatible bucket geospatial indexes.
 - Time-series index requests with `partialFilterExpression` are rejected with `CannotCreateIndex`;

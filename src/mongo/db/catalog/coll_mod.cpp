@@ -421,6 +421,13 @@ Status _collModInternal(OperationContext* opCtx,
                         BSONObjBuilder* result,
                         bool upgradeUniqueIndexes,
                         OptionalCollectionUUID uuid) {
+    if (timeseries::isBucketNamespace(nss)) {
+        return Status(ErrorCodes::InvalidNamespace,
+                      str::stream() << "cannot run collMod directly on time-series bucket "
+                                       "collection "
+                                    << nss.ns());
+    }
+
     StringData dbName = nss.db();
     AutoGetDb autoDb(opCtx, dbName, MODE_X);
     Database* const db = autoDb.getDb();

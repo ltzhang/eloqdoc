@@ -166,6 +166,13 @@ Status dropIndexes(OperationContext* opCtx,
                    const NamespaceString& nss,
                    const BSONObj& idxDescriptor,
                    BSONObjBuilder* result) {
+    if (timeseries::isBucketNamespace(nss)) {
+        return Status(ErrorCodes::InvalidNamespace,
+                      str::stream() << "cannot drop indexes directly on time-series bucket "
+                                       "collection "
+                                    << nss.ns());
+    }
+
     return writeConflictRetry(
         opCtx, "dropIndexes", nss.db(), [opCtx, &nss, &idxDescriptor, result] {
             AutoGetDb autoDb(opCtx, nss.db(), MODE_X);

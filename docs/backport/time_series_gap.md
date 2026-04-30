@@ -155,6 +155,7 @@ Implemented behavior:
 - `dropIndexes` on the logical collection drops translated bucket indexes by name, key pattern, or
   wildcard.
 - Index-targeted `collMod` on the logical collection modifies translated bucket index metadata.
+- Direct `collMod` and `dropIndexes` requests against `system.buckets.*` collections fail fast.
 - `listCollections` hides backing `system.buckets.*` collections.
 - Time-series option parsing enforces mutual exclusion between `granularity` and custom
   `bucketMaxSpanSeconds` / `bucketRoundingSeconds`.
