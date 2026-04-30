@@ -96,6 +96,16 @@ env.Library(
 )
 
 env.CppUnitTest(
+    target='insert_router_test',
+    source=[
+        'insert_router_test.cpp',
+    ],
+    LIBDEPS=[
+        'insert_router',
+    ],
+)
+
+env.CppUnitTest(
     target='index_schema_test',
     source=[
         'index_schema_test.cpp',

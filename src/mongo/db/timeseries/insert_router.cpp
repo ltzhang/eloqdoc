@@ -9,6 +9,7 @@
 #include "mongo/platform/basic.h"
 
 #include "mongo/db/timeseries/insert_router.h"
+#include "mongo/db/timeseries/insert_router_internal.h"
 
 #include <algorithm>
 
@@ -23,9 +24,7 @@
 
 namespace mongo {
 namespace timeseries {
-namespace {
-
-constexpr std::size_t kMaxMeasurementsPerBucket = 1000;
+namespace insert_router_detail {
 
 long long defaultBucketRoundingSeconds(const std::string& granularity) {
     if (granularity == "hours") {
@@ -262,6 +261,7 @@ BSONObj makeReplacementBucketDocument(const TimeseriesOptions& options,
 
 bool bucketAcceptsMeasurement(const TimeseriesOptions& options,
                               const BSONObj& bucketDoc,
+                              const BSONObj& measurement,
                               long long measurementTimeMillis,
                               long long maxSpanMillis) {
     const auto control = bucketDoc.getObjectField("control");
@@ -276,14 +276,36 @@ bool bucketAcceptsMeasurement(const TimeseriesOptions& options,
     }
 
     const auto minTimeMillis = minTimeElem.Date().toMillisSinceEpoch();
-    return measurementTimeMillis >= minTimeMillis &&
-        measurementTimeMillis < minTimeMillis + maxSpanMillis;
+    if (measurementTimeMillis < minTimeMillis ||
+        measurementTimeMillis >= minTimeMillis + maxSpanMillis) {
+        return false;
+    }
+
+    try {
+        return makeReplacementBucketDocument(options, bucketDoc, measurement).objsize() <=
+            kMaxBucketDocumentSize;
+    } catch (const DBException&) {
+        return false;
+    }
 }
+
+}  // namespace insert_router_detail
+namespace {
+
+using insert_router_detail::bucketAcceptsMeasurement;
+using insert_router_detail::bucketMaxSpanMillis;
+using insert_router_detail::bucketRoundingMillis;
+using insert_router_detail::extractTimeElement;
+using insert_router_detail::kMaxMeasurementsPerBucket;
+using insert_router_detail::makeNewBucketDocument;
+using insert_router_detail::makeReplacementBucketDocument;
+using insert_router_detail::wrapMetaForKey;
 
 StatusWith<RecordId> findReusableBucketRecord(OperationContext* opCtx,
                                               Collection* bucketCollection,
                                               const TimeseriesOptions& options,
                                               const BucketKey& key,
+                                              const BSONObj& measurement,
                                               long long measurementTimeMillis,
                                               long long maxSpanMillis,
                                               BSONObj* bucketDocOut,
@@ -293,7 +315,8 @@ StatusWith<RecordId> findReusableBucketRecord(OperationContext* opCtx,
     if (cached) {
         BSONObj cachedDoc;
         if (Helpers::findOne(opCtx, bucketCollection, BSON("_id" << cached->id), cachedDoc)) {
-            if (bucketAcceptsMeasurement(options, cachedDoc, measurementTimeMillis, maxSpanMillis)) {
+            if (bucketAcceptsMeasurement(
+                    options, cachedDoc, measurement, measurementTimeMillis, maxSpanMillis)) {
                 *bucketDocOut = cachedDoc.getOwned();
                 *handleOut = *cached;
                 return Helpers::findOne(opCtx, bucketCollection, BSON("_id" << cached->id), false);
@@ -312,7 +335,8 @@ StatusWith<RecordId> findReusableBucketRecord(OperationContext* opCtx,
             bucketDoc.getField("meta").woCompare(key.meta.getField("meta"), false) != 0) {
             continue;
         }
-        if (!bucketAcceptsMeasurement(options, bucketDoc, measurementTimeMillis, maxSpanMillis)) {
+        if (!bucketAcceptsMeasurement(
+                options, bucketDoc, measurement, measurementTimeMillis, maxSpanMillis)) {
             continue;
         }
 
@@ -417,6 +441,7 @@ Status routeInsert(OperationContext* opCtx,
                                                    bucketCollection,
                                                    tsOptions,
                                                    key,
+                                                   measurement.doc,
                                                    measurementTimeMillis,
                                                    maxSpanMillis,
                                                    &existingBucket,
