@@ -71,9 +71,9 @@ Implemented bucket-level pruning:
 - Leading `$sort` on time/meta paths can be pushed before unpack in conservative bucket form.
 - A leading `$limit` can be pushed before unpack when it is the first pipeline stage, while the
   original limit is preserved after unpack for correctness.
-- A leading inclusion `$project` that references only the meta field can be pushed before unpack as
-  a bucket projection over `control.count` and `meta`, while the original projection is preserved
-  after unpack.
+- A leading simple inclusion `$project` over time, meta, and measurement fields can be pushed before
+  unpack as a bucket projection over `control.count`, `meta`, and `data.<field>` paths, while the
+  original projection is preserved after unpack.
 
 The original user pipeline stages remain after unpacking. Bucket pushdown is therefore a
 performance optimization and not the source of query correctness.
@@ -152,9 +152,11 @@ Focused C++ validation has been run for the core time-series helper paths:
 - `bucket_mutation_test`
 - `collection_options_test`
 
-The May 1, 2026 Gap 12 `$limit` and meta-only `$project` pushdown changes were validated with:
+The May 1, 2026 Gap 12 `$limit` and simple inclusion `$project` pushdown changes were validated
+with:
 
-- `query_translator_test` (15 tests, 0 failures)
+- `document_source_internal_unpack_bucket_test` (4 tests, 0 failures)
+- `query_translator_test` (17 tests, 0 failures)
 - `insert_router_test` (2 tests, 0 failures)
 - `bucket_mutation_test` (5 tests, 0 failures across bucket catalog and mutation suites)
 - `collection_options_test` (35 tests, 0 failures)

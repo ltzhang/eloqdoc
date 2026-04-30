@@ -149,14 +149,43 @@ TEST(TimeSeriesQueryTranslator, PushesDownLeadingMetaOnlyProjectBeforeUnpack) {
     ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
 }
 
-TEST(TimeSeriesQueryTranslator, DoesNotPushDownMeasurementProjectBeforeUnpack) {
+TEST(TimeSeriesQueryTranslator, PushesDownMetaAndMeasurementProjectBeforeUnpack) {
     const auto pipeline = makeBucketPipeline(
         makeOptions(),
         {fromjson("{$project: {_id: 0, tags: 1, v: 1}}"), fromjson("{$limit: 5}")});
 
+    ASSERT_EQUALS(4U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, 'control.count': 1, meta: 1, 'data.v': 1}}"),
+                      pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, tags: 1, v: 1}}"), pipeline[2]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
+}
+
+TEST(TimeSeriesQueryTranslator, PushesDownSimpleInclusionProjectBeforeUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {fromjson("{$project: {_id: 0, t: 1, tags: 1, v: 1}}"), fromjson("{$limit: 5}")});
+
+    ASSERT_EQUALS(4U, pipeline.size());
+    ASSERT_BSONOBJ_EQ(
+        fromjson("{$project: {_id: 0, 'control.count': 1, 'data.t': 1, meta: 1, 'data.v': 1}}"),
+        pipeline[0]);
+    ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[1].firstElementFieldName());
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, t: 1, tags: 1, v: 1}}"), pipeline[2]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[3]);
+}
+
+TEST(TimeSeriesQueryTranslator, DoesNotPushDownComputedProjectBeforeUnpack) {
+    const auto pipeline = makeBucketPipeline(
+        makeOptions(),
+        {fromjson("{$project: {_id: 0, doubled: {$add: ['$v', '$v']}}}"),
+         fromjson("{$limit: 5}")});
+
     ASSERT_EQUALS(3U, pipeline.size());
     ASSERT_EQUALS(std::string("$_internalUnpackBucket"), pipeline[0].firstElementFieldName());
-    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, tags: 1, v: 1}}"), pipeline[1]);
+    ASSERT_BSONOBJ_EQ(fromjson("{$project: {_id: 0, doubled: {$add: ['$v', '$v']}}}"),
+                      pipeline[1]);
     ASSERT_BSONOBJ_EQ(fromjson("{$limit: 5}"), pipeline[2]);
 }
 

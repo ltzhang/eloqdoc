@@ -353,14 +353,11 @@ bool isFalsyProjectionValue(const BSONElement& value) {
     return value.isNumber() && value.numberInt() == 0;
 }
 
-bool appendLeadingMetaProjectPushdown(const CollectionOptions& options,
-                                      const BSONObj& stage,
-                                      std::vector<BSONObj>* translated) {
+bool appendLeadingProjectPushdown(const CollectionOptions& options,
+                                  const BSONObj& stage,
+                                  std::vector<BSONObj>* translated) {
     invariant(options.timeseries);
     const auto& tsOptions = *options.timeseries;
-    if (!tsOptions.hasMetaField()) {
-        return false;
-    }
 
     const auto firstElem = stage.firstElement();
     if (firstElem.fieldNameStringData() != "$project" || firstElem.type() != mongo::Object) {
@@ -370,7 +367,7 @@ bool appendLeadingMetaProjectPushdown(const CollectionOptions& options,
     BSONObjBuilder bucketProject;
     bucketProject.append("_id", 0);
     bucketProject.append("control.count", 1);
-    bool hasMetaProjection = false;
+    bool hasFieldProjection = false;
 
     BSONForEach(projection, firstElem.Obj()) {
         const auto field = projection.fieldNameStringData();
@@ -381,17 +378,20 @@ bool appendLeadingMetaProjectPushdown(const CollectionOptions& options,
             continue;
         }
 
-        std::string metaPath;
-        if (!isTruthyProjectionValue(projection) ||
-            !translateMetaPath(field, tsOptions.metaField, &metaPath)) {
+        if (!isTruthyProjectionValue(projection)) {
             return false;
         }
 
-        bucketProject.append(metaPath, 1);
-        hasMetaProjection = true;
+        std::string metaPath;
+        if (translateMetaPath(field, tsOptions.metaField, &metaPath)) {
+            bucketProject.append(metaPath, 1);
+        } else {
+            bucketProject.append(str::stream() << "data." << field, 1);
+        }
+        hasFieldProjection = true;
     }
 
-    if (!hasMetaProjection) {
+    if (!hasFieldProjection) {
         return false;
     }
 
@@ -432,7 +432,7 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
             break;
         }
 
-        if (translated.empty() && appendLeadingMetaProjectPushdown(options, stage, &translated)) {
+        if (translated.empty() && appendLeadingProjectPushdown(options, stage, &translated)) {
             break;
         }
 

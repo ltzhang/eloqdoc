@@ -404,8 +404,9 @@ Query pruning:
   user sort after unpack.
 - A leading `$limit` can be pushed before unpacking when it is the first stage, with the original
   limit still applied after unpack.
-- A leading inclusion `$project` over only the meta field can be pushed before unpacking as a bucket
-  projection that keeps `control.count` and `meta`.
+- A leading simple inclusion `$project` over time, meta, and measurement fields can be pushed before
+  unpacking as a bucket projection that keeps `control.count`, `meta`, and selected `data.<field>`
+  paths.
 - The original measurement-level predicate remains after unpacking, so bucket pruning is a
   performance optimization rather than the source of correctness.
 
