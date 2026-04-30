@@ -78,7 +78,8 @@ Implemented bucket-level pruning:
 - A leading simple inclusion `$project` over time, meta, and measurement fields can be pushed before
   unpack as a bucket projection over `control.count`, `meta`, and `data.<field>` paths, while the
   original projection is preserved after unpack. The same projection pushdown can follow leading
-  bucket-level `$match` pushdowns; fields needed by the preserved post-unpack matches are retained.
+  bucket-level `$match` and time/meta `$sort` pushdowns; fields needed by the preserved post-unpack
+  matches and sorts are retained.
 - A leading meta-only `$addFields` / `$set` with literal values can be pushed before unpack as a
   bucket update over `meta` paths, while the original stage is preserved after unpack.
 - A single-stage whole-collection or meta-grouped `$group` can avoid unpacking when it only
@@ -177,13 +178,13 @@ Focused C++ validation has been run for the core time-series helper paths:
 - `collection_options_test`
 
 The May 1, 2026 Gap 12 `$limit`, sort-plus-limit, simple inclusion `$project`, `$project` after
-leading bucket `$match` pushdowns, meta-only `$addFields` / `$set`, numeric measurement `$in`,
-exact meta-match grouped aggregation, bucket-level `$count`, meta-field `$sortByCount`, meta-field
-distinct, direct meta-field `$addToSet`, and whole-collection/meta-grouped
+leading bucket `$match` and time/meta `$sort` pushdowns, meta-only `$addFields` / `$set`, numeric
+measurement `$in`, exact meta-match grouped aggregation, bucket-level `$count`, meta-field
+`$sortByCount`, meta-field distinct, direct meta-field `$addToSet`, and whole-collection/meta-grouped
 time/count/measurement-bound `$group` changes were validated with:
 
 - `document_source_internal_unpack_bucket_test` (4 tests, 0 failures)
-- `query_translator_test` (42 tests, 0 failures)
+- `query_translator_test` (43 tests, 0 failures)
 - `insert_router_test` (2 tests, 0 failures)
 - `bucket_mutation_test` (5 tests, 0 failures across bucket catalog and mutation suites)
 - `collection_options_test` (35 tests, 0 failures)

@@ -486,6 +486,15 @@ void collectMatchDependencies(const BSONObj& match, std::set<std::string>* field
     }
 }
 
+void collectSortDependencies(const BSONObj& sort, std::set<std::string>* fields) {
+    BSONForEach(sortField, sort) {
+        const StringData field = sortField.fieldNameStringData();
+        if (!field.startsWith("$")) {
+            fields->insert(field.toString());
+        }
+    }
+}
+
 bool logicalFieldCovers(StringData projectedField, StringData requiredField) {
     if (projectedField == requiredField) {
         return true;
@@ -958,7 +967,6 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
     }
 
     bool lastPushdownWasSort = false;
-    bool hasPushdownOnlyPrefix = true;
     std::set<std::string> fieldsRequiredAfterUnpack;
     for (const auto& stage : userPipeline) {
         const auto firstElem = stage.firstElement();
@@ -973,8 +981,8 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
         }
 
         if (appendLeadingSortPushdown(options, stage, &translated)) {
+            collectSortDependencies(firstElem.Obj(), &fieldsRequiredAfterUnpack);
             lastPushdownWasSort = true;
-            hasPushdownOnlyPrefix = false;
             continue;
         }
 
@@ -983,8 +991,7 @@ std::vector<BSONObj> makeBucketPipeline(const CollectionOptions& options,
             break;
         }
 
-        if (hasPushdownOnlyPrefix &&
-            appendLeadingProjectPushdown(options, stage, fieldsRequiredAfterUnpack, &translated)) {
+        if (appendLeadingProjectPushdown(options, stage, fieldsRequiredAfterUnpack, &translated)) {
             break;
         }
 
