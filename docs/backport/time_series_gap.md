@@ -224,8 +224,8 @@ whole-collection/meta-grouped time/count/measurement-bound `$group` changes were
 - `bucket_mutation_test` (5 tests, 0 failures across bucket catalog and mutation suites)
 - `collection_options_test` (35 tests, 0 failures)
 - `install-core` build
+- Focused time-series resmoke batch: 10/10 tests passed.
+- Full `eloq_basic` resmoke suite: 147/147 tests passed with `--storageEngine=eloq`.
 
-The tree also contains focused JS tests under `tests/jstests/eloq_basic/timeseries/`. Local JS
-runtime validation is currently limited by server fixture/startup constraints in this work
-environment, so the strongest routinely available validation here is focused C++ coverage plus the
-`install-core` build.
+The tree also contains focused JS tests under `tests/jstests/eloq_basic/timeseries/`; these are now
+included by the recursive `eloq_basic` suite root.

@@ -18,10 +18,9 @@
         index: {name: "_id_", hidden: true}
     }));
 
-    assert.commandFailedWithCode(
-        testDB.metrics.update({v: 1}, {$set: {v: 2}}),
-        ErrorCodes.IllegalOperation);
-    assert.commandFailedWithCode(
-        testDB.metrics.remove({v: 1}),
-        ErrorCodes.IllegalOperation);
+    assert.commandWorked(testDB.metrics.insert({t: ISODate("2025-01-01T00:00:00Z"), v: 1}));
+    assert.commandWorked(testDB.metrics.update({v: 1}, {$set: {v: 2}}));
+    assert.eq(2, testDB.metrics.findOne().v);
+    assert.commandWorked(testDB.metrics.remove({v: 2}));
+    assert.eq(0, testDB.metrics.find({}).itcount());
 })();

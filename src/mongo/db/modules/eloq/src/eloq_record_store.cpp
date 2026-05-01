@@ -663,16 +663,25 @@ long long EloqRecordStore::numRecords(OperationContext* opCtx) const {
     const txservice::Distribution* distribution =
         table->_schema->StatisticsObject()->GetDistribution(_tableName);
     if (distribution != nullptr) {
-        // Currently, the accuracy of the record count is guaranteed only for single-core
-        // single-machine setups and for up to 1000 entries in multi-core single-machine setups.
-        // You should not rely on it.
         auto size = distribution->Records();
         MONGO_LOG(1) << "EloqRecordStore::numRecords" << ". size: " << size;
-        return static_cast<long long>(size);
+        // The tx_service distribution is only guaranteed to be accurate up to 1000 entries in
+        // multi-core single-machine setups. Above that, compute the exact value to preserve
+        // MongoDB count semantics.
+        if (size <= 1000) {
+            return static_cast<long long>(size);
+        }
     } else {
         MONGO_LOG(1) << "EloqRecordStore::numRecords" << ". distribution == nullptr";
-        return 0;
     }
+
+    long long count = 0;
+    auto cursor = getCursor(opCtx, true);
+    while (cursor->next()) {
+        ++count;
+    }
+    MONGO_LOG(1) << "EloqRecordStore::numRecords" << ". exact size: " << count;
+    return count;
 }
 
 bool EloqRecordStore::isCapped() const {
@@ -906,6 +915,12 @@ Status EloqRecordStore::updateRecord(OperationContext* opCtx,
     uint64_t pkeySchemaVersion = table._schema->KeySchema()->SchemaTs();
 
     mongoRecord->SetEncodedBlob(reinterpret_cast<const unsigned char*>(data), len);
+    const BSONObj idObj = getIdBSONObjWithoutFieldName(recordObj);
+    KeyString idKeyString(KeyString::kLatestVersion);
+    idKeyString.resetToKey(idObj, kIdOrdering);
+    if (const auto& typeBits = idKeyString.getTypeBits(); !typeBits.isAllZeros()) {
+        mongoRecord->SetUnpackInfo(typeBits.getBuffer(), typeBits.getSize());
+    }
     auto err = ru->setKV(_tableName,
                          pkeySchemaVersion,
                          std::move(mongoKey),

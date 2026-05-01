@@ -1,7 +1,7 @@
 # Current Backport State
 
 This document describes the current EloqDoc MongoDB API backport state on the
-`backport/tier1-phase1a` branch as of April 29, 2026. It is intended for users and engineers who
+`dev` branch as of May 1, 2026. It is intended for users and engineers who
 need to know what works today, where EloqDoc intentionally differs from MongoDB, and which MongoDB
 5.0-8.0 features remain incomplete.
 
@@ -20,11 +20,15 @@ env WITH_DATA_STORE=ELOQDSS_ROCKSDB python scripts/buildscripts/scons.py \
   --build-dir=#build --prefix=/home/lintaoz/eloq/bin --disable-warnings-as-errors -j16 install-core
 ```
 
-Focused C++ unit coverage has been run for the time-series query translator and collection option
-parser. The tree also contains focused JS tests under `tests/jstests/eloq_basic/` for the backported
-features. Local JS runtime validation is currently limited by server fixture/startup issues in this
-work environment, so the strongest routinely available validation here is C++ unit coverage plus the
-`install-core` build.
+Focused C++ unit coverage has been run for the time-series query translator, insert router, bucket
+mutation helpers, and collection option parser. The tree also contains focused JS tests under
+`tests/jstests/eloq_basic/` for the backported features.
+
+Current JS runtime validation on May 1, 2026:
+
+- `eloq_basic`: 147/147 tests passed with `--storageEngine=eloq`.
+- `eloq_core2`: 4/4 tests passed with `--storageEngine=eloq`.
+- `core_op_query_eloq`: 4/4 tests passed.
 
 ## High-Level Compatibility Summary
 

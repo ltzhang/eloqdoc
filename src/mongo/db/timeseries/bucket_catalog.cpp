@@ -117,6 +117,19 @@ void BucketCatalog::closeBucketById(const NamespaceString& logicalNss, const OID
     }
 }
 
+void BucketCatalog::closeBuckets(const NamespaceString& logicalNss) {
+    std::lock_guard<std::mutex> lk(_mutex);
+    const auto nsPrefix = logicalNss.ns() + std::string(1, '\0');
+
+    for (auto it = _openBuckets.begin(); it != _openBuckets.end();) {
+        if (it->first.compare(0, nsPrefix.size(), nsPrefix) == 0) {
+            it = _openBuckets.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 std::string BucketCatalog::makeKeyString(const BucketKey& key) const {
     StringBuilder builder;
     builder << key.logicalNss.ns() << '\0' << key.roundedMillis << '\0'

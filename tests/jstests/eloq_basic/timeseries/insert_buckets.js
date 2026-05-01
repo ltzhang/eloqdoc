@@ -14,7 +14,7 @@
     ];
     assert.commandWorked(testDB.metrics.insertMany(docs));
 
-    assert.eq(0, testDB.metrics.count({}), "logical namespace should not store raw docs directly");
+    assert.eq(3, testDB.metrics.count({}));
     const bucketDocs = testDB.system.buckets.metrics.find().toArray();
     assert.eq(2, bucketDocs.length, tojson(bucketDocs));
 

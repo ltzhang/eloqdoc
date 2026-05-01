@@ -33,6 +33,7 @@
 #include "mongo/db/catalog/drop_collection.h"
 
 #include "mongo/db/background.h"
+#include "mongo/db/catalog/collection_catalog_entry.h"
 #include "mongo/db/catalog/index_catalog.h"
 #include "mongo/db/client.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
@@ -43,6 +44,8 @@
 #include "mongo/db/server_options.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/views/view_catalog.h"
+#include "mongo/db/timeseries/bucket_catalog.h"
+#include "mongo/db/timeseries/timeseries_namespace.h"
 #include "mongo/util/log.h"
 
 namespace mongo {
@@ -89,6 +92,8 @@ Status dropCollection(OperationContext* opCtx,
         if (coll) {
             invariant(!view);
             int numIndexes = coll->getIndexCatalog()->numIndexesTotal(opCtx);
+            const auto collectionOptions =
+                coll->getCatalogEntry()->getCollectionOptions(opCtx);
 
             BackgroundOperation::assertNoBgOpInProgForNs(collectionName.ns());
 
@@ -99,6 +104,15 @@ Status dropCollection(OperationContext* opCtx,
 
             if (!s.isOK()) {
                 return s;
+            }
+
+            if (collectionOptions.timeseries) {
+                const auto bucketNss = timeseries::makeBucketNamespace(collectionName);
+                timeseries::BucketCatalog::get().closeBuckets(collectionName);
+                s = db->dropCollectionEvenIfSystem(opCtx, bucketNss, dropOpTime);
+                if (!s.isOK()) {
+                    return s;
+                }
             }
 
             result.append("nIndexesWas", numIndexes);

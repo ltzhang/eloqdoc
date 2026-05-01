@@ -35,8 +35,18 @@
 #include "mongo/util/options_parser/option_description.h"
 
 DEFINE_string(data_substrate_config, "", "Data Substrate Configuration");
+DECLARE_string(eloq_data_path);
 namespace mongo {
 EloqGlobalOptions eloqGlobalOptions;
+
+namespace {
+bool isGFlagDefault(const char* name) {
+    gflags::CommandLineFlagInfo flagInfo;
+    const bool flagFound = gflags::GetCommandLineFlagInfo(name, &flagInfo);
+    invariant(flagFound);
+    return flagInfo.is_default;
+}
+}  // namespace
 
 Status EloqGlobalOptions::add(moe::OptionSection* options) {
     MONGO_LOG(0) << "EloqGlobalOptions::add";
@@ -74,6 +84,13 @@ Status EloqGlobalOptions::store(const moe::Environment& params,
     if (systemLogPath.has_parent_path()) {
         static std::filesystem::path logdir = systemLogPath.parent_path();
         GFLAGS_NAMESPACE::SetCommandLineOption("log_dir", logdir.c_str());
+    }
+    if (isGFlagDefault("eloq_data_path") && FLAGS_data_substrate_config.empty() &&
+        params.count("storage.dbPath")) {
+        const auto eloqDataPath =
+            (std::filesystem::path(params["storage.dbPath"].as<std::string>()) / "_eloq_data")
+                .string();
+        GFLAGS_NAMESPACE::SetCommandLineOption("eloq_data_path", eloqDataPath.c_str());
     }
     const char* tmp[] = {"eloqdb", nullptr};
     char** dummy_argv = const_cast<char**>(tmp);

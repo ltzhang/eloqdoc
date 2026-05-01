@@ -13,10 +13,10 @@
 
     const out = testDB.getCollection("system.buckets.metrics")
                     .aggregate([{$_internalUnpackBucket: {timeField: "t", metaField: "tags"}}])
-                    .sort({v: 1})
-                    .toArray();
+                    .toArray()
+                    .sort((lhs, rhs) => lhs.v - rhs.v);
 
-    assert.eq([
+    assert.docEq([
         {t: ISODate("2025-01-01T00:00:01Z"), tags: {host: "a"}, v: 10},
         {t: ISODate("2025-01-01T00:00:02Z"), tags: {host: "a"}, v: 11}
     ], out);

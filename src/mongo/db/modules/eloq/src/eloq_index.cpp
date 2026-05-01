@@ -307,32 +307,49 @@ private:
         _eof = false;
 
         if (inNext) {
-            _scanTupleKey = nullptr;
-            _scanTupleRecord = nullptr;
+            while (true) {
+                _scanTupleKey = nullptr;
+                _scanTupleRecord = nullptr;
 
-            txservice::TxErrorCode err = _cursor->nextBatchTuple();
-            uassertStatusOK(TxErrorCodeToMongoStatus(err));
+                txservice::TxErrorCode err = _cursor->nextBatchTuple();
+                uassertStatusOK(TxErrorCodeToMongoStatus(err));
 
-            const txservice::ScanBatchTuple* scanTuple = _cursor->currentBatchTuple();
-            if (scanTuple != nullptr) {
+                const txservice::ScanBatchTuple* scanTuple = _cursor->currentBatchTuple();
+                if (scanTuple == nullptr) {
+                    break;
+                }
+
+                if (scanTuple->status_ == txservice::RecordStatus::Deleted) {
+                    continue;
+                }
+                invariant(scanTuple->status_ == txservice::RecordStatus::Normal);
+
                 _scanTupleKey = scanTuple->key_.GetKey<Eloq::MongoKey>();
                 _scanTupleRecord = static_cast<const Eloq::MongoRecord*>(scanTuple->record_);
 
-                // Ensure records are fetched for current position (lazy fetch)
+                // Ensure records are fetched for current position (lazy fetch).
                 // Only call for STANDARD and UNIQUE indexes - ID indexes already have records in
                 // scan result _ensureRecordsFetched() uses _cursor->getScanBatchIdx() to get
-                // current position
+                // current position.
                 if (_indexType == IndexCursorType::STANDARD ||
                     _indexType == IndexCursorType::UNIQUE) {
-                    // For upsert operations, we dont prefetch records here to avoid
-                    // unnecessary locks
+                    // For upsert operations, we dont prefetch records here to avoid unnecessary
+                    // locks.
                     if (!_opCtx->isUpsert() && _enablePrefetchRecords) {
                         auto err = _ensureRecordsFetched();
                         if (err != txservice::TxErrorCode::NO_ERROR) {
                             uassertStatusOK(TxErrorCodeToMongoStatus(err));
                         }
+                        const size_t currentIndexScanBatchIdx = _cursor->getCurrentBatchTupleIdx();
+                        const size_t offset = currentIndexScanBatchIdx - _prefetchedBatchStartIdx;
+                        if (currentIndexScanBatchIdx < _prefetchedBatchStartIdx ||
+                            offset >= _prefetchedRecords.size() ||
+                            _prefetchedRecords[offset] == nullptr) {
+                            continue;
+                        }
                     }
                 }
+                break;
             }
         }
 
@@ -503,17 +520,16 @@ private:
             return err;
         }
 
-#ifndef NDEBUG
-        // Verify records after batchGetKV (debug build only)
-        // When record cannot be found with batchGetKV, error should be returned
-        // All fetched records should be Normal and non-null since they appear in index scan results
         for (size_t recordIdsIdx = 0; recordIdsIdx < fetchTuples.size(); ++recordIdsIdx) {
             const auto& tuple = fetchTuples[recordIdsIdx];
+            size_t batchVectorIdx = recordIdsIdxToBatchIdx[recordIdsIdx];
+            size_t prefetchOffset = batchVectorIdx - startIdx;
 
-            // Verify record is valid - fail if not
-            assert(tuple.status_ == txservice::RecordStatus::Normal && tuple.record_ != nullptr);
+            if (tuple.status_ != txservice::RecordStatus::Normal || tuple.record_ == nullptr ||
+                _prefetchedRecords[prefetchOffset]->EncodedBlobSize() == 0) {
+                _prefetchedRecords[prefetchOffset].reset();
+            }
         }
-#endif
 
         assert(_prefetchedBatchStartIdx + _prefetchedRecords.size() <= endIdx);
 

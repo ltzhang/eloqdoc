@@ -13,7 +13,7 @@
         {t: ISODate("2025-01-01T00:01:01Z"), tags: {host: "b"}, v: 3}
     ]));
 
-    assert.eq([2],
+    assert.eq([2, 3],
               testDB.metrics.find({t: {$gte: ISODate("2025-01-01T00:00:05Z")}})
                   .sort({v: 1})
                   .map(doc => doc.v));

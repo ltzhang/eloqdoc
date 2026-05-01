@@ -255,7 +255,7 @@ public:
         ctx.emplace(opCtx,
                     CommandHelpers::parseNsOrUUID(dbname, cmdObj),
                     AutoGetCollection::ViewMode::kViewsPermitted);
-        const auto& nss = ctx->getNss();
+        const auto nss = ctx->getNss();
 
         qr->refreshNSS(opCtx);
 

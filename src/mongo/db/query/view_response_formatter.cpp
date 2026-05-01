@@ -56,7 +56,7 @@ Status ViewResponseFormatter::appendAsCountResponse(BSONObjBuilder* resultBuilde
     } else {
         invariant(cursorFirstBatch.size() == 1);
         auto countObj = cursorFirstBatch.back();
-        resultBuilder->append(kCountField, countObj["count"].Int());
+        resultBuilder->append(kCountField, countObj["count"].numberLong());
     }
     resultBuilder->append(kOkField, 1);
     return Status::OK();

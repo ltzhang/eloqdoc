@@ -3,6 +3,7 @@ test_kind: js_test
 selector:
   roots:
   - tests/jstests/eloq_basic/*.js
+  - tests/jstests/eloq_basic/**/*.js
 executor:
   archive:
     hooks:
@@ -22,5 +23,6 @@ executor:
   fixture:
     class: MongoDFixture
     mongod_options:
+      storageEngine: eloq
       set_parameters:
         enableTestCommands: 1

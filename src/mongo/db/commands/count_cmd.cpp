@@ -221,6 +221,7 @@ public:
                 BSONObjBuilder aggResultBuilder;
                 uassertStatusOK(
                     runAggregate(opCtx, bucketNss, bucketRequest, bucketCmd, aggResultBuilder));
+                CommandHelpers::appendCommandStatusNoThrow(aggResultBuilder, Status::OK());
                 uassertStatusOK(
                     ViewResponseFormatter(aggResultBuilder.obj()).appendAsCountResponse(&result));
                 return true;

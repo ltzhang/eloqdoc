@@ -43,6 +43,7 @@ public:
     void upsertBucket(const BucketKey& key, const BucketHandle& handle);
     void closeBucket(const BucketKey& key, const OID& id);
     void closeBucketById(const NamespaceString& logicalNss, const OID& id);
+    void closeBuckets(const NamespaceString& logicalNss);
 
 private:
     std::string makeKeyString(const BucketKey& key) const;

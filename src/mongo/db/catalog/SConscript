@@ -313,6 +313,7 @@ env.Library(
         '$BUILD_DIR/mongo/db/background',
         '$BUILD_DIR/mongo/db/db_raii',
         '$BUILD_DIR/mongo/db/query_exec',
+        '$BUILD_DIR/mongo/db/timeseries/bucket_catalog',
         '$BUILD_DIR/mongo/db/timeseries/index_schema',
         '$BUILD_DIR/mongo/db/timeseries/timeseries_namespace',
         '$BUILD_DIR/mongo/db/views/views',

@@ -33,5 +33,5 @@
     assert.eq("ok", bucket.control.min.status, tojson(bucket));
     assert.eq("ok", bucket.control.max.status, tojson(bucket));
 
-    assert.commandFailed(metrics.updateOne({temp: 10}, {$set: {tags: {host: "b"}}}));
+    assert.throws(() => metrics.updateOne({temp: 10}, {$set: {tags: {host: "b"}}}));
 })();

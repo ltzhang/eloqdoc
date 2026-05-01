@@ -168,7 +168,7 @@ public:
         ctx.emplace(opCtx,
                     CommandHelpers::parseNsOrUUID(dbname, cmdObj),
                     AutoGetCollection::ViewMode::kViewsPermitted);
-        const auto& nss = ctx->getNss();
+        const auto nss = ctx->getNss();
 
         const ExtensionsCallbackReal extensionsCallback(opCtx, &nss);
         auto parsedDistinct =
@@ -211,6 +211,7 @@ public:
                 BSONObjBuilder aggResultBuilder;
                 uassertStatusOK(
                     runAggregate(opCtx, bucketNss, bucketRequest, bucketCmd, aggResultBuilder));
+                CommandHelpers::appendCommandStatusNoThrow(aggResultBuilder, Status::OK());
                 uassertStatusOK(ViewResponseFormatter(aggResultBuilder.obj())
                                     .appendAsDistinctResponse(&result));
                 return true;
