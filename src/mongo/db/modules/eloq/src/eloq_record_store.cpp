@@ -1016,8 +1016,7 @@ std::unique_ptr<RecordCursor> EloqRecordStore::getCursorForRepair(OperationConte
 
 std::unique_ptr<RecordCursor> EloqRecordStore::getRandomCursor(OperationContext* opCtx) const {
     MONGO_LOG(1) << "EloqRecordStore::getRandomCursor";
-    uassertStatusOK(Status(ErrorCodes::BadValue, "Not supported feature"));
-    return {};
+    return nullptr;
 }
 
 std::vector<std::unique_ptr<RecordCursor>> EloqRecordStore::getManyCursors(
